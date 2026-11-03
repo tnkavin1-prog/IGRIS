@@ -1,0 +1,51 @@
+{
+  "name": "gemini-browser-live",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Real-time Gemini Live voice agent that autonomously operates Google Chrome.",
+  "type": "module",
+  "workspaces": [
+    "apps/chrome-extension",
+    "apps/local-bridge",
+    "packages/shared"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:extension": "node scripts/build.mjs --extension-only",
+    "typecheck": "node scripts/typecheck.mjs",
+    "lint": "eslint .",
+    "format": "prettier --write \"**/*.{ts,tsx,mjs,json,md,css,html}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,mjs,json,md,css,html}\"",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:all": "npm run typecheck && npm run lint && npm run test && npm run test:e2e",
+    "bridge": "node apps/local-bridge/dist/server.mjs",
+    "dev:bridge": "node --watch apps/local-bridge/src/server.ts",
+    "release": "node scripts/release.mjs",
+    "smoke:live": "node scripts/smoke-live.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
+    "@types/chrome": "^0.0.312",
+    "@types/node": "^24.5.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.14.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^16.5.0",
+    "happy-dom": "^21.0.4",
+    "prettier": "^3.6.0",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.44.0",
+    "vite": "^8.3.5",
+    "vitest": "^5.1.0"
+  }
+}

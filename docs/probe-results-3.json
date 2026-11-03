@@ -1,0 +1,134 @@
+[
+  {
+    "label": "control / no tools / reasoning",
+    "setupComplete": true,
+    "audioBytes": 71042,
+    "toolCalls": [],
+    "transcript": "The answer is 4.",
+    "text": [],
+    "close": null,
+    "reason": "",
+    "error": null,
+    "resumptionUpdates": 1,
+    "usage": {
+      "promptTokenCount": 2899,
+      "responseTokenCount": 43,
+      "totalTokenCount": 2942,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 2620
+        },
+        {
+          "modality": "AUDIO",
+          "tokenCount": 168
+        }
+      ],
+      "responseTokensDetails": [
+        {
+          "modality": "AUDIO",
+          "tokenCount": 43
+        }
+      ]
+    }
+  },
+  {
+    "label": "minimal tool / no params / no behavior",
+    "setupComplete": true,
+    "audioBytes": 77760,
+    "toolCalls": [],
+    "transcript": "Let me ping that for you now.",
+    "text": [],
+    "close": null,
+    "reason": "",
+    "error": null,
+    "resumptionUpdates": 1,
+    "usage": {
+      "promptTokenCount": 3061,
+      "responseTokenCount": 46,
+      "totalTokenCount": 3107,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 2782
+        },
+        {
+          "modality": "AUDIO",
+          "tokenCount": 168
+        }
+      ],
+      "responseTokensDetails": [
+        {
+          "modality": "AUDIO",
+          "tokenCount": 46
+        }
+      ]
+    }
+  },
+  {
+    "label": "echo tool / NON_BLOCKING",
+    "setupComplete": true,
+    "audioBytes": 72962,
+    "toolCalls": [],
+    "transcript": "Let me take care of that for you.",
+    "text": [],
+    "close": null,
+    "reason": "",
+    "error": null,
+    "resumptionUpdates": 1,
+    "usage": {
+      "promptTokenCount": 3078,
+      "responseTokenCount": 44,
+      "totalTokenCount": 3122,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 2799
+        },
+        {
+          "modality": "AUDIO",
+          "tokenCount": 168
+        }
+      ],
+      "responseTokensDetails": [
+        {
+          "modality": "AUDIO",
+          "tokenCount": 44
+        }
+      ]
+    }
+  },
+  {
+    "label": "echo tool / includeThoughts",
+    "setupComplete": true,
+    "audioBytes": 69120,
+    "toolCalls": [],
+    "transcript": "Let me handle that for you.",
+    "text": [],
+    "close": null,
+    "reason": "",
+    "error": null,
+    "resumptionUpdates": 1,
+    "usage": {
+      "promptTokenCount": 3078,
+      "responseTokenCount": 42,
+      "totalTokenCount": 3120,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 2799
+        },
+        {
+          "modality": "AUDIO",
+          "tokenCount": 168
+        }
+      ],
+      "responseTokensDetails": [
+        {
+          "modality": "AUDIO",
+          "tokenCount": 42
+        }
+      ]
+    }
+  }
+]

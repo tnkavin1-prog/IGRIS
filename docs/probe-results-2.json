@@ -1,0 +1,37 @@
+[
+  {
+    "name": "token-shape-legacy",
+    "status": "ACCEPTED",
+    "detail": "keys=name name=auth_tokens/25…"
+  },
+  {
+    "name": "ephemeral token / constrained endpoint / full setup + tool",
+    "status": "ACCEPTED",
+    "detail": "setupComplete=true\n  audioChunks=7 audioBytes=61442\n  toolCalls=1 (echo_value)\n  toolRoundTrip=true\n  outTranscript=\"Returned gamma.\"\n  inTranscript=\"\"\n  close=- "
+  },
+  {
+    "name": "single-use token enforcement",
+    "status": "ACCEPTED",
+    "detail": "setupComplete=false close=1011 Token has been used too many times"
+  },
+  {
+    "name": "extended-thinking / no thinkingConfig / async tool no scheduling",
+    "status": "REJECTED",
+    "detail": "setupComplete=false\n  audioChunks=0 audioBytes=0\n  toolCalls=0\n  toolRoundTrip=false\n  outTranscript=\"\"\n  inTranscript=\"\"\n  close=1007 \"Thinking level must be specified for this model.\""
+  },
+  {
+    "name": "extended-thinking / thinkingLevel HIGH / async tool no scheduling",
+    "status": "ACCEPTED",
+    "detail": "setupComplete=true\n  audioChunks=12 audioBytes=145442\n  toolCalls=0\n  toolRoundTrip=false\n  outTranscript=\"I will call the tool now.A system error occurred.\"\n  inTranscript=\"\"\n  close=- "
+  },
+  {
+    "name": "extended-thinking / thinkingLevel LOW / async tool no scheduling",
+    "status": "ACCEPTED",
+    "detail": "setupComplete=true\n  audioChunks=23 audioBytes=191042\n  toolCalls=0\n  toolRoundTrip=false\n  outTranscript=\"Let me run that for you.I'm sorry, a system error occurred.\"\n  inTranscript=\"\"\n  close=- "
+  },
+  {
+    "name": "extended-thinking / blocking tool declaration",
+    "status": "REJECTED",
+    "detail": "setupComplete=false\n  audioChunks=0 audioBytes=0\n  toolCalls=0\n  toolRoundTrip=false\n  outTranscript=\"\"\n  inTranscript=\"\"\n  close=1007 \"BLOCKING function calls are not supported for this model.\""
+  }
+]

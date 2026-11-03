@@ -1,0 +1,16 @@
+{
+  "name": "@gbl/chrome-extension",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Chrome side panel UI, audio pipeline, page agent, and tool executor for Gemini Browser Live.",
+  "scripts": {
+    "build": "node ../../scripts/build.mjs --extension-only",
+    "typecheck": "node ../../scripts/typecheck.mjs --extension-only"
+  },
+  "dependencies": {
+    "@gbl/shared": "*",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  }
+}

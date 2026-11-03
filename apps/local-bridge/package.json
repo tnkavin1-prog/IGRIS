@@ -1,0 +1,16 @@
+{
+  "name": "@gbl/local-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Loopback-only token bridge: mints short-lived Gemini Live ephemeral tokens so the API key never reaches Chrome.",
+  "main": "dist/server.mjs",
+  "scripts": {
+    "start": "node dist/server.mjs",
+    "dev": "node --watch src/server.ts"
+  },
+  "dependencies": {
+    "@gbl/shared": "*",
+    "zod": "^4.6.7"
+  }
+}

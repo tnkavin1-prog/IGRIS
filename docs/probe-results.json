@@ -1,0 +1,32 @@
+[
+  {
+    "name": "token-shape-legacy",
+    "status": "ACCEPTED",
+    "detail": "keys=name name=auth_tokens/dd…"
+  },
+  {
+    "name": "token-create / legacy bidiGenerateContentSetup shape",
+    "status": "ACCEPTED",
+    "detail": "name prefix=auth_tok… expires=undefined"
+  },
+  {
+    "name": "token-create / liveConnectConstraints shape",
+    "status": "REJECTED",
+    "detail": "HTTP 400: Invalid JSON payload received. Unknown name \"liveConnectConstraints\" at 'auth_token': Cannot find field."
+  },
+  {
+    "name": "direct key / nested generationConfig / async tool / WHEN_IDLE",
+    "status": "ACCEPTED",
+    "detail": "setupComplete=true\n  audioChunks=5 audioBytes=88800\n  toolCalls=1 (echo_value)\n  toolRoundTrip=true\n  outTranscript=\"Echoed alpha successfully.\"\n  inTranscript=\"\"\n  close=- "
+  },
+  {
+    "name": "gemini-3.8-live-extended-thinking / thinkingLevel MEDIUM / no scheduling",
+    "status": "ACCEPTED",
+    "detail": "setupComplete=true\n  audioChunks=25 audioBytes=220802\n  toolCalls=0\n  toolRoundTrip=false\n  outTranscript=\"Doing that for you right now.I apologize, but a system error occurred.\"\n  inTranscript=\"\"\n  close=- "
+  },
+  {
+    "name": "session resumption handle emission",
+    "status": "ACCEPTED",
+    "detail": "setupComplete=true\n  audioChunks=7 audioBytes=54242\n  toolCalls=0\n  toolRoundTrip=false\n  outTranscript=\"resumption check.\"\n  inTranscript=\"\"\n  close=- "
+  }
+]
