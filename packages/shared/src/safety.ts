@@ -339,6 +339,28 @@ function escapeWithBudget(text: string, maxChars: number): string {
 }
 
 /**
+ * Escape angle brackets in every string inside a structured value.
+ *
+ * Content-script replies are nested objects of DOM-derived strings: element
+ * names, table cells, link text, form labels. Escaping at the page boundary
+ * means no field can forge a `<page_content>` delimiter or a role tag, even
+ * when the executor embeds it in JSON rather than in the framed text block.
+ * Numbers, booleans, and null pass through unchanged.
+ */
+export function escapeUntrustedStrings<T>(value: T): T {
+  if (typeof value === 'string') return escapeUntrustedMarkup(value) as T;
+  if (Array.isArray(value)) return value.map((item) => escapeUntrustedStrings(item)) as T;
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      out[escapeUntrustedMarkup(key)] = escapeUntrustedStrings(item);
+    }
+    return out as T;
+  }
+  return value;
+}
+
+/**
  * Collapse untrusted text to a single short line for inline prompt fields such
  * as a page title. Newlines are removed so a title cannot inject fake bullets
  * or role lines into a plain-text context turn.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ERROR_CODES, ToolError } from '@gbl/shared';
-import { assertPreparedPage } from '../../../apps/chrome-extension/src/tools/executor.js';
+import { assertPreparedPage, cleanUrl } from '../../../apps/chrome-extension/src/tools/executor.js';
 
 function thrown(fn: () => void): ToolError {
   try {
@@ -66,5 +66,33 @@ describe('assertPreparedPage', () => {
   it('treats a missing tab URL as a mismatch when a URL was approved', () => {
     const error = thrown(() => assertPreparedPage(PREP, { id: 12, url: undefined }, 'doc-abc'));
     expect(error.code).toBe(ERROR_CODES.ELEMENT_STALE);
+  });
+});
+
+describe('cleanUrl', () => {
+  it('scrubs sensitive query parameters', () => {
+    expect(cleanUrl('https://example.com/cb?access_token=secret&foo=bar')).toBe(
+      'https://example.com/cb?foo=bar',
+    );
+  });
+
+  it('strips credentials and scrubs sensitive fragment parameters', () => {
+    expect(cleanUrl('https://user:pass@example.com/x#access_token=secret&state=ok')).toBe(
+      'https://example.com/x#state=ok',
+    );
+  });
+
+  it('drops the fragment entirely when no safe parameters remain', () => {
+    expect(cleanUrl('https://example.com/x#access_token=secret')).toBe('https://example.com/x');
+  });
+
+  it('preserves ordinary fragments', () => {
+    expect(cleanUrl('https://example.com/docs#section-2')).toBe(
+      'https://example.com/docs#section-2',
+    );
+  });
+
+  it('keeps the URL when it cannot be parsed', () => {
+    expect(cleanUrl('not a url')).toBe('not a url');
   });
 });

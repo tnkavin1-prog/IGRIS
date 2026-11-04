@@ -385,8 +385,12 @@ function install(): void {
   if (window.__GBL_CONTENT_SCRIPT__) return;
   window.__GBL_CONTENT_SCRIPT__ = { version: PRODUCT_VERSION, startedAt: Date.now() };
 
-  chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
     if (!message || typeof message !== 'object') return false;
+    // Only this extension may drive the page agent. Chrome already blocks web
+    // pages without `externally_connectable`; checking the sender id keeps the
+    // boundary explicit if that ever changes.
+    if (sender?.id && sender.id !== chrome.runtime.id) return false;
     const request = message as PageOpRequest;
     if (request.type !== 'GBL_CONTENT_OP') return false;
     void handleRequest(request)

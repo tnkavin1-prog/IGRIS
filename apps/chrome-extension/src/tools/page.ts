@@ -9,6 +9,7 @@
 import {
   ERROR_CODES,
   ToolError,
+  escapeUntrustedStrings,
   isScriptableUrl,
   type ContentResult,
   type PageOp,
@@ -18,6 +19,17 @@ import {
 
 const OP_TIMEOUT_MS = 22_000;
 const INJECT_FILES = ['content-script.js'];
+
+/**
+ * Content-script replies are page data. Escape every string before the
+ * executor sees it so a hostile DOM cannot forge prompt tags in fields that
+ * never pass through `frameUntrustedPageText` — element names, table cells,
+ * link text, form labels. Escaping is idempotent, so the later text frame
+ * still surrounds the data rather than being escaped itself.
+ */
+export function sanitizePageResult<T>(value: T): T {
+  return escapeUntrustedStrings(value);
+}
 
 export class PageBridge {
   constructor(readonly tabId: number) {}
@@ -105,7 +117,7 @@ export class PageBridge {
         },
       );
     }
-    return result.data as T;
+    return sanitizePageResult(result.data as T);
   }
 
   private async send<T>(

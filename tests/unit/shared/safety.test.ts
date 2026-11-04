@@ -3,6 +3,7 @@ import {
   assessActionRisk,
   buildImageSearchUrl,
   buildSearchUrl,
+  escapeUntrustedStrings,
   frameUntrustedPageText,
   hasRiskyWording,
   isScriptableUrl,
@@ -254,5 +255,42 @@ describe('prompt-injection handling', () => {
     const bounded = frameUntrustedPageText('x'.repeat(5_000), 100);
     expect(bounded).toContain('x'.repeat(100));
     expect(bounded).not.toContain('x'.repeat(101));
+  });
+});
+
+describe('escapeUntrustedStrings', () => {
+  it('escapes angle brackets in a nested object', () => {
+    const result = escapeUntrustedStrings({
+      name: '<img src=x onerror=alert(1)>',
+      count: 3,
+      ok: true,
+      nested: { text: '<script>evil()</script>' },
+    });
+    expect(result.name).toBe('\\u003cimg src=x onerror=alert(1)\\u003e');
+    expect(result.count).toBe(3);
+    expect(result.ok).toBe(true);
+    expect(result.nested.text).toBe('\\u003cscript\\u003eevil()\\u003c/script\\u003e');
+  });
+
+  it('escapes every element of an array', () => {
+    expect(escapeUntrustedStrings(['<a>', 42, { v: '<b>' }])).toEqual([
+      '\\u003ca\\u003e',
+      42,
+      { v: '\\u003cb\\u003e' },
+    ]);
+  });
+
+  it('returns primitives and null unchanged', () => {
+    expect(escapeUntrustedStrings(7)).toBe(7);
+    expect(escapeUntrustedStrings(true)).toBe(true);
+    expect(escapeUntrustedStrings(null)).toBe(null);
+    expect(escapeUntrustedStrings(undefined)).toBe(undefined);
+  });
+
+  it('escapes hostile object keys', () => {
+    const input: Record<string, unknown> = {};
+    input['<evil>'] = 'x';
+    const result = escapeUntrustedStrings(input);
+    expect(Object.keys(result)).toEqual(['\\u003cevil\\u003e']);
   });
 });
