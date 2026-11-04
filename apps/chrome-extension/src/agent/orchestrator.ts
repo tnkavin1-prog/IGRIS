@@ -393,6 +393,7 @@ export class AgentOrchestrator {
         this.deps.executor.execute(tool.name, prep.args, {
           callId: call.id,
           signal: aborter.signal,
+          prep,
         }),
         EXECUTION_TIMEOUT_MS,
         'The browser operation exceeded its deadline.',

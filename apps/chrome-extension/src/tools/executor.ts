@@ -161,6 +161,10 @@ function compactSnapshot(snapshot: PageSnapshot): Record<string, unknown> {
 export interface ToolPreparation {
   args: Record<string, unknown>;
   tabId?: number;
+  /** Raw URL of the inspected page, used to detect navigation before execution. */
+  pageUrl?: string;
+  /** Content-script instance id, used to detect a same-URL reload. */
+  documentId?: string;
   url?: string;
   target?: ElementSummary;
   riskText?: string;
@@ -178,6 +182,47 @@ export interface ToolExecution {
   changed?: boolean;
   target?: ElementSummary;
   postImage?: { base64: string; prompt: string };
+}
+
+export interface ToolExecutionContext {
+  callId: string;
+  signal?: AbortSignal;
+  /** The exact target the user approved, captured during preparation. */
+  prep?: ToolPreparation;
+}
+
+/**
+ * Fail closed when the tab or document changed between approval and execution.
+ *
+ * `currentDocumentId` is optional because some tools (close_tab, downloads with
+ * an explicit URL) only need the tab identity, not a live DOM.
+ */
+export function assertPreparedPage(
+  prep: Pick<ToolPreparation, 'tabId' | 'pageUrl' | 'documentId'> | undefined,
+  tab: Pick<chrome.tabs.Tab, 'id' | 'url'>,
+  currentDocumentId?: string,
+): void {
+  if (!prep?.tabId) return;
+  if (tab.id !== prep.tabId) {
+    throw new ToolError(ERROR_CODES.TAB_GONE, 'The approved tab is no longer the target.', {
+      hint: 'Re-inspect the page and approve the action again.',
+      retryable: true,
+    });
+  }
+  if (prep.pageUrl && (tab.url ?? '') !== prep.pageUrl) {
+    throw new ToolError(
+      ERROR_CODES.ELEMENT_STALE,
+      'The page changed since approval. Re-inspect and try again.',
+      { hint: 'The approval was for a different URL.', retryable: true },
+    );
+  }
+  if (prep.documentId && currentDocumentId !== undefined && currentDocumentId !== prep.documentId) {
+    throw new ToolError(
+      ERROR_CODES.ELEMENT_STALE,
+      'The page reloaded since approval. Re-inspect and try again.',
+      { hint: 'The element reference belongs to the previous document.', retryable: true },
+    );
+  }
 }
 
 export interface ToolExecutorDeps {
@@ -228,6 +273,40 @@ export class ToolExecutor {
     return page;
   }
 
+  /**
+   * Resolve the tab the user approved, rather than whatever happens to be
+   * active now. Returns undefined for tools that were not prepared.
+   */
+  private async preparedTab(
+    prep: ToolPreparation | undefined,
+  ): Promise<chrome.tabs.Tab | undefined> {
+    if (!prep?.tabId) return undefined;
+    const tab = await this.tabById(prep.tabId);
+    assertPreparedPage(prep, tab);
+    return tab;
+  }
+
+  /**
+   * Resolve the approved tab and prove the document is still the same one.
+   * A same-URL reload produces a new content-script instance and therefore a
+   * different document id, so stale element references cannot be replayed.
+   */
+  private async preparedPageTab(context: ToolExecutionContext): Promise<chrome.tabs.Tab> {
+    const tab = (await this.preparedTab(context.prep)) ?? (await this.activeTab());
+    if (context.prep?.documentId) {
+      const page = await this.pageFor(tab);
+      const current = await page.op<PageFingerprint>('grabFingerprint');
+      assertPreparedPage(context.prep, tab, current.documentId);
+    }
+    return tab;
+  }
+
+  private async documentIdFor(tab: chrome.tabs.Tab): Promise<string> {
+    const page = await this.pageFor(tab);
+    const current = await page.op<PageFingerprint>('grabFingerprint');
+    return current.documentId;
+  }
+
   private async inspectLocator(
     tab: chrome.tabs.Tab,
     locator: TargetLocator,
@@ -263,6 +342,8 @@ export class ToolExecutor {
         ...base,
         args: { ...args, ref: inspection.target.ref },
         tabId: this.requireTabId(tab),
+        pageUrl: tab.url ?? '',
+        documentId: await this.documentIdFor(tab),
         target: inspection.target,
         riskText: inspection.riskText,
         inForm: inspection.inForm,
@@ -283,6 +364,8 @@ export class ToolExecutor {
         ...base,
         args: { ...args, ref: inspection.target.ref },
         tabId: this.requireTabId(tab),
+        pageUrl: tab.url ?? '',
+        documentId: await this.documentIdFor(tab),
         target: inspection.target,
         riskText: inspection.riskText,
         inForm: inspection.inForm,
@@ -308,6 +391,8 @@ export class ToolExecutor {
         ...base,
         args: { ...args, ref: inspection.target.ref },
         tabId: this.requireTabId(tab),
+        pageUrl: tab.url ?? '',
+        documentId: await this.documentIdFor(tab),
         target: inspection.target,
         riskText: inspection.riskText,
         inForm: inspection.inForm,
@@ -356,6 +441,8 @@ export class ToolExecutor {
         ...base,
         args: { ...args, ref: inspection.target.ref },
         tabId: this.requireTabId(tab),
+        pageUrl: tab.url ?? '',
+        documentId: await this.documentIdFor(tab),
         target: inspection.target,
         riskText: inspection.riskText,
         inForm: inspection.inForm,
@@ -372,6 +459,7 @@ export class ToolExecutor {
       return {
         ...base,
         tabId: this.requireTabId(tab),
+        pageUrl: tab.url ?? '',
         url: cleanUrl(tab.url),
         detail: tab.title ?? cleanUrl(tab.url),
       };
@@ -383,6 +471,7 @@ export class ToolExecutor {
       return {
         ...base,
         tabId: this.requireTabId(tab),
+        pageUrl: tab.url ?? '',
         url,
         detail: `Download ${cleanUrl(url)}`,
       };
@@ -394,11 +483,21 @@ export class ToolExecutor {
       if (explicitUrl || explicitRef) {
         const tab = await this.activeTab();
         const url = await this.resolveDownloadUrl(args, tab);
-        return { ...base, tabId: this.requireTabId(tab), url, detail: `Download ${cleanUrl(url)}` };
+        return {
+          ...base,
+          tabId: this.requireTabId(tab),
+          pageUrl: tab.url ?? '',
+          url,
+          detail: `Download ${cleanUrl(url)}`,
+        };
       }
+      const tab = await this.activeTab();
       return {
         ...base,
-        detail: `Search for “${strArg(args, 'keywords') ?? 'document'}” and download the best match`,
+        tabId: this.requireTabId(tab),
+        pageUrl: tab.url ?? '',
+        documentId: await this.documentIdFor(tab),
+        detail: `Search for "${strArg(args, 'keywords') ?? 'document'}" and download the best match`,
       };
     }
 
@@ -459,6 +558,27 @@ export class ToolExecutor {
       );
     }
     return valid.url;
+  }
+
+  /**
+   * Prefer the URL the user approved. Re-resolving a ref here would let a page
+   * change between approval and execution point the download somewhere else.
+   */
+  private async approvedDownloadUrl(
+    context: ToolExecutionContext,
+    args: Record<string, unknown>,
+  ): Promise<string> {
+    if (context.prep) {
+      if (!context.prep.url) {
+        throw new ToolError(
+          ERROR_CODES.ELEMENT_STALE,
+          'The approved download URL is missing. Re-inspect the link and try again.',
+          { retryable: true },
+        );
+      }
+      return context.prep.url;
+    }
+    return this.resolveDownloadUrl(args, await this.activeTab());
   }
 
   private async waitForTabLoad(
@@ -679,8 +799,9 @@ export class ToolExecutor {
   private async officialCandidates(
     keywords: string,
     limit: number,
+    tabOverride?: chrome.tabs.Tab,
   ): Promise<Array<Record<string, unknown>>> {
-    const tab = await this.activeTab();
+    const tab = tabOverride ?? (await this.activeTab());
     const page = await this.pageFor(tab);
     const links = await page.op<LinkInfo[]>('links', { limit: 100 });
     const words = keywords
@@ -727,7 +848,7 @@ export class ToolExecutor {
   async execute(
     name: string,
     args: Record<string, unknown>,
-    _context: { callId: string; signal?: AbortSignal } = { callId: '' },
+    context: ToolExecutionContext = { callId: '' },
   ): Promise<ToolExecution> {
     switch (name) {
       case 'get_browser_state': {
@@ -821,9 +942,10 @@ export class ToolExecutor {
       case 'close_tab': {
         const requestedId = Number(args.tabId);
         const tab =
-          Number.isFinite(requestedId) && requestedId >= 0
+          (await this.preparedTab(context.prep)) ??
+          (Number.isFinite(requestedId) && requestedId >= 0
             ? await this.tabById(requestedId)
-            : await this.activeTab();
+            : await this.activeTab());
         const info = tabInfo(tab);
         await chrome.tabs.remove(this.requireTabId(tab));
         return { data: { closed: info }, summary: `Closed “${tab.title ?? 'tab'}”.` };
@@ -1086,7 +1208,7 @@ export class ToolExecutor {
       }
 
       case 'click_element': {
-        const tab = await this.activeTab();
+        const tab = await this.preparedPageTab(context);
         const outcome = await this.runPageAction(tab, (page) =>
           page.op<ActionResult>('click', args),
         );
@@ -1256,7 +1378,7 @@ export class ToolExecutor {
       }
 
       case 'press_key': {
-        const tab = await this.activeTab();
+        const tab = await this.preparedPageTab(context);
         const outcome = await this.runPageAction(tab, (page) =>
           page.op<ActionResult>('pressKey', args),
         );
@@ -1338,7 +1460,7 @@ export class ToolExecutor {
       }
 
       case 'submit_form': {
-        const tab = await this.activeTab();
+        const tab = await this.preparedPageTab(context);
         const outcome = await this.runPageAction(tab, (page) =>
           page.op<ActionResult>('submit', args),
         );
@@ -1399,7 +1521,7 @@ export class ToolExecutor {
       }
 
       case 'click_visual_target': {
-        const tab = await this.activeTab();
+        const tab = await this.preparedPageTab(context);
         const screenshotId = strArg(args, 'screenshotId');
         const screenshot = screenshotId ? this.deps.screenshots.get(screenshotId) : undefined;
         if (!screenshot) {
@@ -1620,8 +1742,7 @@ export class ToolExecutor {
       }
 
       case 'download_link': {
-        const tab = await this.activeTab();
-        const url = await this.resolveDownloadUrl(args, tab);
+        const url = await this.approvedDownloadUrl(context, args);
         const download = await this.downloadUrl(url);
         return {
           data: download,
@@ -1694,11 +1815,13 @@ export class ToolExecutor {
         let url: string;
         let matched: Record<string, unknown> | undefined;
         if (explicitUrl || explicitRef) {
-          const tab = await this.activeTab();
-          url = await this.resolveDownloadUrl(args, tab);
+          url = await this.approvedDownloadUrl(context, args);
           matched = { url: cleanUrl(url), source: 'explicit' };
         } else {
-          const candidates = await this.officialCandidates(keywords, 10);
+          // Search the document the user approved, not whichever tab is active
+          // now. `preparedPageTab` fails closed on a reload or navigation.
+          const tab = await this.preparedPageTab(context);
+          const candidates = await this.officialCandidates(keywords, 10, tab);
           const best = candidates[0];
           if (!best || Number(best.score) < 10) {
             throw new ToolError(
@@ -1710,7 +1833,6 @@ export class ToolExecutor {
               },
             );
           }
-          const tab = await this.activeTab();
           const ref = typeof best.ref === 'string' ? best.ref : undefined;
           if (ref) {
             const page = await this.pageFor(tab);

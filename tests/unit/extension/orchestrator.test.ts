@@ -30,7 +30,11 @@ const SUBMIT_PREP: ToolPreparation = {
 interface HarnessOptions {
   settings?: Partial<AppSettings>;
   prep?: ToolPreparation | ((name: string, args: Record<string, unknown>) => ToolPreparation);
-  execute?: (name: string, args: Record<string, unknown>) => Promise<ToolExecution>;
+  execute?: (
+    name: string,
+    args: Record<string, unknown>,
+    context: { callId: string; signal?: AbortSignal; prep?: ToolPreparation },
+  ) => Promise<ToolExecution>;
   approve?: boolean;
   prepareError?: Error;
   executeError?: Error;
@@ -53,12 +57,18 @@ function harness(options: HarnessOptions = {}) {
     return options.prep ?? { args, url: 'https://example.com/page' };
   });
 
-  const execute = vi.fn(async (name: string, args: Record<string, unknown>) => {
-    if (options.executeError) throw options.executeError;
-    return options.execute
-      ? options.execute(name, args)
-      : { data: { changed: true }, summary: 'Done.' };
-  });
+  const execute = vi.fn(
+    async (
+      name: string,
+      args: Record<string, unknown>,
+      context: { callId: string; signal?: AbortSignal; prep?: ToolPreparation },
+    ) => {
+      if (options.executeError) throw options.executeError;
+      return options.execute
+        ? options.execute(name, args, context)
+        : { data: { changed: true }, summary: 'Done.' };
+    },
+  );
 
   const executor = { prepare, execute } as unknown as ToolExecutor;
   const settings: AppSettings = { ...DEFAULT_SETTINGS, ...options.settings };
@@ -182,6 +192,31 @@ describe('AgentOrchestrator', () => {
     });
     expect(test.entries.get('call-1')).toMatchObject({ status: 'ok' });
     expect(typeof test.entries.get('call-1')?.durationMs).toBe('number');
+  });
+
+  it('forwards the approved preparation so the executor can re-check the page', async () => {
+    const prepared: ToolPreparation = {
+      args: { ref: 'element_002' },
+      tabId: 7,
+      pageUrl: 'https://example.com/checkout',
+      documentId: 'doc-abc',
+      target: { ref: 'element_002', role: 'button', name: 'Pay now', tag: 'button' },
+      detail: 'Checkout on example.com',
+    };
+    const test = harness({ prep: prepared });
+
+    test.orchestrator.handleToolCalls([
+      { id: 'call-1', name: 'click_element', args: { ref: 'element_002' } },
+    ]);
+    await waitForResponses(test.session, 1);
+
+    expect(test.execute).toHaveBeenCalledTimes(1);
+    const context = test.execute.mock.calls[0]?.[2];
+    expect(context).toMatchObject({
+      callId: 'call-1',
+      prep: { tabId: 7, documentId: 'doc-abc', pageUrl: 'https://example.com/checkout' },
+    });
+    expect(context?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('never silently skips the gate for a submit-like click, even when heuristics are off', async () => {

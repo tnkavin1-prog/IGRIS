@@ -46,6 +46,8 @@ export interface PageFingerprint {
   viewportWidth?: number;
   viewportHeight?: number;
   dpr?: number;
+  /** Random id generated once per content-script instance. Changes on reload. */
+  documentId: string;
   /** Cheap structural hash; changes when visible content changes. */
   digest: string;
 }

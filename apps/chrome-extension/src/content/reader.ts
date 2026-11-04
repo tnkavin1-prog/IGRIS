@@ -18,6 +18,13 @@ import {
 } from './dom.js';
 import { registry } from './registry.js';
 
+/**
+ * Identity of this content-script instance. A reload or navigation creates a
+ * new instance with a new id, which lets the executor prove that the document
+ * it is about to mutate is the same one the user approved.
+ */
+const DOCUMENT_ID = crypto.randomUUID();
+
 export function fnv1a(input: string): string {
   let hash = 0x811c9dc5;
   for (let i = 0; i < input.length; i += 1) {
@@ -49,6 +56,7 @@ export function fingerprint(): PageFingerprint {
     viewportWidth: window.innerWidth,
     viewportHeight: window.innerHeight,
     dpr: window.devicePixelRatio || 1,
+    documentId: DOCUMENT_ID,
     digest: fnv1a(state),
   };
 }
