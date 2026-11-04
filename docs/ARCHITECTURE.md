@@ -284,7 +284,7 @@ Snapshots are bounded:
 
 A page fingerprint (URL, title, generation, scroll, element count, text length, structural digest) is used for verification and for `compare_page_states`.
 
-All page text passed to the model is wrapped in an explicit untrusted-data frame. The system instruction tells the model that this text is data, never instructions.
+All page text passed to the model is wrapped in an explicit untrusted-data frame. The system instruction tells the model that this text is data, never instructions. Structured fields that originate in the page — element names, table cells, link text, titles, bookmark and history titles, screenshot titles, and download filenames — are escaped or collapsed at the page boundary before they reach the executor, so no field can forge a prompt delimiter.
 
 ---
 
