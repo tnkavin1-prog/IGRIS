@@ -14,6 +14,7 @@ export function ApprovalSheet({
   const dialogRef = useDialogFocus<HTMLDivElement>({
     initialFocus: denyRef,
     onEscape: () => onResolve(false),
+    layer: 60,
   });
 
   return (

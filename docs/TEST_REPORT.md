@@ -16,7 +16,7 @@ This report contains only results that were actually produced by running the com
 | Lint             | `npx eslint .`               | ✅ Pass — 0 errors, 0 warnings          | Console output                 |
 | Formatting       | `npx prettier --check .`     | ✅ Pass                                 | Console output                 |
 | Unit tests       | `npx vitest run`             | ✅ 16 files, 192 tests                  | Console output                 |
-| E2E tests        | `npx playwright test`        | ✅ 15 tests, 42.7 s                     | `test-results/`                |
+| E2E tests        | `npx playwright test`        | ✅ 17 tests, 42.6 s                     | `test-results/`                |
 | Production build | `npm run release`            | ✅ 12 files, 625.0 kB                   | `release/chrome-extension/`    |
 | ZIP integrity    | Expand + SHA-256 compare     | ✅ 12/12 files match, 0 mismatches      | `release/SHA256SUMS.txt`       |
 | Live API smoke   | `npm run smoke:live`         | ✅ Setup 2,024 ms, first audio 2,743 ms | `docs/evidence/smoke-live.log` |
@@ -124,7 +124,7 @@ Markdown, TypeScript, TSX, MJS, JSON, CSS, and HTML are covered. Generated artif
 
 **Command:** `npx playwright test`
 **Environment:** headed Chromium, real unpacked extension, local fixture servers, mocked Live WebSocket
-**Result:** 15 passed in 42.7 s
+**Result:** 17 passed in 42.6 s
 
 ### 4.1 Extension and content script (`tests/e2e/extension.spec.mjs`)
 
@@ -140,25 +140,27 @@ Markdown, TypeScript, TSX, MJS, JSON, CSS, and HTML are covered. Generated artif
 
 This suite uses a loopback fake bridge for token minting and Playwright's WebSocket router as the Live server. No Google traffic and no real credentials are involved, but the extension runs the production code path: bridge client → ephemeral token → Live setup → `setupComplete` → tool call → preparation → approval UI → executor → tool response.
 
-| #   | Test                                                          | What it proves                                                                                                          |
-| --- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| 6   | `mints a token and completes a real Live setup handshake`     | Token request, constrained-URL connection, setup shape (model, nested audio config, 52 tools, resumption), audio frames |
-| 7   | `gates a submit-like click behind approval, then acts`        | Real approval sheet appears; approving clicks the actual page; execution still targets the approved tab after switching |
-| 8   | `the approval dialog passes axe and traps focus`              | Zero WCAG A/AA violations in the live approval sheet; Tab cannot escape it; initial focus is Deny                       |
-| 9   | `a denied action sends USER_DENIED and causes no side effect` | Deny resolves the real dialog, returns a structured error, and the page is untouched                                    |
-| 10  | `a benign click runs without an approval prompt`              | The gate is not over-eager: a non-submit control executes immediately and returns a result                              |
+| #   | Test                                                            | What it proves                                                                                                          |
+| --- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| 6   | `mints a token and completes a real Live setup handshake`       | Token request, constrained-URL connection, setup shape (model, nested audio config, 52 tools, resumption), audio frames |
+| 7   | `gates a submit-like click behind approval, then acts`          | Real approval sheet appears; approving clicks the actual page; execution still targets the approved tab after switching |
+| 8   | `the approval dialog passes axe and traps focus`                | Zero WCAG A/AA violations in the live approval sheet; Tab cannot escape it; initial focus is Deny                       |
+| 9   | `an approval over settings owns focus and leaves settings open` | Higher-layer dialog wins the focus trap; the settings panel survives the interruption                                   |
+| 10  | `a denied action sends USER_DENIED and causes no side effect`   | Deny resolves the real dialog, returns a structured error, and the page is untouched                                    |
+| 11  | `a benign click runs without an approval prompt`                | The gate is not over-eager: a non-submit control executes immediately and returns a result                              |
 
 ### 4.3 Accessibility (`tests/e2e/accessibility.spec.mjs`)
 
 axe-core 4.11 is injected into the real side-panel page and run against the WCAG 2.0/2.1 A and AA rule sets. Keyboard checks cover what axe cannot assert.
 
-| #   | Test                                              | What it proves                                                                                   |
-| --- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| 11  | `onboarding has no WCAG A/AA violations`          | The four-step first-run dialog has no detectable violations                                      |
-| 12  | `the live panel has no WCAG A/AA violations`      | Header, session card, transcript, and composer are clean                                         |
-| 13  | `every settings tab has no WCAG A/AA violations`  | Connection, Voice, Agent, Access, and Privacy panels are each audited                            |
-| 14  | `the settings dialog traps focus and restores it` | Focus enters the dialog, 10×Tab and 10×Shift+Tab stay inside, Escape returns focus to the opener |
-| 15  | `the onboarding dialog traps focus`               | The same trap holds for onboarding, including its tablist                                        |
+| #   | Test                                                  | What it proves                                                                                   |
+| --- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 12  | `onboarding has no WCAG A/AA violations`              | The four-step first-run dialog has no detectable violations                                      |
+| 13  | `the live panel has no WCAG A/AA violations`          | Header, session card, transcript, and composer are clean                                         |
+| 14  | `every settings tab has no WCAG A/AA violations`      | Connection, Voice, Agent, Access, and Privacy panels are each audited                            |
+| 15  | `the settings dialog traps focus and restores it`     | Focus enters the dialog, 10×Tab and 10×Shift+Tab stay inside, Escape returns focus to the opener |
+| 16  | `the onboarding dialog traps focus`                   | The same trap holds for onboarding, including its tablist                                        |
+| 17  | `a settings dialog opened from onboarding owns focus` | Layer priority stops the onboarding trap from stealing focus from the settings dialog            |
 
 The audit runs against the built extension in headed Chromium, not a component harness. It is a snapshot of the reachable states listed above; it is not a manual screen-reader session.
 
@@ -350,7 +352,7 @@ npm run smoke:live
 | `npm run lint`           | Exit 0, no output                            |
 | `npx prettier --check .` | “All matched files use Prettier code style!” |
 | `npx vitest run`         | 16 files, 192 tests passed                   |
-| `npx playwright test`    | 15 passed                                    |
+| `npx playwright test`    | 17 passed                                    |
 | `npm run release`        | 12 files, ZIP + SHA-256                      |
 | `npm run smoke:live`     | `PASS — Live API round-trip completed`       |
 

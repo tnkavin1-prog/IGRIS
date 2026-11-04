@@ -36,11 +36,42 @@ function focusableInside(dialog: HTMLElement): HTMLElement[] {
   );
 }
 
+/**
+ * Open dialogs, ordered by visual layer. Only the topmost dialog may trap
+ * focus. Without this, a settings panel opened from onboarding (or an approval
+ * sheet appearing over settings) would fight the dialog beneath it for focus.
+ */
+interface StackEntry {
+  dialog: HTMLElement;
+  layer: number;
+  sequence: number;
+}
+
+const dialogStack: StackEntry[] = [];
+let dialogSequence = 0;
+
+function isTopmost(dialog: HTMLElement): boolean {
+  let top: StackEntry | undefined;
+  for (const entry of dialogStack) {
+    if (!entry.dialog.isConnected) continue;
+    if (
+      !top ||
+      entry.layer > top.layer ||
+      (entry.layer === top.layer && entry.sequence > top.sequence)
+    ) {
+      top = entry;
+    }
+  }
+  return top?.dialog === dialog;
+}
+
 export interface DialogFocusOptions {
   /** Called for Escape. The caller decides whether closing is allowed. */
   onEscape?: (() => void) | undefined;
   /** Element to focus on open. Defaults to the first focusable descendant. */
   initialFocus?: RefObject<HTMLElement | null> | undefined;
+  /** Visual layer, matching the dialog's z-index. Higher layers win focus. */
+  layer?: number | undefined;
 }
 
 /**
@@ -58,23 +89,35 @@ export function useDialogFocus<T extends HTMLElement>(
   // no ref is written during render.
   const escapeRef = useRef(options.onEscape);
   const initialRef = useRef(options.initialFocus);
+  const layerRef = useRef(options.layer ?? 0);
   useEffect(() => {
     escapeRef.current = options.onEscape;
     initialRef.current = options.initialFocus;
+    layerRef.current = options.layer ?? 0;
   });
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
 
+    const entry: StackEntry = {
+      dialog,
+      layer: layerRef.current,
+      sequence: (dialogSequence += 1),
+    };
+    dialogStack.push(entry);
+
     const active = document.activeElement;
     restoreRef.current = active instanceof HTMLElement && active !== document.body ? active : null;
 
-    const preferred = initialRef.current?.current;
-    const target = preferred ?? focusableInside(dialog)[0] ?? dialog;
-    target.focus();
+    if (isTopmost(dialog)) {
+      const preferred = initialRef.current?.current;
+      const target = preferred ?? focusableInside(dialog)[0] ?? dialog;
+      target.focus();
+    }
 
     const onKeyDown = (event: KeyboardEvent): void => {
+      if (!isTopmost(dialog)) return;
       if (event.key === 'Escape') {
         const handler = escapeRef.current;
         if (handler) {
@@ -110,6 +153,7 @@ export function useDialogFocus<T extends HTMLElement>(
     // A programmatic focus() on the page behind the modal must not strand the
     // user outside the dialog.
     const onFocusIn = (event: FocusEvent): void => {
+      if (!isTopmost(dialog)) return;
       if (!(event.target instanceof Node) || dialog.contains(event.target)) return;
       const fallback = focusableInside(dialog)[0] ?? dialog;
       fallback.focus();
@@ -121,6 +165,8 @@ export function useDialogFocus<T extends HTMLElement>(
     return () => {
       dialog.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('focusin', onFocusIn);
+      const index = dialogStack.indexOf(entry);
+      if (index >= 0) dialogStack.splice(index, 1);
       const restore = restoreRef.current;
       restoreRef.current = null;
       // The opener can disappear while the dialog is open (for example a menu

@@ -292,6 +292,38 @@ test('the approval dialog passes axe and traps focus', async () => {
   expect(response.response.error.code).toBe('USER_DENIED');
 });
 
+test('an approval over settings owns focus and leaves settings open', async () => {
+  await activateFixtureTab();
+  await panel.getByRole('button', { name: 'Open settings' }).click();
+  const settings = panel.getByRole('dialog', { name: 'Settings' });
+  await expect(settings).toBeVisible();
+
+  sendToolCall([{ id: 'call-stacked', name: 'click_element', args: { text: 'Send request' } }]);
+  const approval = panel.getByRole('dialog', { name: 'Click' });
+  await expect(approval).toBeVisible({ timeout: 20_000 });
+  expect(
+    await panel.evaluate(() =>
+      Boolean(document.activeElement?.closest('[aria-labelledby="approval-title"]')),
+    ),
+  ).toBe(true);
+
+  for (let index = 0; index < 8; index += 1) {
+    await panel.keyboard.press('Tab');
+    const insideApproval = await panel.evaluate(() =>
+      Boolean(document.activeElement?.closest('[aria-labelledby="approval-title"]')),
+    );
+    expect(insideApproval, `Tab ${index + 1} escaped into the settings dialog`).toBe(true);
+  }
+
+  await panel.getByRole('button', { name: 'Deny' }).click();
+  await expect(approval).toHaveCount(0);
+  await expect(settings).toBeVisible();
+  const response = await waitForToolResponse('call-stacked');
+  expect(response.response.error.code).toBe('USER_DENIED');
+  await panel.keyboard.press('Escape');
+  await expect(settings).toHaveCount(0);
+});
+
 test('a denied action sends USER_DENIED and causes no side effect', async () => {
   await activateFixtureTab();
   await fixturePage.evaluate(() => {

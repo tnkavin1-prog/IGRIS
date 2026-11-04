@@ -158,3 +158,27 @@ test('the onboarding dialog traps focus', async () => {
     expect(await focusIsInsideDialog(), `Shift+Tab ${index + 1} escaped onboarding`).toBe(true);
   }
 });
+
+test('a settings dialog opened from onboarding owns focus, not the dialog beneath', async () => {
+  // Continue from the onboarding state left by the previous test.
+  await panel.getByRole('tab', { name: 'Step 2 · Pair' }).click();
+  const opener = panel.getByRole('button', { name: 'Open connection settings' });
+  await opener.click();
+
+  const settings = panel.getByRole('dialog', { name: 'Settings' });
+  await expect(settings).toBeVisible();
+  expect(await focusIsInsideDialog()).toBe(true);
+
+  for (let index = 0; index < 10; index += 1) {
+    await panel.keyboard.press('Tab');
+    const insideSettings = await panel.evaluate(() =>
+      Boolean(document.activeElement?.closest('[aria-labelledby="settings-title"]')),
+    );
+    expect(insideSettings, `Tab ${index + 1} escaped the stacked settings dialog`).toBe(true);
+  }
+
+  await panel.keyboard.press('Escape');
+  await expect(settings).toHaveCount(0);
+  await expect(panel.locator('.onboarding-card')).toBeVisible();
+  await expect(opener).toBeFocused();
+});

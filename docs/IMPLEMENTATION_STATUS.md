@@ -35,7 +35,7 @@ Nothing is marked PASS on the basis of “it should work”.
 | 12  | Approval gates for consequential actions           | **PASS**                                                                 | `safety.ts` + orchestrator; 13 orchestrator tests; offline Live E2E approves, denies, and binds execution to the approved tab           |
 | 13  | Premium side-panel UI                              | **PASS**                                                                 | React UI, 58 KB design system, E2E rendering, screenshots in `docs/assets/`                                                             |
 | 14  | Secure local key handling                          | **PASS**                                                                 | Key only in bridge, `.env` gitignored, redaction tests, gate secret, origin/host/rate checks                                            |
-| 15  | Automated tests                                    | **PASS**                                                                 | 192 unit tests + 15 E2E tests, all passing                                                                                              |
+| 15  | Automated tests                                    | **PASS**                                                                 | 192 unit tests + 17 E2E tests, all passing                                                                                              |
 | 16  | Production build                                   | **PASS**                                                                 | `npm run release`: 12 files, 625.0 kB unpacked                                                                                          |
 | 17  | Ready-to-install extension folder                  | **PASS**                                                                 | `release/chrome-extension/` with manifest at root                                                                                       |
 | 18  | Distributable ZIP                                  | **PASS**                                                                 | `release/Gemini-Browser-Live-Chrome.zip`, SHA-256 `289079…4bff0`, 12/12 files verified                                                  |
@@ -164,7 +164,7 @@ Nothing is marked PASS on the basis of “it should work”.
 | Lint                          | **PASS**       | 0 findings                                                 |
 | Formatting                    | **PASS**       | Prettier clean                                             |
 | Unit tests                    | **PASS**       | 192                                                        |
-| E2E tests                     | **PASS**       | 15                                                         |
+| E2E tests                     | **PASS**       | 17                                                         |
 | Build assertions              | **PASS**       | Fails on missing/empty artifacts                           |
 | Deterministic ZIP             | **PASS**       | Fixed timestamps, sorted entries                           |
 | Manifest reference validation | **PASS**       | Release script                                             |

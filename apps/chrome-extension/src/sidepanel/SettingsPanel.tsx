@@ -41,7 +41,7 @@ export function SettingsPanel({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const secretRef = useRef<HTMLInputElement>(null);
-  const dialogRef = useDialogFocus<HTMLElement>({ onEscape: onClose });
+  const dialogRef = useDialogFocus<HTMLElement>({ onEscape: onClose, layer: 50 });
 
   // `draft` is seeded from the snapshot when the panel mounts. The panel is
   // conditionally rendered, so reopening it always picks up the latest saved

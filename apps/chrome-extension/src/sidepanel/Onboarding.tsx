@@ -77,7 +77,7 @@ export function Onboarding({
   onOpenSettings: () => void;
 }) {
   const [step, setStep] = useState(0);
-  const dialogRef = useDialogFocus<HTMLDivElement>({ onEscape: onClose });
+  const dialogRef = useDialogFocus<HTMLDivElement>({ onEscape: onClose, layer: 45 });
   const current = STEPS[step]!;
   const last = step === STEPS.length - 1;
   const tone = bridgeTone(snapshot);
