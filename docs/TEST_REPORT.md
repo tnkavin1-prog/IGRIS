@@ -1,6 +1,6 @@
 # Test Report
 
-**Date:** 2026-11-03
+**Date:** 2026-11-04
 **Build under test:** Gemini Browser Live v1.0.0
 **Platform:** Windows 11, Node.js v24.18.0, npm 11.16.0, Chromium 156 (Playwright bundle)
 
@@ -10,16 +10,16 @@ This report contains only results that were actually produced by running the com
 
 ## 1. Results summary
 
-| Check            | Command                                            | Result                                  | Evidence                       |
-| ---------------- | -------------------------------------------------- | --------------------------------------- | ------------------------------ |
-| TypeScript       | `node scripts/typecheck.mjs`                       | ✅ Pass — 3 projects                    | Console output                 |
-| Lint             | `npx eslint .`                                     | ✅ Pass — 0 errors, 0 warnings          | Console output                 |
-| Formatting       | `npx prettier --check .`                           | ✅ Pass                                 | Console output                 |
-| Unit tests       | `npx vitest run`                                   | ✅ 13 files, 156 tests                  | Console output                 |
-| E2E tests        | `npx playwright test tests/e2e/extension.spec.mjs` | ✅ 5 tests, 12.3 s                      | `test-results/`                |
-| Production build | `npm run release`                                  | ✅ 12 files, 619.7 kB                   | `release/chrome-extension/`    |
-| ZIP integrity    | Expand + SHA-256 compare                           | ✅ 12/12 files match, 0 mismatches      | `release/SHA256SUMS.txt`       |
-| Live API smoke   | `npm run smoke:live`                               | ✅ Setup 2,024 ms, first audio 2,743 ms | `docs/evidence/smoke-live.log` |
+| Check            | Command                      | Result                                  | Evidence                       |
+| ---------------- | ---------------------------- | --------------------------------------- | ------------------------------ |
+| TypeScript       | `node scripts/typecheck.mjs` | ✅ Pass — 3 projects                    | Console output                 |
+| Lint             | `npx eslint .`               | ✅ Pass — 0 errors, 0 warnings          | Console output                 |
+| Formatting       | `npx prettier --check .`     | ✅ Pass                                 | Console output                 |
+| Unit tests       | `npx vitest run`             | ✅ 15 files, 182 tests                  | Console output                 |
+| E2E tests        | `npx playwright test`        | ✅ 9 tests, 24.0 s                      | `test-results/`                |
+| Production build | `npm run release`            | ✅ 12 files, 619.7 kB                   | `release/chrome-extension/`    |
+| ZIP integrity    | Expand + SHA-256 compare     | ✅ 12/12 files match, 0 mismatches      | `release/SHA256SUMS.txt`       |
+| Live API smoke   | `npm run smoke:live`         | ✅ Setup 2,024 ms, first audio 2,743 ms | `docs/evidence/smoke-live.log` |
 
 No test was skipped or marked as passing without execution.
 
@@ -68,23 +68,25 @@ Markdown, TypeScript, TSX, MJS, JSON, CSS, and HTML are covered. Generated artif
 ## 3. Unit tests
 
 **Command:** `npx vitest run`
-**Result:** 13 files passed, 156 tests passed, 6.18 s
+**Result:** 15 files passed, 182 tests passed, 6.12 s
 
-| Suite                                  | Tests | What it covers                                                                                |
-| -------------------------------------- | ----- | --------------------------------------------------------------------------------------------- |
-| `shared/safety.test.ts`                | 24    | Hard blocks, risk keywords, URL validation, untrusted-text framing, Unicode tokenisation      |
-| `shared/catalog.test.ts`               | 12    | 52 unique tools, schema completeness, approval policy, descriptions                           |
-| `shared/json-schema.test.ts`           | 12    | Runtime validation, required fields, types, enums, array bounds, Gemini schema derivation     |
-| `bridge/config.test.ts`                | 10    | `.env` parsing, BOM handling, validation errors, secret masking, extension-ID filtering       |
-| `bridge/auth.test.ts`                  | 12    | Bearer extraction, constant-time compare, origin allowlist, host header checks                |
-| `bridge/rate-limit.test.ts`            | 6     | Sliding window, rejection, refill, isolation                                                  |
-| `bridge/token-service.test.ts`         | 9     | Model allowlist, upstream payload, error mapping, redaction, timeouts                         |
-| `bridge/app.test.ts`                   | 13    | Health/config/token routes, CORS, body limits, auth failures, rate limits                     |
-| `extension/audio.test.ts`              | 16    | PCM conversion, base64, resampler, gain, frame sizing, ring buffer math                       |
-| `extension/setup.test.ts`              | 12    | Nested `generationConfig`, thinking config, tools on/off, resumption, VAD clamps              |
-| `extension/storage.test.ts`            | 12    | Defaults, merge, validation, secret storage, retention, reset                                 |
-| `extension/system-instruction.test.ts` | 6     | Policy content, injection warnings, verification language, model-specific text                |
-| `extension/orchestrator.test.ts`       | 12    | Validation, approval gate, denial, timeout, cancellation, step limit, error mapping, evidence |
+| Suite                                  | Tests | What it covers                                                                                       |
+| -------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------- |
+| `shared/safety.test.ts`                | 24    | Hard blocks, risk keywords, URL validation, untrusted-text framing, Unicode tokenisation             |
+| `shared/prompt-injection.test.ts`      | 17    | Delimiter forgery, nested/forged blocks, role tags, controls, lookalike tags, inline-title escape    |
+| `shared/catalog.test.ts`               | 12    | 52 unique tools, schema completeness, approval policy, descriptions                                  |
+| `shared/json-schema.test.ts`           | 12    | Runtime validation, required fields, types, enums, array bounds, Gemini schema derivation            |
+| `bridge/config.test.ts`                | 10    | `.env` parsing, BOM handling, validation errors, secret masking, extension-ID filtering              |
+| `bridge/auth.test.ts`                  | 12    | Bearer extraction, constant-time compare, origin allowlist, host header checks                       |
+| `bridge/rate-limit.test.ts`            | 6     | Sliding window, rejection, refill, isolation                                                         |
+| `bridge/token-service.test.ts`         | 9     | Model allowlist, upstream payload, error mapping, redaction, timeouts                                |
+| `bridge/app.test.ts`                   | 13    | Health/config/token routes, CORS, body limits, auth failures, rate limits                            |
+| `extension/audio.test.ts`              | 16    | PCM conversion, base64, resampler, gain, frame sizing, ring buffer math                              |
+| `extension/setup.test.ts`              | 13    | Nested `generationConfig`, thinking config, tools on/off, resumption, VAD clamps, title escaping     |
+| `extension/storage.test.ts`            | 12    | Defaults, merge, validation, secret storage, retention, reset                                        |
+| `extension/system-instruction.test.ts` | 6     | Policy content, injection warnings, verification language, model-specific text                       |
+| `extension/executor-guards.test.ts`    | 7     | Tab/URL/document binding, `TAB_GONE`/`ELEMENT_STALE`, prepared-URL replay                            |
+| `extension/orchestrator.test.ts`       | 13    | Validation, approval gate, denial, timeout, cancellation, step limit, error mapping, prep forwarding |
 
 ### Notable behaviours asserted
 
@@ -95,6 +97,10 @@ Markdown, TypeScript, TSX, MJS, JSON, CSS, and HTML are covered. Generated artif
 - Cancellation aborts a running tool and marks queued calls cancelled.
 - The step limit stops runaway loops.
 - Page text cannot approve an action (no code path exists; tests assert the resolver is only reachable through the controller callback).
+- A hostile page cannot forge the untrusted-content delimiter or a `<system>` role tag.
+- A page title cannot inject newlines, fake bullets, or role tags into the orientation turn.
+- Execution refuses a different tab, a different URL, or a same-URL reload after approval.
+- The approved preparation object is forwarded to the executor for the re-check.
 - Array `minItems` / `maxItems` are enforced at runtime (a real defect found and fixed during development).
 - BOM-prefixed `.env` files parse correctly (regression test added after a Windows setup issue).
 
@@ -102,9 +108,11 @@ Markdown, TypeScript, TSX, MJS, JSON, CSS, and HTML are covered. Generated artif
 
 ## 4. End-to-end tests
 
-**Command:** `npx playwright test tests/e2e/extension.spec.mjs`
-**Environment:** headed Chromium, real unpacked extension, local fixture server
-**Result:** 5 passed in 12.3 s
+**Command:** `npx playwright test`
+**Environment:** headed Chromium, real unpacked extension, local fixture servers, mocked Live WebSocket
+**Result:** 9 passed in 24.0 s
+
+### 4.1 Extension and content script (`tests/e2e/extension.spec.mjs`)
 
 | #   | Test                                                       | What it proves                                                                                              |
 | --- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
@@ -114,10 +122,21 @@ Markdown, TypeScript, TSX, MJS, JSON, CSS, and HTML are covered. Generated artif
 | 4   | `content script snapshots and operates a real page`        | Content script injects into a real page, snapshot returns title/text/elements, click mutates the page       |
 | 5   | `a full-page read is bounded and framed as data`           | Full-page read respects the 500-character test bound and returns a string framed as data                    |
 
+### 4.2 Offline Live and approval harness (`tests/e2e/live-approval.spec.mjs`)
+
+This suite uses a loopback fake bridge for token minting and Playwright's WebSocket router as the Live server. No Google traffic and no real credentials are involved, but the extension runs the production code path: bridge client → ephemeral token → Live setup → `setupComplete` → tool call → preparation → approval UI → executor → tool response.
+
+| #   | Test                                                          | What it proves                                                                                                          |
+| --- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| 6   | `mints a token and completes a real Live setup handshake`     | Token request, constrained-URL connection, setup shape (model, nested audio config, 52 tools, resumption), audio frames |
+| 7   | `gates a submit-like click behind approval, then acts`        | Real approval sheet appears; approving clicks the actual page; execution still targets the approved tab after switching |
+| 8   | `a denied action sends USER_DENIED and causes no side effect` | Deny resolves the real dialog, returns a structured error, and the page is untouched                                    |
+| 9   | `a benign click runs without an approval prompt`              | The gate is not over-eager: a non-submit control executes immediately and returns a result                              |
+
 ### What the E2E suite does not do
 
-- It does not start a real Gemini session (no credentials in CI, and the test must be deterministic).
-- It does not exercise a microphone or speaker.
+- It does not connect to the real Gemini service; that path is covered by `npm run smoke:live` and the protocol probes.
+- It uses Chromium's fake audio device; it does not capture a physical microphone or measure speaker output.
 - It does not test downloads, bookmarks, or history against real Chrome data.
 
 Those paths are covered by unit tests (logic), the Live smoke test (protocol), and manual verification (hardware).
@@ -249,8 +268,10 @@ outTranscript="Returned gamma."
 | Bridge HTTP surface                       | ✅ 13 tests         | —                      | ✅ health         | —                               |
 | Live setup builder                        | ✅ 12 tests         | —                      | ✅ accepted       | —                               |
 | System instruction                        | ✅ 6 tests          | —                      | —                 | —                               |
-| Orchestrator / approvals                  | ✅ 12 tests         | —                      | —                 | ✅ UI reviewed                  |
-| Audio math / resampling                   | ✅ 16 tests         | —                      | —                 | ⚠️ Hardware not automated       |
+| Orchestrator / approvals                  | ✅ 13 tests         | ✅ Approve/deny E2E    | —                 | ✅ UI reviewed                  |
+| Approval tab/document binding             | ✅ 7 tests          | ✅ E2E switch-tab case | —                 | —                               |
+| Prompt-injection boundary                 | ✅ 17-case corpus   | —                      | —                 | —                               |
+| Audio math / resampling                   | ✅ 16 tests         | ⚠️ Fake device only    | —                 | ⚠️ Hardware not automated       |
 | Storage / settings                        | ✅ 12 tests         | ✅ UI                  | —                 | —                               |
 | UI rendering                              | —                   | ✅ 3 tests             | —                 | ✅ Screenshots                  |
 | Content script                            | —                   | ✅ 2 tests             | —                 | ✅ Used during development      |
@@ -264,8 +285,8 @@ Legend: ✅ covered, ⚠️ partial, ❌ not covered, — not applicable.
 
 ## 8. Known gaps and limitations
 
-1. **No automated microphone test.** Browser audio capture requires a real or virtual device and user permission. The worklet math is unit-tested; the end-to-end voice loop was verified manually.
-2. **No automated real-session tool test.** Doing so would require credentials in the test environment and would be nondeterministic. The protocol probe covers the round trip with an echo tool.
+1. **No automated physical-microphone test.** The E2E suite uses Chromium's fake audio device, so the capture and playback pipeline runs but acoustic behaviour and real hardware permissions are not measured. The worklet math is unit-tested; the real voice loop was verified manually.
+2. **No automated real-Gemini tool test.** The offline E2E proves the full browser-side protocol path with a mocked Live server. A real session with credentials would be nondeterministic; the smoke test and protocol probes cover the real service.
 3. **Optional-permission tools are not exercised against real Chrome data.** `downloads`, `bookmarks`, and `history` paths are guarded by runtime permission checks and policy tests, but no test creates a real download or reads a real bookmark.
 4. **Visual tools are not automated.** `capture_viewport`, `describe_visible_page`, and `click_visual_target` require a real rendered page and model vision. They are implemented and reviewed, not E2E-tested.
 5. **No cross-browser testing.** Chrome/Chromium only. The Side Panel API is not available in Firefox.
@@ -286,7 +307,7 @@ npm run typecheck
 npm run lint
 npx prettier --check .
 npx vitest run
-npx playwright test tests/e2e/extension.spec.mjs
+npx playwright test
 npm run release
 npm run smoke:live
 ```
@@ -298,8 +319,8 @@ npm run smoke:live
 | `npm run typecheck`      | Exit 0, three ✔ lines                        |
 | `npm run lint`           | Exit 0, no output                            |
 | `npx prettier --check .` | “All matched files use Prettier code style!” |
-| `npx vitest run`         | 13 files, 156 tests passed                   |
-| `npx playwright test …`  | 5 passed                                     |
+| `npx vitest run`         | 15 files, 182 tests passed                   |
+| `npx playwright test`    | 9 passed                                     |
 | `npm run release`        | 12 files, ZIP + SHA-256                      |
 | `npm run smoke:live`     | `PASS — Live API round-trip completed`       |
 
@@ -317,16 +338,19 @@ The smoke test starts the built bridge if it is not running and stops it afterwa
 
 These are recorded because they demonstrate the tests are doing real work.
 
-| Defect                                                    | Impact                                                     | Fix                                                     |
-| --------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
-| Array `minItems` / `maxItems` not enforced at runtime     | Oversized tool arguments could reach executors             | Runtime validator now enforces bounds; tests added      |
-| Bridge reflected arbitrary `Origin` on readable endpoints | Any local page could read responses                        | CORS now only emits headers for allowlisted origins     |
-| `extractBearer` failed on leading whitespace              | Valid tokens rejected in edge cases                        | Trim before matching; test added                        |
-| Useless assignments in setup                              | Lint noise, unclear intent                                 | Removed                                                 |
-| Caught errors lost `cause`                                | Harder diagnosis                                           | Errors now preserve `cause`                             |
-| Keyword tokenisation broke on Unicode                     | Risk detection missed non-ASCII labels                     | Unicode-aware tokenisation; test added                  |
-| BOM-prefixed `.env` hid the first key                     | Bridge failed to start on Windows PowerShell-created files | BOM stripped; regression test added                     |
-| IPv6 loopback in CSP                                      | Chrome refused to load the extension                       | Removed `[::1]` entries; loopback validation restricted |
+| Defect                                                    | Impact                                                     | Fix                                                                     |
+| --------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Approval acted on the active tab, not the approved one    | Switching tabs after approval could act on another page    | Preparation stores tab id, URL, and document id; execution fails closed |
+| Untrusted page block could be closed by page text         | Injected text could appear outside the data boundary       | Angle brackets escaped; delimiter is unforgeable                        |
+| Page title could inject newlines/role tags                | Hostile title could forge prompt lines                     | Single-line sanitisation + escaping for inline fields                   |
+| Array `minItems` / `maxItems` not enforced at runtime     | Oversized tool arguments could reach executors             | Runtime validator now enforces bounds; tests added                      |
+| Bridge reflected arbitrary `Origin` on readable endpoints | Any local page could read responses                        | CORS now only emits headers for allowlisted origins                     |
+| `extractBearer` failed on leading whitespace              | Valid tokens rejected in edge cases                        | Trim before matching; test added                                        |
+| Useless assignments in setup                              | Lint noise, unclear intent                                 | Removed                                                                 |
+| Caught errors lost `cause`                                | Harder diagnosis                                           | Errors now preserve `cause`                                             |
+| Keyword tokenisation broke on Unicode                     | Risk detection missed non-ASCII labels                     | Unicode-aware tokenisation; test added                                  |
+| BOM-prefixed `.env` hid the first key                     | Bridge failed to start on Windows PowerShell-created files | BOM stripped; regression test added                                     |
+| IPv6 loopback in CSP                                      | Chrome refused to load the extension                       | Removed `[::1]` entries; loopback validation restricted                 |
 
 ---
 

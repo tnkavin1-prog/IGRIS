@@ -19,28 +19,28 @@ Nothing is marked PASS on the basis of “it should work”.
 
 ## 1. Core acceptance criteria
 
-| #   | Requirement                                        | Status                                                           | Evidence                                                                                                           |
-| --- | -------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| 1   | Chrome extension, Manifest V3, side panel UI       | **PASS**                                                         | `manifest.json`; E2E tests 1–3; `release/chrome-extension/` loads in Chromium 156                                  |
-| 2   | Real-time Gemini Live connection                   | **PASS**                                                         | `smoke:live` reached `setupComplete`, audio, and transcript; `docs/evidence/smoke-live.log`                        |
-| 3   | Streaming 16 kHz PCM microphone input              | **PASS** (implementation) / **PARTIAL** (hardware verification)  | `audio/capture.ts`, `worklet-capture.ts`, 16 audio unit tests; no automated real-mic E2E                           |
-| 4   | 24 kHz PCM playback                                | **PASS** (implementation) / **PARTIAL** (hardware verification)  | `audio/playback.ts`, ring-buffer worklet, audio unit tests; manual only                                            |
-| 5   | Barge-in interruption                              | **PASS** (implementation) / **PARTIAL** (hardware verification)  | Local flush on `interrupted`, controller handling; not measured with real speakers                                 |
-| 6   | Session resumption                                 | **PASS**                                                         | `sessionResumption: {}` verified to emit handles (`probe-results.json`); manager reconnect logic; setup unit tests |
-| 7   | Ephemeral tokens; permanent key never in extension | **PASS**                                                         | Token mint probe, smoke test, bridge token-service tests, manifest/CSP review                                      |
-| 8   | Asynchronous tool calling                          | **PASS**                                                         | Constrained-endpoint probe: `toolCalls=1`, `toolRoundTrip=true`; orchestrator tests                                |
-| 9   | Semantic DOM grounding                             | **PASS**                                                         | Element registry, role/name derivation, fingerprints; E2E snapshot + click on a real page                          |
-| 10  | Verification loop after actions                    | **PASS** (implementation) / **PARTIAL** (live tool verification) | Fingerprint diff, navigation settle, download polling; orchestrator evidence tests; echo-tool probe only           |
-| 11  | Prompt-injection resistance                        | **PASS** (defence in depth) / **PARTIAL** (adversarial testing)  | Untrusted framing, system instruction, code-enforced consent; safety tests; no red-team E2E                        |
-| 12  | Approval gates for consequential actions           | **PASS**                                                         | `safety.ts` + orchestrator; 12 orchestrator tests; E2E settings/approval UI review                                 |
-| 13  | Premium side-panel UI                              | **PASS**                                                         | React UI, 58 KB design system, E2E rendering, screenshots in `docs/assets/`                                        |
-| 14  | Secure local key handling                          | **PASS**                                                         | Key only in bridge, `.env` gitignored, redaction tests, gate secret, origin/host/rate checks                       |
-| 15  | Automated tests                                    | **PASS**                                                         | 156 unit tests + 5 E2E tests, all passing                                                                          |
-| 16  | Production build                                   | **PASS**                                                         | `npm run release`: 12 files, 619.7 kB unpacked                                                                     |
-| 17  | Ready-to-install extension folder                  | **PASS**                                                         | `release/chrome-extension/` with manifest at root                                                                  |
-| 18  | Distributable ZIP                                  | **PASS**                                                         | `release/Gemini-Browser-Live-Chrome.zip`, SHA-256 `ab53db…aebb9`, 12/12 files verified                             |
-| 19  | Documented test evidence                           | **PASS**                                                         | `docs/TEST_REPORT.md`                                                                                              |
-| 20  | This status document                               | **PASS**                                                         | You are reading it                                                                                                 |
+| #   | Requirement                                        | Status                                                                   | Evidence                                                                                                                                |
+| --- | -------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Chrome extension, Manifest V3, side panel UI       | **PASS**                                                                 | `manifest.json`; E2E tests 1–3; `release/chrome-extension/` loads in Chromium 156                                                       |
+| 2   | Real-time Gemini Live connection                   | **PASS**                                                                 | `smoke:live` reached `setupComplete`, audio, and transcript; `docs/evidence/smoke-live.log`                                             |
+| 3   | Streaming 16 kHz PCM microphone input              | **PASS** (implementation) / **PARTIAL** (hardware verification)          | `audio/capture.ts`, `worklet-capture.ts`, 16 audio unit tests; no automated real-mic E2E                                                |
+| 4   | 24 kHz PCM playback                                | **PASS** (implementation) / **PARTIAL** (hardware verification)          | `audio/playback.ts`, ring-buffer worklet, audio unit tests; manual only                                                                 |
+| 5   | Barge-in interruption                              | **PASS** (implementation) / **PARTIAL** (hardware verification)          | Local flush on `interrupted`, controller handling; not measured with real speakers                                                      |
+| 6   | Session resumption                                 | **PASS**                                                                 | `sessionResumption: {}` verified to emit handles (`probe-results.json`); manager reconnect logic; setup unit tests                      |
+| 7   | Ephemeral tokens; permanent key never in extension | **PASS**                                                                 | Token mint probe, smoke test, bridge token-service tests, manifest/CSP review                                                           |
+| 8   | Asynchronous tool calling                          | **PASS**                                                                 | Constrained-endpoint probe: `toolCalls=1`, `toolRoundTrip=true`; orchestrator tests                                                     |
+| 9   | Semantic DOM grounding                             | **PASS**                                                                 | Element registry, role/name derivation, fingerprints; E2E snapshot + click on a real page                                               |
+| 10  | Verification loop after actions                    | **PASS** (implementation) / **PARTIAL** (live tool verification)         | Fingerprint diff, navigation settle, download polling; orchestrator evidence tests; echo-tool probe only                                |
+| 11  | Prompt-injection resistance                        | **PASS** (defence in depth + corpus) / **PARTIAL** (live model red team) | Unforgeable untrusted framing, escaped inline titles, system instruction, code-enforced consent; 17-case corpus; no live-model red team |
+| 12  | Approval gates for consequential actions           | **PASS**                                                                 | `safety.ts` + orchestrator; 13 orchestrator tests; offline Live E2E approves, denies, and binds execution to the approved tab           |
+| 13  | Premium side-panel UI                              | **PASS**                                                                 | React UI, 58 KB design system, E2E rendering, screenshots in `docs/assets/`                                                             |
+| 14  | Secure local key handling                          | **PASS**                                                                 | Key only in bridge, `.env` gitignored, redaction tests, gate secret, origin/host/rate checks                                            |
+| 15  | Automated tests                                    | **PASS**                                                                 | 182 unit tests + 9 E2E tests, all passing                                                                                               |
+| 16  | Production build                                   | **PASS**                                                                 | `npm run release`: 12 files, 619.7 kB unpacked                                                                                          |
+| 17  | Ready-to-install extension folder                  | **PASS**                                                                 | `release/chrome-extension/` with manifest at root                                                                                       |
+| 18  | Distributable ZIP                                  | **PASS**                                                                 | `release/Gemini-Browser-Live-Chrome.zip`, SHA-256 `ab53db…aebb9`, 12/12 files verified                                                  |
+| 19  | Documented test evidence                           | **PASS**                                                                 | `docs/TEST_REPORT.md`                                                                                                                   |
+| 20  | This status document                               | **PASS**                                                                 | You are reading it                                                                                                                      |
 
 ---
 
@@ -100,20 +100,21 @@ Nothing is marked PASS on the basis of “it should work”.
 
 ### 2.4 Safety and approval
 
-| Item                             | Status         | Notes                              |
-| -------------------------------- | -------------- | ---------------------------------- |
-| Hard-blocked URL schemes         | **PASS**       | 24 safety tests                    |
-| Protected Chrome surfaces        | **PASS**       | `isScriptableUrl`, error path      |
-| Risk keyword classification      | **PASS**       | Unicode-aware, 24 tests            |
-| Submit-like actions always gated | **PASS**       | Policy tests                       |
-| Approval sheet                   | **PASS**       | UI + orchestrator tests            |
-| Approval timeout (120 s)         | **PASS**       | Test                               |
-| Denial is final                  | **PASS**       | Test                               |
-| Cancellation                     | **PASS**       | Test                               |
-| Step budget                      | **PASS**       | Test                               |
-| Page content cannot approve      | **PASS**       | No code path; architectural review |
-| Executable download block        | **PASS**       | Policy test                        |
-| Prompt-injection red team        | **NOT TESTED** | No adversarial page corpus         |
+| Item                             | Status   | Notes                                                              |
+| -------------------------------- | -------- | ------------------------------------------------------------------ |
+| Hard-blocked URL schemes         | **PASS** | 24 safety tests                                                    |
+| Protected Chrome surfaces        | **PASS** | `isScriptableUrl`, error path                                      |
+| Risk keyword classification      | **PASS** | Unicode-aware, 24 tests                                            |
+| Submit-like actions always gated | **PASS** | Policy tests                                                       |
+| Approval bound to approved tab   | **PASS** | Executor guard tests + offline Live E2E                            |
+| Approval sheet                   | **PASS** | UI + orchestrator tests + offline Live E2E                         |
+| Approval timeout (120 s)         | **PASS** | Test                                                               |
+| Denial is final                  | **PASS** | Test                                                               |
+| Cancellation                     | **PASS** | Test                                                               |
+| Step budget                      | **PASS** | Test                                                               |
+| Page content cannot approve      | **PASS** | No code path; architectural review                                 |
+| Executable download block        | **PASS** | Policy test                                                        |
+| Prompt-injection corpus          | **PASS** | 17-case corpus: delimiter forgery, role tags, controls, lookalikes |
 
 ### 2.5 Security
 
@@ -161,8 +162,8 @@ Nothing is marked PASS on the basis of “it should work”.
 | Typecheck                     | **PASS**       | 3 projects                              |
 | Lint                          | **PASS**       | 0 findings                              |
 | Formatting                    | **PASS**       | Prettier clean                          |
-| Unit tests                    | **PASS**       | 156                                     |
-| E2E tests                     | **PASS**       | 5                                       |
+| Unit tests                    | **PASS**       | 182                                     |
+| E2E tests                     | **PASS**       | 9                                       |
 | Build assertions              | **PASS**       | Fails on missing/empty artifacts        |
 | Deterministic ZIP             | **PASS**       | Fixed timestamps, sorted entries        |
 | Manifest reference validation | **PASS**       | Release script                          |
@@ -216,7 +217,7 @@ The original directive asked for a production-quality, real-time Gemini Live voi
 | Approval gates                          | **PASS** — code-enforced                                      |
 | Premium UI                              | **PASS** — screenshot-verified                                |
 | Secure local key handling               | **PASS** — `.env`, ACL, redaction                             |
-| Tests                                   | **PASS** — 156 unit + 5 E2E                                   |
+| Tests                                   | **PASS** — 182 unit + 9 E2E                                   |
 | Production build                        | **PASS** — `release/`                                         |
 | Ready-to-install extension              | **PASS** — unpacked folder                                    |
 | Distributable ZIP                       | **PASS** — verified archive                                   |
@@ -246,18 +247,17 @@ All deviations are documented in `docs/TECHNICAL_RESEARCH.md` and `docs/ARCHITEC
 
 Ordered by value, not difficulty.
 
-| Item                                          | Priority | Why it matters                                                   |
-| --------------------------------------------- | -------- | ---------------------------------------------------------------- |
-| Red-team prompt-injection corpus              | High     | Validate the layered defence against real attack strings         |
-| Automated approval-flow E2E                   | High     | Prove the gate in a real browser session, not only in unit tests |
-| Real microphone/playback E2E                  | High     | Close the largest verification gap                               |
-| Downloads/bookmarks/history integration tests | Medium   | Exercise optional permissions against real Chrome data           |
-| Long-session soak test                        | Medium   | Measure resumption, rotation, and memory over hours              |
-| Accessibility audit (axe)                     | Medium   | Confirm keyboard and screen-reader behaviour                     |
-| CI pipeline                                   | Medium   | Prevent regressions on every change                              |
-| macOS/Linux setup test                        | Low      | Validate the documented manual path                              |
-| Visual-tool E2E                               | Low      | Requires model vision and a deterministic page                   |
-| TypeDoc API reference                         | Low      | Nice-to-have for contributors                                    |
+| Item                                          | Priority | Why it matters                                                                        |
+| --------------------------------------------- | -------- | ------------------------------------------------------------------------------------- |
+| Live-model prompt-injection red team          | High     | The corpus proves boundary integrity; a real model run would test semantic resistance |
+| Real microphone/playback E2E                  | High     | Close the largest verification gap                                                    |
+| Downloads/bookmarks/history integration tests | Medium   | Exercise optional permissions against real Chrome data                                |
+| Long-session soak test                        | Medium   | Measure resumption, rotation, and memory over hours                                   |
+| Accessibility audit (axe)                     | Medium   | Confirm keyboard and screen-reader behaviour                                          |
+| CI pipeline                                   | Medium   | Prevent regressions on every change                                                   |
+| macOS/Linux setup test                        | Low      | Validate the documented manual path                                                   |
+| Visual-tool E2E                               | Low      | Requires model vision and a deterministic page                                        |
+| TypeDoc API reference                         | Low      | Nice-to-have for contributors                                                         |
 
 ---
 
@@ -272,7 +272,7 @@ The project is done for v1.0.0 when:
 - [x] Security model, permissions, architecture, and research are documented.
 - [x] Every untested path is labelled, not hidden.
 
-It is **not** done for every conceivable production deployment: there is no CI, no cross-platform execution, no adversarial injection corpus, and no hardware-automated audio test. Those are listed above as open items, not as completed work.
+It is **not** done for every conceivable production deployment: there is no CI, no cross-platform execution, no live-model injection red team, and no hardware-automated audio test. Those are listed above as open items, not as completed work.
 
 ---
 
