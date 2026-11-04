@@ -211,7 +211,7 @@ Copies used in documentation: `docs/assets/`.
   unpacked    626.1 kB
   archive     627.4 kB
   zip         release/Gemini-Browser-Live-Chrome.zip
-  sha256      218f9d00db898e7dd580d111aaf9413b9b8e679999afa84bd15d03cf098f8450
+  sha256      fb7171c8c4391c691fd96a98460a38212324fd25b8f6bff03fa1f29d3cd2cd13
 ```
 
 ### Artifact inventory
