@@ -248,17 +248,17 @@ All deviations are documented in `docs/TECHNICAL_RESEARCH.md` and `docs/ARCHITEC
 
 Ordered by value, not difficulty.
 
-| Item                                          | Priority | Why it matters                                                                        |
-| --------------------------------------------- | -------- | ------------------------------------------------------------------------------------- |
-| Live-model prompt-injection red team          | High     | The corpus proves boundary integrity; a real model run would test semantic resistance |
-| Real microphone/playback E2E                  | High     | Close the largest verification gap                                                    |
-| Downloads/bookmarks/history integration tests | Medium   | Exercise optional permissions against real Chrome data                                |
-| Long-session soak test                        | Medium   | Measure resumption, rotation, and memory over hours                                   |
-| Manual screen-reader pass                     | Low      | axe and focus traps are automated; NVDA/VoiceOver behaviour is not                    |
-| CI pipeline                                   | Medium   | Workflow exists; needs a remote and one green run to be verified                      |
-| macOS/Linux setup test                        | Low      | Validate the documented manual path                                                   |
-| Visual-tool E2E                               | Low      | Requires model vision and a deterministic page                                        |
-| TypeDoc API reference                         | Low      | Nice-to-have for contributors                                                         |
+| Item                                          | Priority | Why it matters                                                                                 |
+| --------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| Live-model prompt-injection red team          | High     | The corpus proves boundary integrity; a real model run would test semantic resistance          |
+| Real microphone/playback E2E                  | High     | Close the largest verification gap                                                             |
+| Downloads/bookmarks/history integration tests | Low      | Blocked by Chrome's native permission dialog in automation; unit policy tests cover the gating |
+| Long-session soak test                        | Medium   | Measure resumption, rotation, and memory over hours                                            |
+| Manual screen-reader pass                     | Low      | axe and focus traps are automated; NVDA/VoiceOver behaviour is not                             |
+| CI pipeline                                   | Medium   | Workflow exists; needs a remote and one green run to be verified                               |
+| macOS/Linux setup test                        | Low      | Validate the documented manual path                                                            |
+| Visual-tool E2E                               | Low      | Requires model vision and a deterministic page                                                 |
+| TypeDoc API reference                         | Low      | Nice-to-have for contributors                                                                  |
 
 ---
 
