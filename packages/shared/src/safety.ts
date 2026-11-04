@@ -95,9 +95,10 @@ export function validateNavigationUrl(raw: string): UrlCheck {
       return { ok: false, reason: `The ${scheme.replace(':', '')} scheme is not allowed.` };
     }
   }
-  // Reject control characters that can smuggle a second URL.
+  // Reject control characters and zero-width characters that can smuggle a
+  // second URL or obscure a dangerous scheme.
   // eslint-disable-next-line no-control-regex -- deliberately matching C0 controls
-  if (/[\u0000-\u001f\u007f]/.test(value)) {
+  if (/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2060\ufeff]/.test(value)) {
     return { ok: false, reason: 'URL contains control characters.' };
   }
 

@@ -88,6 +88,10 @@ describe('validateNavigationUrl', () => {
       ok: false,
       reason: 'URL contains control characters.',
     });
+    expect(validateNavigationUrl('https://example.com/\u200bevil')).toMatchObject({
+      ok: false,
+      reason: 'URL contains control characters.',
+    });
   });
 
   it('builds encoded search URLs', () => {
