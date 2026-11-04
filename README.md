@@ -205,8 +205,10 @@ packages/
   shared/               Tool catalog, schemas, safety policy, protocol types
 scripts/                Build, release, setup, probes, smoke test, icons
 tests/
-  unit/                 156 Vitest tests
-  e2e/                  5 Playwright tests against real Chrome
+  unit/                 192 Vitest tests
+  e2e/                  9 Playwright tests against real Chrome
+.github/
+  workflows/ci.yml      Checks, browser E2E, and release artifact jobs
 docs/                   Architecture, security, permissions, research, evidence
 release/                Built extension + deterministic ZIP (gitignored)
 ```
@@ -221,8 +223,8 @@ release/                Built extension + deterministic ZIP (gitignored)
 | `npm run build:extension` | Extension only                                                         |
 | `npm run bridge`          | Start the built bridge                                                 |
 | `npm run dev:bridge`      | Start the bridge with watch mode                                       |
-| `npm test`                | Run 156 unit tests                                                     |
-| `npm run test:e2e`        | Run 5 Playwright tests in Chrome                                       |
+| `npm test`                | Run 192 unit tests                                                     |
+| `npm run test:e2e`        | Run 9 Playwright tests in Chrome                                       |
 | `npm run test:all`        | Typecheck + lint + unit + E2E                                          |
 | `npm run typecheck`       | TypeScript across all workspaces                                       |
 | `npm run lint`            | ESLint 10 flat config                                                  |
@@ -235,6 +237,7 @@ release/                Built extension + deterministic ZIP (gitignored)
 ## Evidence and status
 
 - [docs/TEST_REPORT.md](docs/TEST_REPORT.md) — commands, dates, results, and what is _not_ covered.
+- [.github/workflows/ci.yml](.github/workflows/ci.yml) — typecheck/lint/format/unit, headed-Chromium E2E under Xvfb, and release artifact jobs. Committed but not yet executed on GitHub (no remote configured).
 - [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) — requirement-by-requirement PASS / PARTIAL / NOT TESTED matrix.
 - [docs/TECHNICAL_RESEARCH.md](docs/TECHNICAL_RESEARCH.md) — Live API protocol findings, including the dead ends.
 - [docs/PERMISSIONS.md](docs/PERMISSIONS.md) — every Chrome permission and why it exists.

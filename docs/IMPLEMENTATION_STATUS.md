@@ -158,24 +158,24 @@ Nothing is marked PASS on the basis of “it should work”.
 
 ### 2.7 Build, release, operations
 
-| Item                          | Status         | Notes                                   |
-| ----------------------------- | -------------- | --------------------------------------- |
-| Typecheck                     | **PASS**       | 3 projects                              |
-| Lint                          | **PASS**       | 0 findings                              |
-| Formatting                    | **PASS**       | Prettier clean                          |
-| Unit tests                    | **PASS**       | 192                                     |
-| E2E tests                     | **PASS**       | 9                                       |
-| Build assertions              | **PASS**       | Fails on missing/empty artifacts        |
-| Deterministic ZIP             | **PASS**       | Fixed timestamps, sorted entries        |
-| Manifest reference validation | **PASS**       | Release script                          |
-| SHA-256 checksum              | **PASS**       | `release/SHA256SUMS.txt`                |
-| Setup script                  | **PASS**       | Syntax-checked; produced working `.env` |
-| Bridge health endpoint        | **PASS**       | Smoke                                   |
-| Graceful shutdown             | **PASS**       | Code review                             |
-| Windows support               | **PASS**       | Executed                                |
-| macOS / Linux support         | **NOT TESTED** | Manual `.env` path documented           |
-| CI pipeline                   | **NOT TESTED** | No CI configured                        |
-| Auto-update                   | **NOT TESTED** | Unpacked extension only                 |
+| Item                          | Status         | Notes                                                      |
+| ----------------------------- | -------------- | ---------------------------------------------------------- |
+| Typecheck                     | **PASS**       | 3 projects                                                 |
+| Lint                          | **PASS**       | 0 findings                                                 |
+| Formatting                    | **PASS**       | Prettier clean                                             |
+| Unit tests                    | **PASS**       | 192                                                        |
+| E2E tests                     | **PASS**       | 9                                                          |
+| Build assertions              | **PASS**       | Fails on missing/empty artifacts                           |
+| Deterministic ZIP             | **PASS**       | Fixed timestamps, sorted entries                           |
+| Manifest reference validation | **PASS**       | Release script                                             |
+| SHA-256 checksum              | **PASS**       | `release/SHA256SUMS.txt`                                   |
+| Setup script                  | **PASS**       | Syntax-checked; produced working `.env`                    |
+| Bridge health endpoint        | **PASS**       | Smoke                                                      |
+| Graceful shutdown             | **PASS**       | Code review                                                |
+| Windows support               | **PASS**       | Executed                                                   |
+| macOS / Linux support         | **NOT TESTED** | Manual `.env` path documented                              |
+| CI pipeline                   | **PARTIAL**    | Workflow committed; not yet executed on GitHub (no remote) |
+| Auto-update                   | **NOT TESTED** | Unpacked extension only                                    |
 
 ### 2.8 Documentation
 
@@ -255,7 +255,7 @@ Ordered by value, not difficulty.
 | Downloads/bookmarks/history integration tests | Medium   | Exercise optional permissions against real Chrome data                                |
 | Long-session soak test                        | Medium   | Measure resumption, rotation, and memory over hours                                   |
 | Accessibility audit (axe)                     | Medium   | Confirm keyboard and screen-reader behaviour                                          |
-| CI pipeline                                   | Medium   | Prevent regressions on every change                                                   |
+| CI pipeline                                   | Medium   | Workflow exists; needs a remote and one green run to be verified                      |
 | macOS/Linux setup test                        | Low      | Validate the documented manual path                                                   |
 | Visual-tool E2E                               | Low      | Requires model vision and a deterministic page                                        |
 | TypeDoc API reference                         | Low      | Nice-to-have for contributors                                                         |
@@ -273,7 +273,7 @@ The project is done for v1.0.0 when:
 - [x] Security model, permissions, architecture, and research are documented.
 - [x] Every untested path is labelled, not hidden.
 
-It is **not** done for every conceivable production deployment: there is no CI, no cross-platform execution, no live-model injection red team, and no hardware-automated audio test. Those are listed above as open items, not as completed work.
+It is **not** done for every conceivable production deployment: the CI workflow has not run on GitHub yet, there is no cross-platform execution, no live-model injection red team, and no hardware-automated audio test. Those are listed above as open items, not as completed work.
 
 ---
 

@@ -23,6 +23,18 @@ This report contains only results that were actually produced by running the com
 
 No test was skipped or marked as passing without execution.
 
+### 1.1 Continuous integration
+
+`.github/workflows/ci.yml` defines three jobs:
+
+| Job       | Runs                                                        |
+| --------- | ----------------------------------------------------------- |
+| `checks`  | `npm ci`, typecheck, lint, format check, unit tests         |
+| `e2e`     | Playwright Chromium install, `xvfb-run npm run test:e2e`    |
+| `release` | `npm run release`, uploads the extension ZIP as an artifact |
+
+**Status:** the workflow file is committed and Prettier-validated, but it has **not executed on GitHub** because this repository has no remote configured. Its status is therefore unverified; it is not claimed as a passing CI run.
+
 ---
 
 ## 2. Static checks
@@ -295,8 +307,9 @@ Legend: ✅ covered, ⚠️ partial, ❌ not covered, — not applicable.
 6. **No load or soak testing.** Long sessions rely on the sliding context window; behaviour beyond the smoke duration is unmeasured.
 7. **No accessibility audit.** The UI uses semantic roles and keyboard-reachable controls, but no automated axe/Pa11y run was performed.
 8. **No macOS/Linux execution.** Setup was tested on Windows 11. The manual `.env` path is documented but not executed on those platforms.
-9. **Dev-dependency audit warnings.** `npm audit --omit=dev` reports 0 production vulnerabilities; the full tree reports moderate dev-only issues in the ESLint toolchain.
-10. **Single-run latency numbers.** The smoke timings are observations, not a benchmark.
+9. **CI is unverified.** The workflow is committed but has never run on GitHub because no remote exists.
+10. **Dev-dependency audit warnings.** `npm audit --omit=dev` reports 0 production vulnerabilities; the full tree reports moderate dev-only issues in the ESLint toolchain.
+11. **Single-run latency numbers.** The smoke timings are observations, not a benchmark.
 
 ---
 
