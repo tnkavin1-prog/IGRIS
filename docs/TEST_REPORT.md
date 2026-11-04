@@ -199,7 +199,7 @@ Copies used in documentation: `docs/assets/`.
   manifest.json                      2.2 kB
   sidepanel.html                     0.4 kB
   background.js                      1.6 kB
-  content-script.js                  89.5 kB
+  content-script.js                  89.6 kB
   audio/worklet-capture.js           0.5 kB
   audio/worklet-playback.js          3.0 kB
   icons/icon128.png                 11.7 kB
@@ -208,10 +208,10 @@ Copies used in documentation: `docs/assets/`.
 ▸ Release package
   extension   Gemini Browser Live v1.0.0
   files       12
-  unpacked    625.0 kB
-  archive     626.3 kB
+  unpacked    626.1 kB
+  archive     627.4 kB
   zip         release/Gemini-Browser-Live-Chrome.zip
-  sha256      289079d6fbe78f3206fa6cd59e0bc5fd9e6f81da897254f91b2d92f91ff4bff0
+  sha256      218f9d00db898e7dd580d111aaf9413b9b8e679999afa84bd15d03cf098f8450
 ```
 
 ### Artifact inventory
@@ -221,11 +221,11 @@ Copies used in documentation: `docs/assets/`.
 | `manifest.json`                 | 2,267   |
 | `sidepanel.html`                | 460     |
 | `background.js`                 | 1,618   |
-| `content-script.js`             | 91,687  |
+| `content-script.js`             | 91,757  |
 | `audio/worklet-capture.js`      | 513     |
 | `audio/worklet-playback.js`     | 3,108   |
 | `assets/sidepanel-BxH92Vnn.css` | 41,429  |
-| `assets/sidepanel-DjC4ZAVX.js`  | 480,495 |
+| `assets/sidepanel-DjC4ZAVX.js`  | 481,538 |
 | `icons/icon16.png`              | 844     |
 | `icons/icon32.png`              | 2,100   |
 | `icons/icon48.png`              | 3,489   |
