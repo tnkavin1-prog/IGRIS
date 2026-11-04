@@ -16,7 +16,7 @@ This report contains only results that were actually produced by running the com
 | Lint             | `npx eslint .`               | ✅ Pass — 0 errors, 0 warnings          | Console output                 |
 | Formatting       | `npx prettier --check .`     | ✅ Pass                                 | Console output                 |
 | Unit tests       | `npx vitest run`             | ✅ 16 files, 192 tests                  | Console output                 |
-| E2E tests        | `npx playwright test`        | ✅ 17 tests, 42.6 s                     | `test-results/`                |
+| E2E tests        | `npx playwright test`        | ✅ 18 tests, 25.1 s                     | `test-results/`                |
 | Production build | `npm run release`            | ✅ 12 files, 625.0 kB                   | `release/chrome-extension/`    |
 | ZIP integrity    | Expand + SHA-256 compare     | ✅ 12/12 files match, 0 mismatches      | `release/SHA256SUMS.txt`       |
 | Live API smoke   | `npm run smoke:live`         | ✅ Setup 2,024 ms, first audio 2,743 ms | `docs/evidence/smoke-live.log` |
@@ -124,7 +124,7 @@ Markdown, TypeScript, TSX, MJS, JSON, CSS, and HTML are covered. Generated artif
 
 **Command:** `npx playwright test`
 **Environment:** headed Chromium, real unpacked extension, local fixture servers, mocked Live WebSocket
-**Result:** 17 passed in 42.6 s
+**Result:** 18 passed in 25.1 s
 
 ### 4.1 Extension and content script (`tests/e2e/extension.spec.mjs`)
 
@@ -147,7 +147,8 @@ This suite uses a loopback fake bridge for token minting and Playwright's WebSoc
 | 8   | `the approval dialog passes axe and traps focus`                | Zero WCAG A/AA violations in the live approval sheet; Tab cannot escape it; initial focus is Deny                       |
 | 9   | `an approval over settings owns focus and leaves settings open` | Higher-layer dialog wins the focus trap; the settings panel survives the interruption                                   |
 | 10  | `a denied action sends USER_DENIED and causes no side effect`   | Deny resolves the real dialog, returns a structured error, and the page is untouched                                    |
-| 11  | `a benign click runs without an approval prompt`                | The gate is not over-eager: a non-submit control executes immediately and returns a result                              |
+| 11  | `plays 24 kHz model audio and flushes it on interruption`       | PCM from the mocked model is decoded, played (non-zero output meter), then discarded on barge-in                        |
+| 12  | `a benign click runs without an approval prompt`                | The gate is not over-eager: a non-submit control executes immediately and returns a result                              |
 
 ### 4.3 Accessibility (`tests/e2e/accessibility.spec.mjs`)
 
@@ -155,19 +156,19 @@ axe-core 4.11 is injected into the real side-panel page and run against the WCAG
 
 | #   | Test                                                  | What it proves                                                                                   |
 | --- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| 12  | `onboarding has no WCAG A/AA violations`              | The four-step first-run dialog has no detectable violations                                      |
-| 13  | `the live panel has no WCAG A/AA violations`          | Header, session card, transcript, and composer are clean                                         |
-| 14  | `every settings tab has no WCAG A/AA violations`      | Connection, Voice, Agent, Access, and Privacy panels are each audited                            |
-| 15  | `the settings dialog traps focus and restores it`     | Focus enters the dialog, 10×Tab and 10×Shift+Tab stay inside, Escape returns focus to the opener |
-| 16  | `the onboarding dialog traps focus`                   | The same trap holds for onboarding, including its tablist                                        |
-| 17  | `a settings dialog opened from onboarding owns focus` | Layer priority stops the onboarding trap from stealing focus from the settings dialog            |
+| 13  | `onboarding has no WCAG A/AA violations`              | The four-step first-run dialog has no detectable violations                                      |
+| 14  | `the live panel has no WCAG A/AA violations`          | Header, session card, transcript, and composer are clean                                         |
+| 15  | `every settings tab has no WCAG A/AA violations`      | Connection, Voice, Agent, Access, and Privacy panels are each audited                            |
+| 16  | `the settings dialog traps focus and restores it`     | Focus enters the dialog, 10×Tab and 10×Shift+Tab stay inside, Escape returns focus to the opener |
+| 17  | `the onboarding dialog traps focus`                   | The same trap holds for onboarding, including its tablist                                        |
+| 18  | `a settings dialog opened from onboarding owns focus` | Layer priority stops the onboarding trap from stealing focus from the settings dialog            |
 
 The audit runs against the built extension in headed Chromium, not a component harness. It is a snapshot of the reachable states listed above; it is not a manual screen-reader session.
 
 ### What the E2E suite does not do
 
 - It does not connect to the real Gemini service; that path is covered by `npm run smoke:live` and the protocol probes.
-- It uses Chromium's fake audio device; it does not capture a physical microphone or measure speaker output.
+- It uses Chromium's fake audio device; it exercises capture and playback through the real worklets, but does not measure a physical microphone or speaker.
 - It does not test downloads, bookmarks, or history against real Chrome data.
 
 Those paths are covered by unit tests (logic), the Live smoke test (protocol), and manual verification (hardware).
@@ -297,14 +298,14 @@ outTranscript="Returned gamma."
 | Shared safety / schema / catalog          | ✅ 48 tests                                               | —                      | —                 | —                               |
 | Bridge config / auth / rate limit / token | ✅ 50 tests                                               | —                      | ✅ mint           | —                               |
 | Bridge HTTP surface                       | ✅ 13 tests                                               | —                      | ✅ health         | —                               |
-| Live setup builder                        | ✅ 12 tests                                               | —                      | ✅ accepted       | —                               |
+| Live setup builder                        | ✅ 13 tests                                               | —                      | ✅ accepted       | —                               |
 | System instruction                        | ✅ 6 tests                                                | —                      | —                 | —                               |
 | Orchestrator / approvals                  | ✅ 13 tests                                               | ✅ Approve/deny E2E    | —                 | ✅ UI reviewed                  |
 | Approval tab/document binding             | ✅ 7 tests                                                | ✅ E2E switch-tab case | —                 | —                               |
 | Prompt-injection boundary                 | ✅ 17-case corpus                                         | —                      | —                 | —                               |
-| Audio math / resampling                   | ✅ 16 tests                                               | ⚠️ Fake device only    | —                 | ⚠️ Hardware not automated       |
+| Audio math / resampling                   | ✅ 16 tests                                               | ✅ Playback E2E        | —                 | ⚠️ Hardware not automated       |
 | Storage / settings                        | ✅ 12 tests                                               | ✅ UI                  | —                 | —                               |
-| UI rendering                              | —                                                         | ✅ 3 tests             | —                 | ✅ Screenshots                  |
+| UI rendering                              | —                                                         | ✅ 3 + 6 a11y tests    | —                 | ✅ Screenshots                  |
 | Content script                            | —                                                         | ✅ 2 tests             | —                 | ✅ Used during development      |
 | 52 tools                                  | ✅ Catalog + schema                                       | ⚠️ Snapshot/click only | ⚠️ Echo tool only | ✅ Spot-checked                 |
 | Downloads / bookmarks / history           | ✅ 10 download-policy tests; ⚠️ optional-permission paths | —                      | —                 | ❌ Not exercised with real data |
@@ -316,7 +317,7 @@ Legend: ✅ covered, ⚠️ partial, ❌ not covered, — not applicable.
 
 ## 8. Known gaps and limitations
 
-1. **No automated physical-microphone test.** The E2E suite uses Chromium's fake audio device, so the capture and playback pipeline runs but acoustic behaviour and real hardware permissions are not measured. The worklet math is unit-tested; the real voice loop was verified manually.
+1. **No automated physical-microphone test.** The E2E suite uses Chromium's fake audio device, so the capture and playback pipeline runs but acoustic behaviour and real hardware permissions are not measured. The worklet math is unit-tested and playback is E2E-tested through the fake device; the real voice loop was verified manually.
 2. **No automated real-Gemini tool test.** The offline E2E proves the full browser-side protocol path with a mocked Live server. A real session with credentials would be nondeterministic; the smoke test and protocol probes cover the real service.
 3. **Optional-permission tools are not exercised against real Chrome data.** `downloads`, `bookmarks`, and `history` paths are guarded by runtime permission checks and policy tests, but no test creates a real download or reads a real bookmark.
 4. **Visual tools are not automated.** `capture_viewport`, `describe_visible_page`, and `click_visual_target` require a real rendered page and model vision. They are implemented and reviewed, not E2E-tested.
@@ -352,7 +353,7 @@ npm run smoke:live
 | `npm run lint`           | Exit 0, no output                            |
 | `npx prettier --check .` | “All matched files use Prettier code style!” |
 | `npx vitest run`         | 16 files, 192 tests passed                   |
-| `npx playwright test`    | 17 passed                                    |
+| `npx playwright test`    | 18 passed                                    |
 | `npm run release`        | 12 files, ZIP + SHA-256                      |
 | `npm run smoke:live`     | `PASS — Live API round-trip completed`       |
 

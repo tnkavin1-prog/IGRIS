@@ -84,6 +84,29 @@ function sendToolCall(calls) {
   live.socket.send(JSON.stringify({ toolCall: { functionCalls: calls } }));
 }
 
+/** A short PCM16 sine tone, base64-encoded the way Live sends model audio. */
+function pcmToneBase64(seconds, sampleRate = 24_000) {
+  const samples = Math.round(seconds * sampleRate);
+  const buffer = Buffer.alloc(samples * 2);
+  for (let index = 0; index < samples; index += 1) {
+    const value = Math.round(Math.sin((2 * Math.PI * 440 * index) / sampleRate) * 0.25 * 32_767);
+    buffer.writeInt16LE(value, index * 2);
+  }
+  return buffer.toString('base64');
+}
+
+function sendServerContent(content) {
+  if (!live.socket) throw new Error('The mocked Live socket is not connected.');
+  live.socket.send(JSON.stringify({ serverContent: content }));
+}
+
+async function outputMeterWidth() {
+  const width = await panel
+    .locator('.audio-meter.output i')
+    .evaluate((element) => element.style.width);
+  return Number.parseFloat(width) || 0;
+}
+
 async function waitForToolResponse(callId) {
   await expect
     .poll(
@@ -322,6 +345,28 @@ test('an approval over settings owns focus and leaves settings open', async () =
   expect(response.response.error.code).toBe('USER_DENIED');
   await panel.keyboard.press('Escape');
   await expect(settings).toHaveCount(0);
+});
+
+test('plays 24 kHz model audio and flushes it on interruption', async () => {
+  sendServerContent({
+    modelTurn: {
+      parts: [{ inlineData: { data: pcmToneBase64(1.2), mimeType: 'audio/pcm;rate=24000' } }],
+    },
+    turnComplete: false,
+  });
+
+  await expect(panel.getByText('Speaking', { exact: true }).first()).toBeVisible({
+    timeout: 10_000,
+  });
+  // A non-zero output meter proves the worklet decoded, buffered, and played
+  // the PCM rather than the status changing on the raw event alone.
+  await expect.poll(outputMeterWidth, { timeout: 10_000 }).toBeGreaterThan(0);
+
+  sendServerContent({ interrupted: true });
+  await expect(panel.getByText('Listening', { exact: true }).first()).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect.poll(outputMeterWidth, { timeout: 10_000 }).toBe(0);
 });
 
 test('a denied action sends USER_DENIED and causes no side effect', async () => {
