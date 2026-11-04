@@ -35,7 +35,7 @@ Nothing is marked PASS on the basis of “it should work”.
 | 12  | Approval gates for consequential actions           | **PASS**                                                                 | `safety.ts` + orchestrator; 13 orchestrator tests; offline Live E2E approves, denies, and binds execution to the approved tab           |
 | 13  | Premium side-panel UI                              | **PASS**                                                                 | React UI, 58 KB design system, E2E rendering, screenshots in `docs/assets/`                                                             |
 | 14  | Secure local key handling                          | **PASS**                                                                 | Key only in bridge, `.env` gitignored, redaction tests, gate secret, origin/host/rate checks                                            |
-| 15  | Automated tests                                    | **PASS**                                                                 | 182 unit tests + 9 E2E tests, all passing                                                                                               |
+| 15  | Automated tests                                    | **PASS**                                                                 | 192 unit tests + 9 E2E tests, all passing                                                                                               |
 | 16  | Production build                                   | **PASS**                                                                 | `npm run release`: 12 files, 619.7 kB unpacked                                                                                          |
 | 17  | Ready-to-install extension folder                  | **PASS**                                                                 | `release/chrome-extension/` with manifest at root                                                                                       |
 | 18  | Distributable ZIP                                  | **PASS**                                                                 | `release/Gemini-Browser-Live-Chrome.zip`, SHA-256 `ab53db…aebb9`, 12/12 files verified                                                  |
@@ -82,21 +82,22 @@ Nothing is marked PASS on the basis of “it should work”.
 
 ### 2.3 Browser tools
 
-| Item                                | Status                                | Notes                                                       |
-| ----------------------------------- | ------------------------------------- | ----------------------------------------------------------- |
-| 52-tool catalog                     | **PASS**                              | Catalog tests assert 52 unique tools and schemas            |
-| Runtime argument validation         | **PASS**                              | 12 schema tests, including array bounds                     |
-| Navigation and tabs                 | **PASS** (logic) / **PARTIAL** (live) | Content E2E covers page load; tab tools not E2E             |
-| Semantic snapshot                   | **PASS**                              | E2E test 4                                                  |
-| Element interaction                 | **PASS**                              | E2E click test                                              |
-| Forms, selects, checkboxes          | **PARTIAL**                           | Unit-level policy; not E2E                                  |
-| Tables, links, images               | **PARTIAL**                           | Implemented; not E2E                                        |
-| Waits and dynamic content           | **PARTIAL**                           | Implemented; not E2E                                        |
-| Screenshots and visual click        | **NOT TESTED**                        | Implemented; requires model vision                          |
-| Page comparison                     | **PARTIAL**                           | Implemented; unit-level only                                |
-| Bookmarks / history / downloads     | **PARTIAL**                           | Permission checks and policy tested; no real data exercised |
-| Google Images helpers               | **PARTIAL**                           | URL construction tested; live flow not E2E                  |
-| Document finder / verified download | **PARTIAL**                           | Policy and ranking logic; no live download test             |
+| Item                                | Status                                | Notes                                                        |
+| ----------------------------------- | ------------------------------------- | ------------------------------------------------------------ |
+| 52-tool catalog                     | **PASS**                              | Catalog tests assert 52 unique tools and schemas             |
+| Runtime argument validation         | **PASS**                              | 12 schema tests, including array bounds                      |
+| Navigation and tabs                 | **PASS** (logic) / **PARTIAL** (live) | Content E2E covers page load; tab tools not E2E              |
+| Semantic snapshot                   | **PASS**                              | E2E test 4                                                   |
+| Element interaction                 | **PASS**                              | E2E click test                                               |
+| Forms, selects, checkboxes          | **PARTIAL**                           | Unit-level policy; not E2E                                   |
+| Tables, links, images               | **PARTIAL**                           | Implemented; not E2E                                         |
+| Waits and dynamic content           | **PARTIAL**                           | Implemented; not E2E                                         |
+| Screenshots and visual click        | **NOT TESTED**                        | Implemented; requires model vision                           |
+| Page comparison                     | **PARTIAL**                           | Implemented; unit-level only                                 |
+| Downloads: redirect/danger check    | **PASS**                              | Final URL, filename, and Chrome verdict re-checked; 10 tests |
+| Bookmarks / history                 | **PARTIAL**                           | Permission checks and policy tested; no real data exercised  |
+| Google Images helpers               | **PARTIAL**                           | URL construction tested; live flow not E2E                   |
+| Document finder / verified download | **PARTIAL**                           | Policy and ranking logic; no live download test              |
 
 ### 2.4 Safety and approval
 
@@ -162,7 +163,7 @@ Nothing is marked PASS on the basis of “it should work”.
 | Typecheck                     | **PASS**       | 3 projects                              |
 | Lint                          | **PASS**       | 0 findings                              |
 | Formatting                    | **PASS**       | Prettier clean                          |
-| Unit tests                    | **PASS**       | 182                                     |
+| Unit tests                    | **PASS**       | 192                                     |
 | E2E tests                     | **PASS**       | 9                                       |
 | Build assertions              | **PASS**       | Fails on missing/empty artifacts        |
 | Deterministic ZIP             | **PASS**       | Fixed timestamps, sorted entries        |
@@ -217,7 +218,7 @@ The original directive asked for a production-quality, real-time Gemini Live voi
 | Approval gates                          | **PASS** — code-enforced                                      |
 | Premium UI                              | **PASS** — screenshot-verified                                |
 | Secure local key handling               | **PASS** — `.env`, ACL, redaction                             |
-| Tests                                   | **PASS** — 182 unit + 9 E2E                                   |
+| Tests                                   | **PASS** — 192 unit + 9 E2E                                   |
 | Production build                        | **PASS** — `release/`                                         |
 | Ready-to-install extension              | **PASS** — unpacked folder                                    |
 | Distributable ZIP                       | **PASS** — verified archive                                   |

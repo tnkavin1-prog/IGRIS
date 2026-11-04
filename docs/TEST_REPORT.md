@@ -15,7 +15,7 @@ This report contains only results that were actually produced by running the com
 | TypeScript       | `node scripts/typecheck.mjs` | ✅ Pass — 3 projects                    | Console output                 |
 | Lint             | `npx eslint .`               | ✅ Pass — 0 errors, 0 warnings          | Console output                 |
 | Formatting       | `npx prettier --check .`     | ✅ Pass                                 | Console output                 |
-| Unit tests       | `npx vitest run`             | ✅ 15 files, 182 tests                  | Console output                 |
+| Unit tests       | `npx vitest run`             | ✅ 16 files, 192 tests                  | Console output                 |
 | E2E tests        | `npx playwright test`        | ✅ 9 tests, 24.0 s                      | `test-results/`                |
 | Production build | `npm run release`            | ✅ 12 files, 619.7 kB                   | `release/chrome-extension/`    |
 | ZIP integrity    | Expand + SHA-256 compare     | ✅ 12/12 files match, 0 mismatches      | `release/SHA256SUMS.txt`       |
@@ -68,7 +68,7 @@ Markdown, TypeScript, TSX, MJS, JSON, CSS, and HTML are covered. Generated artif
 ## 3. Unit tests
 
 **Command:** `npx vitest run`
-**Result:** 15 files passed, 182 tests passed, 6.12 s
+**Result:** 16 files passed, 192 tests passed, 6.39 s
 
 | Suite                                  | Tests | What it covers                                                                                       |
 | -------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------- |
@@ -86,6 +86,7 @@ Markdown, TypeScript, TSX, MJS, JSON, CSS, and HTML are covered. Generated artif
 | `extension/storage.test.ts`            | 12    | Defaults, merge, validation, secret storage, retention, reset                                        |
 | `extension/system-instruction.test.ts` | 6     | Policy content, injection warnings, verification language, model-specific text                       |
 | `extension/executor-guards.test.ts`    | 7     | Tab/URL/document binding, `TAB_GONE`/`ELEMENT_STALE`, prepared-URL replay                            |
+| `extension/downloads.test.ts`          | 10    | Redirect to executable, disguised filename, Chrome danger verdicts, non-web schemes                  |
 | `extension/orchestrator.test.ts`       | 13    | Validation, approval gate, denial, timeout, cancellation, step limit, error mapping, prep forwarding |
 
 ### Notable behaviours asserted
@@ -101,6 +102,7 @@ Markdown, TypeScript, TSX, MJS, JSON, CSS, and HTML are covered. Generated artif
 - A page title cannot inject newlines, fake bullets, or role tags into the orientation turn.
 - Execution refuses a different tab, a different URL, or a same-URL reload after approval.
 - The approved preparation object is forwarded to the executor for the re-check.
+- A download that redirects to an executable, sends an executable under a document filename, or receives a dangerous Chrome verdict is blocked and removed.
 - Array `minItems` / `maxItems` are enforced at runtime (a real defect found and fixed during development).
 - BOM-prefixed `.env` files parse correctly (regression test added after a Windows setup issue).
 
@@ -261,23 +263,23 @@ outTranscript="Returned gamma."
 
 ## 7. Coverage by subsystem
 
-| Subsystem                                 | Unit                | E2E                    | Live API          | Manual                          |
-| ----------------------------------------- | ------------------- | ---------------------- | ----------------- | ------------------------------- |
-| Shared safety / schema / catalog          | ✅ 48 tests         | —                      | —                 | —                               |
-| Bridge config / auth / rate limit / token | ✅ 50 tests         | —                      | ✅ mint           | —                               |
-| Bridge HTTP surface                       | ✅ 13 tests         | —                      | ✅ health         | —                               |
-| Live setup builder                        | ✅ 12 tests         | —                      | ✅ accepted       | —                               |
-| System instruction                        | ✅ 6 tests          | —                      | —                 | —                               |
-| Orchestrator / approvals                  | ✅ 13 tests         | ✅ Approve/deny E2E    | —                 | ✅ UI reviewed                  |
-| Approval tab/document binding             | ✅ 7 tests          | ✅ E2E switch-tab case | —                 | —                               |
-| Prompt-injection boundary                 | ✅ 17-case corpus   | —                      | —                 | —                               |
-| Audio math / resampling                   | ✅ 16 tests         | ⚠️ Fake device only    | —                 | ⚠️ Hardware not automated       |
-| Storage / settings                        | ✅ 12 tests         | ✅ UI                  | —                 | —                               |
-| UI rendering                              | —                   | ✅ 3 tests             | —                 | ✅ Screenshots                  |
-| Content script                            | —                   | ✅ 2 tests             | —                 | ✅ Used during development      |
-| 52 tools                                  | ✅ Catalog + schema | ⚠️ Snapshot/click only | ⚠️ Echo tool only | ✅ Spot-checked                 |
-| Downloads / bookmarks / history           | ⚠️ Policy only      | —                      | —                 | ❌ Not exercised with real data |
-| Visual click / screenshots                | —                   | —                      | —                 | ❌ Not exercised                |
+| Subsystem                                 | Unit                                                      | E2E                    | Live API          | Manual                          |
+| ----------------------------------------- | --------------------------------------------------------- | ---------------------- | ----------------- | ------------------------------- |
+| Shared safety / schema / catalog          | ✅ 48 tests                                               | —                      | —                 | —                               |
+| Bridge config / auth / rate limit / token | ✅ 50 tests                                               | —                      | ✅ mint           | —                               |
+| Bridge HTTP surface                       | ✅ 13 tests                                               | —                      | ✅ health         | —                               |
+| Live setup builder                        | ✅ 12 tests                                               | —                      | ✅ accepted       | —                               |
+| System instruction                        | ✅ 6 tests                                                | —                      | —                 | —                               |
+| Orchestrator / approvals                  | ✅ 13 tests                                               | ✅ Approve/deny E2E    | —                 | ✅ UI reviewed                  |
+| Approval tab/document binding             | ✅ 7 tests                                                | ✅ E2E switch-tab case | —                 | —                               |
+| Prompt-injection boundary                 | ✅ 17-case corpus                                         | —                      | —                 | —                               |
+| Audio math / resampling                   | ✅ 16 tests                                               | ⚠️ Fake device only    | —                 | ⚠️ Hardware not automated       |
+| Storage / settings                        | ✅ 12 tests                                               | ✅ UI                  | —                 | —                               |
+| UI rendering                              | —                                                         | ✅ 3 tests             | —                 | ✅ Screenshots                  |
+| Content script                            | —                                                         | ✅ 2 tests             | —                 | ✅ Used during development      |
+| 52 tools                                  | ✅ Catalog + schema                                       | ⚠️ Snapshot/click only | ⚠️ Echo tool only | ✅ Spot-checked                 |
+| Downloads / bookmarks / history           | ✅ 10 download-policy tests; ⚠️ optional-permission paths | —                      | —                 | ❌ Not exercised with real data |
+| Visual click / screenshots                | —                                                         | —                      | —                 | ❌ Not exercised                |
 
 Legend: ✅ covered, ⚠️ partial, ❌ not covered, — not applicable.
 
@@ -319,7 +321,7 @@ npm run smoke:live
 | `npm run typecheck`      | Exit 0, three ✔ lines                        |
 | `npm run lint`           | Exit 0, no output                            |
 | `npx prettier --check .` | “All matched files use Prettier code style!” |
-| `npx vitest run`         | 15 files, 182 tests passed                   |
+| `npx vitest run`         | 16 files, 192 tests passed                   |
 | `npx playwright test`    | 9 passed                                     |
 | `npm run release`        | 12 files, ZIP + SHA-256                      |
 | `npm run smoke:live`     | `PASS — Live API round-trip completed`       |
@@ -338,19 +340,20 @@ The smoke test starts the built bridge if it is not running and stops it afterwa
 
 These are recorded because they demonstrate the tests are doing real work.
 
-| Defect                                                    | Impact                                                     | Fix                                                                     |
-| --------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Approval acted on the active tab, not the approved one    | Switching tabs after approval could act on another page    | Preparation stores tab id, URL, and document id; execution fails closed |
-| Untrusted page block could be closed by page text         | Injected text could appear outside the data boundary       | Angle brackets escaped; delimiter is unforgeable                        |
-| Page title could inject newlines/role tags                | Hostile title could forge prompt lines                     | Single-line sanitisation + escaping for inline fields                   |
-| Array `minItems` / `maxItems` not enforced at runtime     | Oversized tool arguments could reach executors             | Runtime validator now enforces bounds; tests added                      |
-| Bridge reflected arbitrary `Origin` on readable endpoints | Any local page could read responses                        | CORS now only emits headers for allowlisted origins                     |
-| `extractBearer` failed on leading whitespace              | Valid tokens rejected in edge cases                        | Trim before matching; test added                                        |
-| Useless assignments in setup                              | Lint noise, unclear intent                                 | Removed                                                                 |
-| Caught errors lost `cause`                                | Harder diagnosis                                           | Errors now preserve `cause`                                             |
-| Keyword tokenisation broke on Unicode                     | Risk detection missed non-ASCII labels                     | Unicode-aware tokenisation; test added                                  |
-| BOM-prefixed `.env` hid the first key                     | Bridge failed to start on Windows PowerShell-created files | BOM stripped; regression test added                                     |
-| IPv6 loopback in CSP                                      | Chrome refused to load the extension                       | Removed `[::1]` entries; loopback validation restricted                 |
+| Defect                                                    | Impact                                                     | Fix                                                                      |
+| --------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Approval acted on the active tab, not the approved one    | Switching tabs after approval could act on another page    | Preparation stores tab id, URL, and document id; execution fails closed  |
+| Untrusted page block could be closed by page text         | Injected text could appear outside the data boundary       | Angle brackets escaped; delimiter is unforgeable                         |
+| Page title could inject newlines/role tags                | Hostile title could forge prompt lines                     | Single-line sanitisation + escaping for inline fields                    |
+| Downloads trusted the initial URL only                    | A redirect could deliver an executable after approval      | Final URL, filename, and Chrome danger re-checked; blocked files removed |
+| Array `minItems` / `maxItems` not enforced at runtime     | Oversized tool arguments could reach executors             | Runtime validator now enforces bounds; tests added                       |
+| Bridge reflected arbitrary `Origin` on readable endpoints | Any local page could read responses                        | CORS now only emits headers for allowlisted origins                      |
+| `extractBearer` failed on leading whitespace              | Valid tokens rejected in edge cases                        | Trim before matching; test added                                         |
+| Useless assignments in setup                              | Lint noise, unclear intent                                 | Removed                                                                  |
+| Caught errors lost `cause`                                | Harder diagnosis                                           | Errors now preserve `cause`                                              |
+| Keyword tokenisation broke on Unicode                     | Risk detection missed non-ASCII labels                     | Unicode-aware tokenisation; test added                                   |
+| BOM-prefixed `.env` hid the first key                     | Bridge failed to start on Windows PowerShell-created files | BOM stripped; regression test added                                      |
+| IPv6 loopback in CSP                                      | Chrome refused to load the extension                       | Removed `[::1]` entries; loopback validation restricted                  |
 
 ---
 

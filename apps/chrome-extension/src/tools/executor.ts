@@ -28,6 +28,7 @@ import {
   type TargetLocator,
 } from '@gbl/shared';
 import { PageBridge, isNavigationError } from './page.js';
+import { DANGEROUS_DOWNLOAD, assessDownload } from './downloads.js';
 import {
   type ScreenshotStore,
   type StateStore,
@@ -230,8 +231,6 @@ export interface ToolExecutorDeps {
   screenshots: ScreenshotStore;
   states: StateStore;
 }
-
-const DANGEROUS_DOWNLOAD = /\.(exe|msi|bat|cmd|ps1|scr|jar|apk|dmg|pkg|vbs|wsf|hta)(?:$|[?#])/i;
 
 export class ToolExecutor {
   constructor(private readonly deps: ToolExecutorDeps) {}
@@ -779,6 +778,27 @@ export class ToolExecutor {
       );
     }
     const item = await this.waitForDownload(downloadId);
+    const assessment = assessDownload({
+      requestedUrl: valid.url,
+      finalUrl: item?.finalUrl,
+      filename: item?.filename,
+      danger: item?.danger,
+      state: item?.state,
+    });
+    if (assessment.blocked) {
+      await this.discardDownload(downloadId);
+      throw new ToolError(
+        ERROR_CODES.URL_BLOCKED,
+        assessment.reason ?? 'The downloaded file was blocked by policy.',
+        {
+          hint: 'The file was removed. Ask the user to download it themselves if they need it.',
+          retryable: false,
+        },
+      );
+    }
+    if (item?.state === 'in_progress') {
+      this.watchDownload(downloadId, valid.url);
+    }
     const filename = item?.filename ? (item.filename.split(/[\\/]/).pop() ?? item.filename) : '';
     return {
       downloadId,
@@ -788,12 +808,64 @@ export class ToolExecutor {
       totalBytes: item?.totalBytes ?? 0,
       danger: item?.danger,
       exists: item?.exists,
-      url: cleanUrl(item?.url ?? valid.url),
+      url: cleanUrl(assessment.resolvedUrl),
+      ...(assessment.redirect ? { redirected: true } : {}),
       verified: item?.state === 'complete',
       ...(item?.state === 'in_progress'
         ? { note: 'The download is still in progress. Use list_downloads to check it later.' }
         : {}),
     };
+  }
+
+  /**
+   * Re-check a download that was still running when the tool returned. A
+   * redirect can only be classified after Chrome has the final URL, so a
+   * dangerous file that arrives late is cancelled and deleted here.
+   */
+  private watchDownload(downloadId: number, requestedUrl: string): void {
+    const changed = chrome.downloads?.onChanged;
+    if (!changed) return;
+    const deadline = Date.now() + 10 * 60_000;
+    const inspect = (): void => {
+      void chrome.downloads
+        .search({ id: downloadId })
+        .then(([item]) => {
+          if (!item || item.state === 'in_progress') return;
+          changed.removeListener(listener);
+          if (item.state !== 'complete') return;
+          const assessment = assessDownload({
+            requestedUrl,
+            finalUrl: item.finalUrl,
+            filename: item.filename,
+            danger: item.danger,
+            state: item.state,
+          });
+          if (assessment.blocked) return this.discardDownload(downloadId);
+          return undefined;
+        })
+        .catch(() => undefined);
+    };
+    const listener = (delta: chrome.downloads.DownloadDelta): void => {
+      if (delta.id !== downloadId) return;
+      const state = delta.state?.current;
+      if (state === 'complete' || state === 'interrupted') {
+        inspect();
+        return;
+      }
+      if (Date.now() >= deadline) {
+        changed.removeListener(listener);
+      }
+    };
+    changed.addListener(listener);
+    // The transfer can finish between waitForDownload() and addListener().
+    inspect();
+    window.setTimeout(() => changed.removeListener(listener), 10 * 60_000);
+  }
+
+  private async discardDownload(downloadId: number): Promise<void> {
+    await chrome.downloads.cancel(downloadId).catch(() => undefined);
+    await chrome.downloads.removeFile(downloadId).catch(() => undefined);
+    await chrome.downloads.erase({ id: downloadId }).catch(() => undefined);
   }
 
   private async officialCandidates(
