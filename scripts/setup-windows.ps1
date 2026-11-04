@@ -81,7 +81,12 @@ if ($ApiKey.Length -lt 20 -or $ApiKey -match '\s') {
 
 # -- Gate secret: 32 random bytes, base64url encoded (43 chars).
 $secretBytes = New-Object byte[] 32
-[System.Security.Cryptography.RandomNumberGenerator]::Fill($secretBytes)
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+try {
+  $rng.GetBytes($secretBytes)
+} finally {
+  $rng.Dispose()
+}
 $gateSecret = [Convert]::ToBase64String($secretBytes).Replace('+', '-').Replace('/', '_').TrimEnd('=')
 
 $lines = @(
