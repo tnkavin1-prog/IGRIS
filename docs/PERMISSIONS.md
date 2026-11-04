@@ -93,9 +93,9 @@ Stores:
 
 ### `activeTab`
 
-**Used by:** injection and tab operations
+**Used by:** injection and tab operations, and `capture_viewport` (via `chrome.tabs.captureVisibleTab`).
 
-Grants temporary access to the active tab when the user invokes the extension. It complements the broad host permission and keeps the extension usable in contexts where host permissions are restricted by enterprise policy.
+Grants temporary access to the active tab when the user invokes the extension. It complements the broad host permission and keeps the extension usable in contexts where host permissions are restricted by enterprise policy. `capture_viewport` depends on it: Chrome grants `activeTab` only after a user gesture on the target tab, so a screenshot cannot be taken of a tab the user has not interacted with. The tool returns a `PERMISSION_DENIED`-style error with a hint in that case.
 
 ---
 
