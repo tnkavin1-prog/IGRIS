@@ -238,7 +238,8 @@ release/                Built extension + deterministic ZIP (gitignored)
 
 - [docs/TEST_REPORT.md](docs/TEST_REPORT.md) — commands, dates, results, and what is _not_ covered.
 - [.github/workflows/ci.yml](.github/workflows/ci.yml) — typecheck/lint/format/unit, headed-Chromium E2E under Xvfb, and release artifact jobs. Committed but not yet executed on GitHub (no remote configured).
-- [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) — requirement-by-requirement PASS / PARTIAL / NOT TESTED matrix.
+- [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) - requirement-by-requirement PASS / PARTIAL / NOT TESTED matrix.
+- [CHANGELOG.md](CHANGELOG.md) - development cycle history.
 - [docs/TECHNICAL_RESEARCH.md](docs/TECHNICAL_RESEARCH.md) — Live API protocol findings, including the dead ends.
 - [docs/PERMISSIONS.md](docs/PERMISSIONS.md) — every Chrome permission and why it exists.
 
