@@ -35,7 +35,7 @@ Nothing is marked PASS on the basis of “it should work”.
 | 12  | Approval gates for consequential actions           | **PASS**                                                                 | `safety.ts` + orchestrator; 13 orchestrator tests; offline Live E2E approves, denies, and binds execution to the approved tab           |
 | 13  | Premium side-panel UI                              | **PASS**                                                                 | React UI, 58 KB design system, E2E rendering, screenshots in `docs/assets/`                                                             |
 | 14  | Secure local key handling                          | **PASS**                                                                 | Key only in bridge, `.env` gitignored, redaction tests, gate secret, origin/host/rate checks                                            |
-| 15  | Automated tests                                    | **PASS**                                                                 | 192 unit tests + 9 E2E tests, all passing                                                                                               |
+| 15  | Automated tests                                    | **PASS**                                                                 | 192 unit tests + 15 E2E tests, all passing                                                                                              |
 | 16  | Production build                                   | **PASS**                                                                 | `npm run release`: 12 files, 619.7 kB unpacked                                                                                          |
 | 17  | Ready-to-install extension folder                  | **PASS**                                                                 | `release/chrome-extension/` with manifest at root                                                                                       |
 | 18  | Distributable ZIP                                  | **PASS**                                                                 | `release/Gemini-Browser-Live-Chrome.zip`, SHA-256 `ab53db…aebb9`, 12/12 files verified                                                  |
@@ -142,19 +142,19 @@ Nothing is marked PASS on the basis of “it should work”.
 
 ### 2.6 UI and UX
 
-| Item                                                | Status                    | Notes                                              |
-| --------------------------------------------------- | ------------------------- | -------------------------------------------------- |
-| Onboarding                                          | **PASS**                  | E2E tests 1–2                                      |
-| Session card and status                             | **PASS**                  | E2E + screenshots                                  |
-| Transcript with tool entries                        | **PASS**                  | Rendering verified; live entries manual            |
-| Composer (typed turns)                              | **PASS**                  | E2E visible; send path unit-level                  |
-| Settings: connection, voice, agent, access, privacy | **PASS**                  | E2E test 3                                         |
-| Approval sheet                                      | **PASS**                  | Unit + review                                      |
-| Toasts                                              | **PASS**                  | Review                                             |
-| Keyboard shortcuts                                  | **PASS** (implementation) | Manifest commands; not E2E                         |
-| Responsive layout                                   | **PARTIAL**               | Fixed side-panel width; no mobile target           |
-| Accessibility audit                                 | **NOT TESTED**            | Semantic roles used, no axe run                    |
-| Reduced motion                                      | **PARTIAL**               | CSS respects `prefers-reduced-motion`; not audited |
+| Item                                                | Status                                      | Notes                                                                                                                 |
+| --------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Onboarding                                          | **PASS**                                    | E2E tests 1–2                                                                                                         |
+| Session card and status                             | **PASS**                                    | E2E + screenshots                                                                                                     |
+| Transcript with tool entries                        | **PASS**                                    | Rendering verified; live entries manual                                                                               |
+| Composer (typed turns)                              | **PASS**                                    | E2E visible; send path unit-level                                                                                     |
+| Settings: connection, voice, agent, access, privacy | **PASS**                                    | E2E test 3                                                                                                            |
+| Approval sheet                                      | **PASS**                                    | Unit + review                                                                                                         |
+| Toasts                                              | **PASS**                                    | Review                                                                                                                |
+| Keyboard shortcuts                                  | **PASS** (implementation)                   | Manifest commands; not E2E                                                                                            |
+| Responsive layout                                   | **PARTIAL**                                 | Fixed side-panel width; no mobile target                                                                              |
+| Accessibility audit                                 | **PASS** (automated) / **PARTIAL** (manual) | axe-core WCAG A/AA on onboarding, panel, every settings tab, approval; focus trap tests; no manual screen-reader pass |
+| Reduced motion                                      | **PARTIAL**                                 | CSS respects `prefers-reduced-motion`; not audited                                                                    |
 
 ### 2.7 Build, release, operations
 
@@ -164,7 +164,7 @@ Nothing is marked PASS on the basis of “it should work”.
 | Lint                          | **PASS**       | 0 findings                                                 |
 | Formatting                    | **PASS**       | Prettier clean                                             |
 | Unit tests                    | **PASS**       | 192                                                        |
-| E2E tests                     | **PASS**       | 9                                                          |
+| E2E tests                     | **PASS**       | 15                                                         |
 | Build assertions              | **PASS**       | Fails on missing/empty artifacts                           |
 | Deterministic ZIP             | **PASS**       | Fixed timestamps, sorted entries                           |
 | Manifest reference validation | **PASS**       | Release script                                             |
@@ -254,7 +254,7 @@ Ordered by value, not difficulty.
 | Real microphone/playback E2E                  | High     | Close the largest verification gap                                                    |
 | Downloads/bookmarks/history integration tests | Medium   | Exercise optional permissions against real Chrome data                                |
 | Long-session soak test                        | Medium   | Measure resumption, rotation, and memory over hours                                   |
-| Accessibility audit (axe)                     | Medium   | Confirm keyboard and screen-reader behaviour                                          |
+| Manual screen-reader pass                     | Low      | axe and focus traps are automated; NVDA/VoiceOver behaviour is not                    |
 | CI pipeline                                   | Medium   | Workflow exists; needs a remote and one green run to be verified                      |
 | macOS/Linux setup test                        | Low      | Validate the documented manual path                                                   |
 | Visual-tool E2E                               | Low      | Requires model vision and a deterministic page                                        |

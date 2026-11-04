@@ -206,7 +206,7 @@ packages/
 scripts/                Build, release, setup, probes, smoke test, icons
 tests/
   unit/                 192 Vitest tests
-  e2e/                  9 Playwright tests against real Chrome
+  e2e/                  15 Playwright tests against real Chrome
 .github/
   workflows/ci.yml      Checks, browser E2E, and release artifact jobs
 docs/                   Architecture, security, permissions, research, evidence
@@ -224,7 +224,7 @@ release/                Built extension + deterministic ZIP (gitignored)
 | `npm run bridge`          | Start the built bridge                                                 |
 | `npm run dev:bridge`      | Start the bridge with watch mode                                       |
 | `npm test`                | Run 192 unit tests                                                     |
-| `npm run test:e2e`        | Run 9 Playwright tests in Chrome                                       |
+| `npm run test:e2e`        | Run 15 Playwright tests in Chrome                                      |
 | `npm run test:all`        | Typecheck + lint + unit + E2E                                          |
 | `npm run typecheck`       | TypeScript across all workspaces                                       |
 | `npm run lint`            | ESLint 10 flat config                                                  |

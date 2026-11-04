@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const extensionDir = join(root, 'release', 'chrome-extension');
 const manifest = JSON.parse(readFileSync(join(extensionDir, 'manifest.json'), 'utf8'));
+const axeSource = readFileSync(join(root, 'node_modules', 'axe-core', 'axe.min.js'), 'utf8');
 
 function extensionIdFromKey(key) {
   const digest = createHash('sha256').update(Buffer.from(key, 'base64')).digest();
@@ -191,6 +192,7 @@ test.beforeAll(async () => {
   );
   await panel.reload();
   await expect(panel.getByRole('button', { name: 'Start live', exact: true })).toBeVisible();
+  await panel.evaluate(axeSource);
 
   fixturePage = await context.newPage();
   await fixturePage.goto(contentUrl);
@@ -254,6 +256,40 @@ test('gates a submit-like click behind approval, then acts on the approved tab',
   const response = await waitForToolResponse('call-approve');
   expect(response.response.result.ok).toBe(true);
   expect(response.response.error).toBeUndefined();
+});
+
+test('the approval dialog passes axe and traps focus', async () => {
+  await activateFixtureTab();
+  sendToolCall([{ id: 'call-a11y', name: 'click_element', args: { text: 'Send request' } }]);
+
+  const dialog = panel.getByRole('dialog');
+  await expect(dialog).toBeVisible({ timeout: 20_000 });
+
+  const results = await panel.evaluate(async () => {
+    // @ts-expect-error axe is injected by the test harness.
+    return await window.axe.run(document, {
+      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] },
+    });
+  });
+  expect(
+    results.violations.map((violation) => ({
+      id: violation.id,
+      nodes: violation.nodes.map((node) => node.target),
+    })),
+  ).toEqual([]);
+
+  expect(await panel.evaluate(() => document.activeElement?.textContent)).toBe('Deny');
+  for (let index = 0; index < 8; index += 1) {
+    await panel.keyboard.press('Tab');
+    const inside = await panel.evaluate(() =>
+      Boolean(document.activeElement?.closest('[role="dialog"]')),
+    );
+    expect(inside, `Tab ${index + 1} escaped the approval dialog`).toBe(true);
+  }
+
+  await panel.getByRole('button', { name: 'Deny' }).click();
+  const response = await waitForToolResponse('call-a11y');
+  expect(response.response.error.code).toBe('USER_DENIED');
 });
 
 test('a denied action sends USER_DENIED and causes no side effect', async () => {

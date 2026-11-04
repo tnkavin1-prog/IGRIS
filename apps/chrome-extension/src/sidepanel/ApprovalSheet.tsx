@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import type { ApprovalRequest } from '@gbl/shared';
+import { useDialogFocus } from './focus';
 import { Icon, hostOf } from './ui';
 
 export function ApprovalSheet({
@@ -10,27 +11,21 @@ export function ApprovalSheet({
   onResolve: (allow: boolean) => void;
 }) {
   const denyRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    denyRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onResolve(false);
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onResolve]);
+  const dialogRef = useDialogFocus<HTMLDivElement>({
+    initialFocus: denyRef,
+    onEscape: () => onResolve(false),
+  });
 
   return (
     <div className="overlay approval-overlay">
       <div
+        ref={dialogRef}
         className="approval-card"
         role="dialog"
         aria-modal="true"
         aria-labelledby="approval-title"
         aria-describedby="approval-description"
+        tabIndex={-1}
       >
         <div className="approval-top">
           <div className="approval-shield">

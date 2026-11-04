@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_SETTINGS, LANGUAGES, LIVE_MODELS, VOICES, type AppSettings } from '@gbl/shared';
 import type { AgentController, PanelSnapshot } from './controller';
+import { useDialogFocus } from './focus';
 import { OPTIONAL_PERMISSIONS } from './permissions';
 import { Badge, Field, Icon, IconButton, Slider, StatusDot, Toggle, type IconName } from './ui';
 
@@ -40,6 +41,7 @@ export function SettingsPanel({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const secretRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useDialogFocus<HTMLElement>({ onEscape: onClose });
 
   // `draft` is seeded from the snapshot when the panel mounts. The panel is
   // conditionally rendered, so reopening it always picks up the latest saved
@@ -56,14 +58,6 @@ export function SettingsPanel({
   useEffect(() => {
     void controller.refreshDevices();
   }, [controller]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
 
   const model = useMemo(
     () => LIVE_MODELS.find((item) => item.id === draft.modelId) ?? LIVE_MODELS[0]!,
@@ -115,10 +109,12 @@ export function SettingsPanel({
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
       <aside
+        ref={dialogRef}
         className="settings-panel"
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-title"
+        tabIndex={-1}
       >
         <div className="settings-head">
           <div>

@@ -6,8 +6,9 @@
  * the security boundary (the API key stays in the bridge) because that is the
  * least obvious part of the architecture.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { AgentController, PanelSnapshot } from './controller';
+import { useDialogFocus } from './focus';
 import { Badge, Icon, StatusDot, type IconName } from './ui';
 
 interface Step {
@@ -76,21 +77,19 @@ export function Onboarding({
   onOpenSettings: () => void;
 }) {
   const [step, setStep] = useState(0);
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useDialogFocus<HTMLDivElement>({ onEscape: onClose });
   const current = STEPS[step]!;
   const last = step === STEPS.length - 1;
   const tone = bridgeTone(snapshot);
 
   useEffect(() => {
-    dialogRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose();
       if (event.key === 'ArrowRight' && !last) setStep((value) => value + 1);
       if (event.key === 'ArrowLeft' && step > 0) setStep((value) => value - 1);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [last, onClose, step]);
+  }, [last, step]);
 
   return (
     <div className="overlay onboarding-overlay">
