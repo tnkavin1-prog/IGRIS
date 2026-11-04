@@ -1,0 +1,11 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "tsconfig": "tsconfig.typedoc.json",
+  "entryPoints": ["packages/shared/src/index.ts"],
+  "out": "docs/api",
+  "name": "Gemini Browser Live — Shared Package",
+  "includeVersion": true,
+  "excludePrivate": true,
+  "excludeExternals": true,
+  "readme": "README.md"
+}

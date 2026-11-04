@@ -179,19 +179,19 @@ Nothing is marked PASS on the basis of “it should work”.
 
 ### 2.8 Documentation
 
-| Document                           | Status         |
-| ---------------------------------- | -------------- |
-| `README.md`                        | **PASS**       |
-| `docs/INSTALLATION.md`             | **PASS**       |
-| `docs/ARCHITECTURE.md`             | **PASS**       |
-| `docs/SECURITY.md`                 | **PASS**       |
-| `docs/PERMISSIONS.md`              | **PASS**       |
-| `docs/TOOL_REFERENCE.md`           | **PASS**       |
-| `docs/TECHNICAL_RESEARCH.md`       | **PASS**       |
-| `docs/TEST_REPORT.md`              | **PASS**       |
-| `docs/IMPLEMENTATION_STATUS.md`    | **PASS**       |
-| Inline module documentation        | **PASS**       | Every source file has a header comment explaining intent |
-| API reference generated from types | **NOT TESTED** | No TypeDoc build                                         |
+| Document                           | Status   |
+| ---------------------------------- | -------- |
+| `README.md`                        | **PASS** |
+| `docs/INSTALLATION.md`             | **PASS** |
+| `docs/ARCHITECTURE.md`             | **PASS** |
+| `docs/SECURITY.md`                 | **PASS** |
+| `docs/PERMISSIONS.md`              | **PASS** |
+| `docs/TOOL_REFERENCE.md`           | **PASS** |
+| `docs/TECHNICAL_RESEARCH.md`       | **PASS** |
+| `docs/TEST_REPORT.md`              | **PASS** |
+| `docs/IMPLEMENTATION_STATUS.md`    | **PASS** |
+| Inline module documentation        | **PASS** | Every source file has a header comment explaining intent |
+| API reference generated from types | **PASS** | `npm run docs:api` -> `docs/api/`                        |
 
 ---
 
@@ -258,7 +258,7 @@ Ordered by value, not difficulty.
 | CI pipeline                                   | Medium   | Workflow exists; needs a remote and one green run to be verified                               |
 | macOS/Linux setup test                        | Low      | Validate the documented manual path                                                            |
 | Visual-tool E2E                               | Low      | Requires model vision and a deterministic page                                                 |
-| TypeDoc API reference                         | Low      | Nice-to-have for contributors                                                                  |
+| TypeDoc API reference                         | Done     | `npm run docs:api` generates `docs/api/` from the shared package                               |
 
 ---
 

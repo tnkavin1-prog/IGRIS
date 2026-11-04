@@ -230,7 +230,7 @@ release/                Built extension + deterministic ZIP (gitignored)
 | `npm run lint`            | ESLint 10 flat config                                                  |
 | `npm run format`          | Prettier write                                                         |
 | `npm run release`         | Build, validate manifest references, write deterministic ZIP + SHA-256 |
-| `npm run smoke:live`      | Real Live API round trip through the built bridge                      |
+| `npm run docs:api`        | Generate TypeDoc API reference into `docs/api/`                        |     | `npm run smoke:live` | Real Live API round trip through the built bridge |
 
 ---
 

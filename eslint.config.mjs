@@ -10,6 +10,7 @@ export default tseslint.config(
       'release/**',
       'dist/**',
       '**/dist/**',
+      'docs/api/**',
       'test-results/**',
       'playwright-report/**',
       'coverage/**',

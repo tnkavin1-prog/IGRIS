@@ -41,6 +41,5 @@ logs/
 # Captured evidence logs are intentional
 !docs/evidence/*.log
 
-# Local scratch
-tmp/
-.tmp/
+# Generated API docs (typedoc)
+docs/api/
