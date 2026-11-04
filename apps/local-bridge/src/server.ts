@@ -16,6 +16,22 @@ import { loadConfig, maskSecret } from './config.js';
 import { createLogger } from './logger.js';
 
 function main(): void {
+  if (process.argv.includes('--version') || process.argv.includes('-v')) {
+    console.log(`${PRODUCT_NAME} local bridge v${PRODUCT_VERSION}`);
+    process.exitCode = 0;
+    return;
+  }
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    console.log(`${PRODUCT_NAME} local bridge v${PRODUCT_VERSION}`);
+    console.log('');
+    console.log('Usage: node server.mjs [--version] [--help]');
+    console.log('');
+    console.log('Environment is loaded from .env next to this file (or GBL_ENV_FILE).');
+    console.log('Required: GEMINI_API_KEY, LOCAL_GATE_SECRET (32+ chars), ALLOWED_EXTENSION_IDS.');
+    process.exitCode = 0;
+    return;
+  }
+
   const loaded = loadConfig();
   if (!loaded.ok || !loaded.config) {
     console.error('');
