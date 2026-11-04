@@ -17,7 +17,7 @@ This report contains only results that were actually produced by running the com
 | Formatting       | `npx prettier --check .`     | ✅ Pass                                 | Console output                 |
 | Unit tests       | `npx vitest run`             | ✅ 16 files, 192 tests                  | Console output                 |
 | E2E tests        | `npx playwright test`        | ✅ 15 tests, 42.7 s                     | `test-results/`                |
-| Production build | `npm run release`            | ✅ 12 files, 619.7 kB                   | `release/chrome-extension/`    |
+| Production build | `npm run release`            | ✅ 12 files, 625.0 kB                   | `release/chrome-extension/`    |
 | ZIP integrity    | Expand + SHA-256 compare     | ✅ 12/12 files match, 0 mismatches      | `release/SHA256SUMS.txt`       |
 | Live API smoke   | `npm run smoke:live`         | ✅ Setup 2,024 ms, first audio 2,743 ms | `docs/evidence/smoke-live.log` |
 
@@ -205,10 +205,10 @@ Copies used in documentation: `docs/assets/`.
 ▸ Release package
   extension   Gemini Browser Live v1.0.0
   files       12
-  unpacked    619.7 kB
-  archive     621.1 kB
+  unpacked    625.0 kB
+  archive     626.3 kB
   zip         release/Gemini-Browser-Live-Chrome.zip
-  sha256      ab53db1b45f316b7a709546f9b95050a30a87186daef365b4be45fdd63a4ebb9
+  sha256      289079d6fbe78f3206fa6cd59e0bc5fd9e6f81da897254f91b2d92f91ff4bff0
 ```
 
 ### Artifact inventory
@@ -218,11 +218,11 @@ Copies used in documentation: `docs/assets/`.
 | `manifest.json`                 | 2,267   |
 | `sidepanel.html`                | 460     |
 | `background.js`                 | 1,618   |
-| `content-script.js`             | 91,615  |
+| `content-script.js`             | 91,687  |
 | `audio/worklet-capture.js`      | 513     |
 | `audio/worklet-playback.js`     | 3,108   |
 | `assets/sidepanel-BxH92Vnn.css` | 41,429  |
-| `assets/sidepanel-MZPqZxcQ.js`  | 475,219 |
+| `assets/sidepanel-DjC4ZAVX.js`  | 480,495 |
 | `icons/icon16.png`              | 844     |
 | `icons/icon32.png`              | 2,100   |
 | `icons/icon48.png`              | 3,489   |
@@ -239,7 +239,7 @@ files=12 mismatches=0
 `release/SHA256SUMS.txt`:
 
 ```
-ab53db1b45f316b7a709546f9b95050a30a87186daef365b4be45fdd63a4ebb9  Gemini-Browser-Live-Chrome.zip
+289079d6fbe78f3206fa6cd59e0bc5fd9e6f81da897254f91b2d92f91ff4bff0  Gemini-Browser-Live-Chrome.zip
 ```
 
 `manifest.json` sits at the archive root, so the ZIP can be distributed directly.

@@ -1,7 +1,7 @@
 # Implementation Status
 
 **Version:** 1.0.0
-**Date:** 2026-11-03
+**Date:** 2026-11-04
 **Overall status:** Feature-complete for the stated scope, with clearly marked verification gaps.
 
 This matrix uses four states:
@@ -36,9 +36,9 @@ Nothing is marked PASS on the basis of “it should work”.
 | 13  | Premium side-panel UI                              | **PASS**                                                                 | React UI, 58 KB design system, E2E rendering, screenshots in `docs/assets/`                                                             |
 | 14  | Secure local key handling                          | **PASS**                                                                 | Key only in bridge, `.env` gitignored, redaction tests, gate secret, origin/host/rate checks                                            |
 | 15  | Automated tests                                    | **PASS**                                                                 | 192 unit tests + 15 E2E tests, all passing                                                                                              |
-| 16  | Production build                                   | **PASS**                                                                 | `npm run release`: 12 files, 619.7 kB unpacked                                                                                          |
+| 16  | Production build                                   | **PASS**                                                                 | `npm run release`: 12 files, 625.0 kB unpacked                                                                                          |
 | 17  | Ready-to-install extension folder                  | **PASS**                                                                 | `release/chrome-extension/` with manifest at root                                                                                       |
-| 18  | Distributable ZIP                                  | **PASS**                                                                 | `release/Gemini-Browser-Live-Chrome.zip`, SHA-256 `ab53db…aebb9`, 12/12 files verified                                                  |
+| 18  | Distributable ZIP                                  | **PASS**                                                                 | `release/Gemini-Browser-Live-Chrome.zip`, SHA-256 `289079…4bff0`, 12/12 files verified                                                  |
 | 19  | Documented test evidence                           | **PASS**                                                                 | `docs/TEST_REPORT.md`                                                                                                                   |
 | 20  | This status document                               | **PASS**                                                                 | You are reading it                                                                                                                      |
 
