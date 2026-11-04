@@ -66,19 +66,19 @@ Nothing is marked PASS on the basis of “it should work”.
 
 ### 2.2 Live session
 
-| Item                                                   | Status                    | Notes                                                        |
-| ------------------------------------------------------ | ------------------------- | ------------------------------------------------------------ |
-| Token mint via bridge                                  | **PASS**                  | Smoke + unit tests                                           |
-| Constrained WebSocket                                  | **PASS**                  | Probe + smoke                                                |
-| Setup payload (nested config, tools, VAD, compression) | **PASS**                  | 12 setup tests + live acceptance                             |
-| `setupComplete` handling                               | **PASS**                  | Smoke                                                        |
-| Input/output transcription                             | **PASS**                  | Smoke received output transcript                             |
-| Proactive token rotation                               | **PASS** (implementation) | ~60 s before expiry; not observed over a full 30 min session |
-| Reconnect with resumption handle                       | **PASS** (implementation) | Backoff 1/2/4/8/15 s, max 5; not forced in a live test       |
-| Auto-reconnect toggle                                  | **PASS**                  | Settings                                                     |
-| Graceful stop                                          | **PASS**                  | Controller + tests                                           |
-| Quota / error status                                   | **PASS**                  | Typed bridge errors, UI status                               |
-| Long-session soak                                      | **NOT TESTED**            | No multi-hour run                                            |
+| Item                                                   | Status                    | Notes                                                                 |
+| ------------------------------------------------------ | ------------------------- | --------------------------------------------------------------------- |
+| Token mint via bridge                                  | **PASS**                  | Smoke + unit tests                                                    |
+| Constrained WebSocket                                  | **PASS**                  | Probe + smoke                                                         |
+| Setup payload (nested config, tools, VAD, compression) | **PASS**                  | 12 setup tests + live acceptance                                      |
+| `setupComplete` handling                               | **PASS**                  | Smoke                                                                 |
+| Input/output transcription                             | **PASS**                  | Smoke received output transcript                                      |
+| Proactive token rotation                               | **PASS** (implementation) | ~60 s before expiry; not observed over a full 30 min session          |
+| Reconnect with resumption handle                       | **PASS** (implementation) | Backoff 1/2/4/8/15 s, max 5; not forced in a live test                |
+| Auto-reconnect toggle                                  | **PASS**                  | Settings                                                              |
+| Graceful stop                                          | **PASS**                  | Controller + tests                                                    |
+| Quota / error status                                   | **PASS**                  | Typed bridge errors, UI status                                        |
+| Long-session soak                                      | **PARTIAL**               | 5-round stability smoke test (`npm run test:soak`); no multi-hour run |
 
 ### 2.3 Browser tools
 
@@ -253,7 +253,7 @@ Ordered by value, not difficulty.
 | Live-model prompt-injection red team          | High     | The corpus proves boundary integrity; a real model run would test semantic resistance          |
 | Real microphone/playback E2E                  | High     | Close the largest verification gap                                                             |
 | Downloads/bookmarks/history integration tests | Low      | Blocked by Chrome's native permission dialog in automation; unit policy tests cover the gating |
-| Long-session soak test                        | Medium   | Measure resumption, rotation, and memory over hours                                            |
+| Long-session soak test                        | Low      | 5-round stability smoke test exists (`npm run test:soak`); multi-hour soak still open          |
 | Manual screen-reader pass                     | Low      | axe and focus traps are automated; NVDA/VoiceOver behaviour is not                             |
 | CI pipeline                                   | Medium   | Workflow exists; needs a remote and one green run to be verified                               |
 | macOS/Linux setup test                        | Low      | Validate the documented manual path                                                            |
