@@ -15,7 +15,7 @@ This report contains only results that were actually produced by running the com
 | TypeScript       | `node scripts/typecheck.mjs` | ✅ Pass — 3 projects                    | Console output                 |
 | Lint             | `npx eslint .`               | ✅ Pass — 0 errors, 0 warnings          | Console output                 |
 | Formatting       | `npx prettier --check .`     | ✅ Pass                                 | Console output                 |
-| Unit tests       | `npx vitest run`             | ✅ 17 files, 203 tests                  | Console output                 |
+| Unit tests       | `npx vitest run`             | ✅ 18 files, 211 tests                  | Console output                 |
 | E2E tests        | `npx playwright test`        | ✅ 18 tests, 25.1 s                     | `test-results/`                |
 | Production build | `npm run release`            | ✅ 12 files, 625.0 kB                   | `release/chrome-extension/`    |
 | ZIP integrity    | Expand + SHA-256 compare     | ✅ 12/12 files match, 0 mismatches      | `release/SHA256SUMS.txt`       |
