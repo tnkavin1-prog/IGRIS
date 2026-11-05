@@ -207,7 +207,12 @@ test('stays live and stable across repeated tool calls and audio', async () => {
     )
     .toBe(true);
 
-  const rounds = 5;
+  // SOAK_ROUNDS overrides the round count. One round is roughly 0.6 s, so
+  // SOAK_ROUNDS=6000 is about an hour. Default stays small for CI.
+  const rounds = Number(process.env.SOAK_ROUNDS ?? 5);
+  if (!Number.isInteger(rounds) || rounds < 1) {
+    throw new Error(`SOAK_ROUNDS must be a positive integer, got ${process.env.SOAK_ROUNDS}`);
+  }
   for (let round = 0; round < rounds; round += 1) {
     // Audio burst.
     live.socket.send(

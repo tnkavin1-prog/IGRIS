@@ -66,7 +66,13 @@ export default tseslint.config(
     },
   },
   {
-    files: ['scripts/**/*.mjs', 'tests/**/*.mjs', 'playwright.config.mjs', 'vitest.config.ts'],
+    files: [
+      'scripts/**/*.mjs',
+      'tests/**/*.mjs',
+      'playwright.config.mjs',
+      'playwright.soak.config.mjs',
+      'vitest.config.ts',
+    ],
     languageOptions: {
       globals: {
         ...globals.node,

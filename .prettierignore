@@ -11,3 +11,6 @@ package-lock.json
 apps/local-bridge/.env
 probe-out*.txt
 docs/probe-results*.json
+docs/api/
+# Unrelated local scratch files
+SSC_CGL_Mock_Exam.html

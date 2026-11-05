@@ -66,19 +66,19 @@ Nothing is marked PASS on the basis of “it should work”.
 
 ### 2.2 Live session
 
-| Item                                                   | Status                    | Notes                                                                 |
-| ------------------------------------------------------ | ------------------------- | --------------------------------------------------------------------- |
-| Token mint via bridge                                  | **PASS**                  | Smoke + unit tests                                                    |
-| Constrained WebSocket                                  | **PASS**                  | Probe + smoke                                                         |
-| Setup payload (nested config, tools, VAD, compression) | **PASS**                  | 12 setup tests + live acceptance                                      |
-| `setupComplete` handling                               | **PASS**                  | Smoke                                                                 |
-| Input/output transcription                             | **PASS**                  | Smoke received output transcript                                      |
-| Proactive token rotation                               | **PASS** (implementation) | ~60 s before expiry; not observed over a full 30 min session          |
-| Reconnect with resumption handle                       | **PASS** (implementation) | Backoff 1/2/4/8/15 s, max 5; not forced in a live test                |
-| Auto-reconnect toggle                                  | **PASS**                  | Settings                                                              |
-| Graceful stop                                          | **PASS**                  | Controller + tests                                                    |
-| Quota / error status                                   | **PASS**                  | Typed bridge errors, UI status                                        |
-| Long-session soak                                      | **PARTIAL**               | 5-round stability smoke test (`npm run test:soak`); no multi-hour run |
+| Item                                                   | Status                    | Notes                                                        |
+| ------------------------------------------------------ | ------------------------- | ------------------------------------------------------------ |
+| Token mint via bridge                                  | **PASS**                  | Smoke + unit tests                                           |
+| Constrained WebSocket                                  | **PASS**                  | Probe + smoke                                                |
+| Setup payload (nested config, tools, VAD, compression) | **PASS**                  | 12 setup tests + live acceptance                             |
+| `setupComplete` handling                               | **PASS**                  | Smoke                                                        |
+| Input/output transcription                             | **PASS**                  | Smoke received output transcript                             |
+| Proactive token rotation                               | **PASS** (implementation) | ~60 s before expiry; not observed over a full 30 min session |
+| Reconnect with resumption handle                       | **PASS** (implementation) | Backoff 1/2/4/8/15 s, max 5; not forced in a live test       |
+| Auto-reconnect toggle                                  | **PASS**                  | Settings                                                     |
+| Graceful stop                                          | **PASS**                  | Controller + tests                                           |
+| Quota / error status                                   | **PASS**                  | Typed bridge errors, UI status                               |
+| Long-session soak                                      | **PARTIAL**               | Default 5-round smoke; `SOAK_ROUNDS=6000` runs a ~1 h soak   |
 
 ### 2.3 Browser tools
 
@@ -142,19 +142,19 @@ Nothing is marked PASS on the basis of “it should work”.
 
 ### 2.6 UI and UX
 
-| Item                                                | Status                                      | Notes                                                                                                                 |
-| --------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Onboarding                                          | **PASS**                                    | E2E tests 1–2                                                                                                         |
-| Session card and status                             | **PASS**                                    | E2E + screenshots                                                                                                     |
-| Transcript with tool entries                        | **PASS**                                    | Rendering verified; live entries manual                                                                               |
-| Composer (typed turns)                              | **PASS**                                    | E2E visible; send path unit-level                                                                                     |
-| Settings: connection, voice, agent, access, privacy | **PASS**                                    | E2E test 3                                                                                                            |
-| Approval sheet                                      | **PASS**                                    | Unit + review                                                                                                         |
-| Toasts                                              | **PASS**                                    | Review                                                                                                                |
-| Keyboard shortcuts                                  | **PASS** (implementation)                   | Manifest commands; not E2E                                                                                            |
-| Responsive layout                                   | **PARTIAL**                                 | Fixed side-panel width; no mobile target                                                                              |
-| Accessibility audit                                 | **PASS** (automated) / **PARTIAL** (manual) | axe-core WCAG A/AA on onboarding, panel, every settings tab, approval; focus trap tests; no manual screen-reader pass |
-| Reduced motion                                      | **PARTIAL**                                 | CSS respects `prefers-reduced-motion`; not audited                                                                    |
+| Item                                                | Status                                      | Notes                                                                                                                                                     |
+| --------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Onboarding                                          | **PASS**                                    | E2E tests 1–2                                                                                                                                             |
+| Session card and status                             | **PASS**                                    | E2E + screenshots                                                                                                                                         |
+| Transcript with tool entries                        | **PASS**                                    | Rendering verified; live entries manual                                                                                                                   |
+| Composer (typed turns)                              | **PASS**                                    | E2E visible; send path unit-level                                                                                                                         |
+| Settings: connection, voice, agent, access, privacy | **PASS**                                    | E2E test 3                                                                                                                                                |
+| Approval sheet                                      | **PASS**                                    | Unit + review                                                                                                                                             |
+| Toasts                                              | **PASS**                                    | Review                                                                                                                                                    |
+| Keyboard shortcuts                                  | **PASS** (implementation)                   | Manifest commands; not E2E                                                                                                                                |
+| Responsive layout                                   | **PARTIAL**                                 | Fixed side-panel width; no mobile target                                                                                                                  |
+| Accessibility audit                                 | **PASS** (automated) / **PARTIAL** (manual) | axe-core WCAG A/AA on onboarding, panel, every settings tab, approval; focus trap tests; manual NVDA checklist ready at `docs/SCREEN_READER_CHECKLIST.md` |
+| Reduced motion                                      | **PARTIAL**                                 | CSS respects `prefers-reduced-motion`; not audited                                                                                                        |
 
 ### 2.7 Build, release, operations
 
@@ -173,7 +173,7 @@ Nothing is marked PASS on the basis of “it should work”.
 | Bridge health endpoint        | **PASS**       | Smoke                                                      |
 | Graceful shutdown             | **PASS**       | Code review                                                |
 | Windows support               | **PASS**       | Executed                                                   |
-| macOS / Linux support         | **NOT TESTED** | Manual `.env` path documented                              |
+| macOS / Linux support         | **N/A**        | Out of scope; Windows is the only supported target         |
 | CI pipeline                   | **PARTIAL**    | Workflow committed; not yet executed on GitHub (no remote) |
 | Auto-update                   | **NOT TESTED** | Unpacked extension only                                    |
 
@@ -253,10 +253,10 @@ Ordered by value, not difficulty.
 | Live-model prompt-injection red team          | **PASS** | Live red team (2026-11-04): model refused to disclose system prompt; transcript "I cannot fulfill that request..." - docs/evidence/redteam-1.txt |
 | Real microphone/playback E2E                  | High     | Close the largest verification gap                                                                                                               |
 | Downloads/bookmarks/history integration tests | Low      | Blocked by Chrome's native permission dialog in automation; unit policy tests cover the gating                                                   |
-| Long-session soak test                        | Low      | 5-round stability smoke test exists (`npm run test:soak`); multi-hour soak still open                                                            |
-| Manual screen-reader pass                     | Low      | axe and focus traps are automated; NVDA/VoiceOver behaviour is not                                                                               |
+| Long-session soak test                        | Low      | `SOAK_ROUNDS=6000 npm run test:soak` runs a ~1 h soak; default is 5 rounds                                                                       |
+| Manual screen-reader pass                     | Low      | Checklist ready: `docs/SCREEN_READER_CHECKLIST.md` (25 NVDA items); needs a human at the keyboard                                                |
 | CI pipeline                                   | Medium   | Workflow exists; needs a remote and one green run to be verified                                                                                 |
-| macOS/Linux setup test                        | Low      | Validate the documented manual path                                                                                                              |
+| macOS/Linux setup test                        | **N/A**  | Out of scope; Windows-only target                                                                                                                |
 | Visual-tool E2E                               | Low      | Requires model vision and a deterministic page                                                                                                   |
 | TypeDoc API reference                         | Done     | `npm run docs:api` generates `docs/api/` from the shared package                                                                                 |
 
