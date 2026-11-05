@@ -59,7 +59,10 @@ async function buildSidePanel() {
       cssMinify: true,
       modulePreload: { polyfill: false },
       rollupOptions: {
-        input: { sidepanel: resolve(extensionDir, 'sidepanel.html') },
+        input: {
+          sidepanel: resolve(extensionDir, 'sidepanel.html'),
+          overlay: resolve(extensionDir, 'overlay.html'),
+        },
         output: {
           entryFileNames: 'assets/[name]-[hash].js',
           chunkFileNames: 'assets/[name]-[hash].js',
@@ -69,6 +72,7 @@ async function buildSidePanel() {
     },
   });
   assertFile(join(outDir, 'sidepanel.html'));
+  assertFile(join(outDir, 'overlay.html'));
 }
 
 async function buildScripts() {
@@ -96,6 +100,12 @@ async function buildScripts() {
     }),
     esbuild({
       ...common,
+      entryPoints: [join(extensionDir, 'src', 'overlay', 'host.ts')],
+      outfile: join(outDir, 'overlay-host.js'),
+      format: 'iife',
+    }),
+    esbuild({
+      ...common,
       entryPoints: [join(extensionDir, 'src', 'audio', 'worklet-capture.ts')],
       outfile: join(outDir, 'audio', 'worklet-capture.js'),
       format: 'iife',
@@ -111,6 +121,7 @@ async function buildScripts() {
   for (const file of [
     'background.js',
     'content-script.js',
+    'overlay-host.js',
     'audio/worklet-capture.js',
     'audio/worklet-playback.js',
   ]) {

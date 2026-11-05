@@ -8,7 +8,7 @@
  */
 import { test, expect, chromium } from '@playwright/test';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,6 +33,69 @@ const extensionId = extensionIdFromKey(manifest.key);
 
 let context;
 let panel;
+
+// The accessibility tree is what NVDA/VoiceOver actually consume. axe checks
+// rules; this checks the computed name/role/state that reaches the synthesizer.
+const axSurfaces = {};
+
+const INTERACTIVE_ROLES = new Set([
+  'button',
+  'checkbox',
+  'combobox',
+  'link',
+  'listbox',
+  'menuitem',
+  'menuitemcheckbox',
+  'menuitemradio',
+  'option',
+  'radio',
+  'searchbox',
+  'slider',
+  'spinbutton',
+  'switch',
+  'tab',
+  'textbox',
+  'treeitem',
+]);
+
+async function axTree() {
+  const cdp = await context.newCDPSession(panel);
+  await cdp.send('Accessibility.enable');
+  const { nodes } = await cdp.send('Accessibility.getFullAXTree');
+  await cdp.detach();
+  return nodes
+    .filter((node) => !node.ignored)
+    .map((node) => ({
+      role: node.role?.value ?? '',
+      name: node.name?.value ?? '',
+      description: node.description?.value ?? '',
+      value: typeof node.value?.value === 'string' ? node.value.value : undefined,
+      disabled: node.properties?.find((p) => p.name === 'disabled')?.value?.value === true,
+      checked: node.properties?.find((p) => p.name === 'checked')?.value?.value,
+      expanded: node.properties?.find((p) => p.name === 'expanded')?.value?.value,
+      focused: node.properties?.find((p) => p.name === 'focused')?.value?.value === true,
+      level: node.properties?.find((p) => p.name === 'level')?.value?.value,
+    }));
+}
+
+async function auditAxTree(label) {
+  const tree = await axTree();
+  axSurfaces[label] = tree;
+
+  const unnamed = tree.filter((node) => INTERACTIVE_ROLES.has(node.role) && !node.name.trim());
+  expect(
+    unnamed,
+    `${label}: interactive nodes without an accessible name: ${JSON.stringify(unnamed, null, 2)}`,
+  ).toEqual([]);
+
+  const unnamedDialogs = tree.filter((node) => node.role === 'dialog' && !node.name.trim());
+  expect(
+    unnamedDialogs,
+    `${label}: dialogs without an accessible name: ${JSON.stringify(unnamedDialogs, null, 2)}`,
+  ).toEqual([]);
+
+  return tree;
+}
 
 async function audit(label) {
   const results = await panel.evaluate(async () => {
@@ -88,6 +151,15 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  if (Object.keys(axSurfaces).length > 0) {
+    const outDir = join(root, 'docs', 'evidence');
+    mkdirSync(outDir, { recursive: true });
+    writeFileSync(
+      join(outDir, 'ax-tree.json'),
+      `${JSON.stringify({ generatedAt: new Date().toISOString(), surfaces: axSurfaces }, null, 2)}\n`,
+      'utf8',
+    );
+  }
   await context?.close();
 });
 
@@ -98,6 +170,19 @@ test('onboarding has no WCAG A/AA violations', async () => {
 test('the live panel has no WCAG A/AA violations', async () => {
   await skipOnboarding();
   await audit('live panel');
+});
+
+test('every surface exposes a fully named accessibility tree', async () => {
+  await skipOnboarding();
+  const tree = await auditAxTree('live panel');
+  expect(tree.length).toBeGreaterThan(10);
+
+  await panel.getByRole('button', { name: 'Open settings' }).click();
+  await expect(panel.getByRole('dialog', { name: 'Settings' })).toBeVisible();
+  await auditAxTree('settings');
+
+  await panel.keyboard.press('Escape');
+  await expect(panel.getByRole('dialog', { name: 'Settings' })).toHaveCount(0);
 });
 
 test('every settings tab has no WCAG A/AA violations', async () => {

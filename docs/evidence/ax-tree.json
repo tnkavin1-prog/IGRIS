@@ -1,0 +1,2257 @@
+{
+  "generatedAt": "2026-11-05T07:05:03.289Z",
+  "surfaces": {
+    "live panel": [
+      {
+        "role": "RootWebArea",
+        "name": "Gemini Browser Live",
+        "description": "",
+        "disabled": false,
+        "focused": true
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "banner",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "main",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "contentinfo",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Bridge offline",
+        "description": "The local bridge is unreachable. Start it with \"npm run bridge\" and try again.",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Open settings",
+        "description": "Open settings",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "status",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "form",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Actions that spend money, submit data, download files, or close tabs always ask first.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Enter to send",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Gemini ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Browser Live",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "VOICE · VISION · ACTION",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Bridge offline",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Paste the gate secret once to unlock live sessions.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Connect",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "heading",
+        "name": "Your browser, in conversation",
+        "description": "",
+        "disabled": false,
+        "focused": false,
+        "level": 2
+      },
+      {
+        "role": "paragraph",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Ready to start",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Browser tools",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Ready when you are",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "3.8 Live",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Start live",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Key stays in the local bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "16 kHz in · 24 kHz out",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Headphones recommended",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "heading",
+        "name": "Live transcript & actions",
+        "description": "",
+        "disabled": false,
+        "focused": false,
+        "level": 3
+      },
+      {
+        "role": "button",
+        "name": "Clear",
+        "description": "",
+        "disabled": true,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "textbox",
+        "name": "Message Gemini",
+        "description": "",
+        "disabled": true,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Start live session",
+        "description": "Start live session",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Actions that spend money, submit data, download files, or close tabs always ask first.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Enter to send",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Gemini ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Browser Live",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "VOICE · VISION · ACTION",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Bridge offline",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Pair the local bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Paste the gate secret once to unlock live sessions.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Connect",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "READY",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Your browser, in conversation",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Start a live session and ask for anything you would do in Chrome.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Ready to start",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Browser tools",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "LIVE SESSION",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Ready when you are",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "3.8 Live",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Start live",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Key stays in the local bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "16 kHz in · 24 kHz out",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Headphones recommended",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "CONVERSATION",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Live transcript & actions",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Clear",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Start a live session and ask Gemini to do something in your browser.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Summarize this page",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Find the key details",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Compare these tabs",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Fill this form",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Pair the local bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Connect",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "READY",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Your browser, in ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "conversation",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Start a live session and ask for anything ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "you would do in Chrome.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "LIVE SESSION",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Start live",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "CONVERSATION",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Live transcript & actions",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Clear",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Nothing here yet.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Start a live session and ask Gemini to ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "do something in your browser.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Summarize this page",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Find the key details",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Compare these tabs",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Fill this form",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Nothing here yet.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Summarize this page",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Find the key details",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Compare these tabs",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Fill this form",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      }
+    ],
+    "settings": [
+      {
+        "role": "RootWebArea",
+        "name": "Gemini Browser Live",
+        "description": "",
+        "disabled": false,
+        "focused": true
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "banner",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "main",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "contentinfo",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Bridge offline",
+        "description": "The local bridge is unreachable. Start it with \"npm run bridge\" and try again.",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Open settings",
+        "description": "Open settings",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "status",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "form",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Actions that spend money, submit data, download files, or close tabs always ask first.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Enter to send",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "dialog",
+        "name": "Settings",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Gemini ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Browser Live",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "VOICE · VISION · ACTION",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Bridge offline",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Paste the gate secret once to unlock live sessions.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Connect",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "heading",
+        "name": "Your browser, in conversation",
+        "description": "",
+        "disabled": false,
+        "focused": false,
+        "level": 2
+      },
+      {
+        "role": "paragraph",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Ready to start",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Browser tools",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Ready when you are",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "3.8 Live",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Start live",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Key stays in the local bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "16 kHz in · 24 kHz out",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Headphones recommended",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "heading",
+        "name": "Live transcript & actions",
+        "description": "",
+        "disabled": false,
+        "focused": false,
+        "level": 3
+      },
+      {
+        "role": "button",
+        "name": "Clear",
+        "description": "",
+        "disabled": true,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "textbox",
+        "name": "Message Gemini",
+        "description": "",
+        "disabled": true,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Start live session",
+        "description": "Start live session",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Actions that spend money, submit data, download files, or close tabs always ask first.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Enter to send",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "heading",
+        "name": "Settings",
+        "description": "",
+        "disabled": false,
+        "focused": false,
+        "level": 2
+      },
+      {
+        "role": "button",
+        "name": "Close settings",
+        "description": "Close settings",
+        "disabled": false,
+        "focused": true
+      },
+      {
+        "role": "navigation",
+        "name": "Settings sections",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "code",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Keep the terminal window open while you use the extension. The bridge logs every request but never the API key.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Close",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Save settings",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Gemini ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Browser Live",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "VOICE · VISION · ACTION",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Bridge offline",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Pair the local bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Paste the gate secret once to unlock live sessions.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Connect",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "READY",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Your browser, in conversation",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Start a live session and ask for anything you would do in Chrome.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Ready to start",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Browser tools",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "LIVE SESSION",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Ready when you are",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "3.8 Live",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Start live",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Key stays in the local bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "16 kHz in · 24 kHz out",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Headphones recommended",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "CONVERSATION",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Live transcript & actions",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Clear",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Start a live session and ask Gemini to do something in your browser.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Summarize this page",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Find the key details",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Compare these tabs",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Fill this form",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "CONFIGURATION",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Settings",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Connection",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Voice",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Agent",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Access",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Privacy",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "heading",
+        "name": "Local bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false,
+        "level": 3
+      },
+      {
+        "role": "StaticText",
+        "name": "Offline",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "paragraph",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "LabelText",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Test connection",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "The local bridge is unreachable. Start it with \"npm run bridge\" and try again.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "heading",
+        "name": "Bridge secret",
+        "description": "",
+        "disabled": false,
+        "focused": false,
+        "level": 3
+      },
+      {
+        "role": "StaticText",
+        "name": "Required",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "paragraph",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "textbox",
+        "name": "Paste LOCAL_GATE_SECRET",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Show secret",
+        "description": "Show secret",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Save",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Start the bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "npm run bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Keep the terminal window open while you use the extension. The bridge logs ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "every request but never the API key.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Changes apply to the next session.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Close",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Save settings",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Pair the local bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Connect",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "READY",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Your browser, in ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "conversation",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Start a live session and ask for anything ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "you would do in Chrome.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "LIVE SESSION",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Start live",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "CONVERSATION",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Live transcript & actions",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Clear",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Nothing here yet.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Start a live session and ask Gemini to ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "do something in your browser.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Summarize this page",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Find the key details",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Compare these tabs",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Fill this form",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "CONFIGURATION",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Settings",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Connection",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Voice",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Agent",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Access",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Privacy",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Local bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Offline",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "The bridge holds your Gemini API key and mints single-use Live tokens. It listens on loopback only; the key never enters Chrome.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Bridge URL",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "textbox",
+        "name": "Bridge URL Only 127.0.0.1 or localhost is accepted.",
+        "description": "",
+        "value": "http://127.0.0.1:47821",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Only 127.0.0.1 or localhost is accepted.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Test connection",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "The local bridge is unreachable. Start it with \"npm run bridge\" and try again.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Bridge secret",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Required",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Copy ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "code",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": " from ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "code",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": ". It is stored in ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "code",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": ", never synced, and never sent anywhere except your loopback bridge.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Save",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Start the bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "npm run bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Changes apply to the next session.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Close",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Save settings",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Nothing here yet.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Summarize this page",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Find the key details",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Compare these tabs",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Fill this form",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Connection",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Voice",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Agent",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Access",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Privacy",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Local bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "The bridge holds your Gemini API key and mints single-use Live tokens. It listens ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "on loopback only; the key never enters Chrome.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Bridge URL",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Only 127.0.0.1 or localhost is accepted.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Test connection",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Bridge secret",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Copy ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "LOCAL_GATE_SECRET",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": " from ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "apps/local-bridge/.env",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": ". It is stored in ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "chrome.storage.local",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": ", never synced, and never sent anywhere except your ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "loopback bridge.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Save",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "http://127.0.0.1:47821",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "LOCAL_GATE_SECRET",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "apps/local-bridge/.env",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "chrome.storage.local",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "http://127.0.0.1:47821",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      }
+    ]
+  }
+}

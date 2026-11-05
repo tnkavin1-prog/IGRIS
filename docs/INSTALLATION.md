@@ -175,7 +175,7 @@ Do not load the repository root — Chrome needs `manifest.json` at the folder r
 
 ## 7. Pair the extension
 
-1. Click the extension icon (or press `Alt+Shift+O`).
+1. Click the extension icon (or press `Alt+Shift+O`). The floating overlay appears on the current tab; on `chrome://` and other protected pages the side panel opens instead.
 2. Open **Settings → Connection**.
 3. Confirm **Bridge URL** is `http://127.0.0.1:47821` (or your custom port).
 4. Paste the gate secret printed by the setup script.
@@ -193,6 +193,8 @@ The secret is stored in `chrome.storage.local` and sent as a bearer token on eve
 3. Wait for the status to become **Listening**.
 4. Say: _“What page am I on?”_
 5. The agent should call `get_browser_state` or `get_page_snapshot` and answer.
+
+The overlay is pinned 20 px from the bottom-right. Drag the grip to move it, the minus button to collapse it to an orb, and the cross to close it. Closing the overlay ends the session. If you open a second surface while a session is live, it reports “The assistant is already running in another window.” instead of opening a second microphone.
 
 If you see **Bridge offline**, the bridge is not running or the URL/secret is wrong. See troubleshooting below.
 
@@ -220,10 +222,10 @@ Expected:
 ```
 ▸ Bridge already running at http://127.0.0.1:47821
 ▸ Token minted
-▸ Setup complete in 2024 ms
-▸ First audio in 2743 ms (84003 bytes)
+▸ Setup complete in 1556 ms
+▸ First audio in 2026 ms (69123 bytes)
 ▸ Transcript: Smoke test passed.
-✔ PASS — Live API round-trip completed in 3001 ms
+✔ PASS — Live API round-trip completed in 2231 ms
 ```
 
 Timings vary with network conditions. The pass condition is that setup completes and audio or a transcript arrives.

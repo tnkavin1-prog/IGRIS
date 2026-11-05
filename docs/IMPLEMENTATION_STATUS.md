@@ -21,7 +21,7 @@ Nothing is marked PASS on the basis of “it should work”.
 
 | #   | Requirement                                        | Status                                                               | Evidence                                                                                                                                                                                                                 |
 | --- | -------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | Chrome extension, Manifest V3, side panel UI       | **PASS**                                                             | `manifest.json`; E2E tests 1–3; `release/chrome-extension/` loads in Chromium 156                                                                                                                                        |
+| 1   | Chrome extension, Manifest V3, floating overlay UI | **PASS**                                                             | `manifest.json`; `overlay.html` + `overlay-host.js`; 4 overlay E2E tests; `release/chrome-extension/` loads in Chromium 156                                                                                              |
 | 2   | Real-time Gemini Live connection                   | **PASS**                                                             | `smoke:live` reached `setupComplete`, audio, and transcript; `docs/evidence/smoke-live.log`                                                                                                                              |
 | 3   | Streaming 16 kHz PCM microphone input              | **PASS** (implementation) / **PARTIAL** (hardware verification)      | `audio/capture.ts`, `worklet-capture.ts`, 16 audio unit tests; no automated real-mic E2E                                                                                                                                 |
 | 4   | 24 kHz PCM playback                                | **PASS** (implementation + fake-device E2E) / **PARTIAL** (acoustic) | `audio/playback.ts`, ring-buffer worklet, audio unit tests; offline Live E2E decodes PCM and drives the output meter                                                                                                     |
@@ -33,12 +33,12 @@ Nothing is marked PASS on the basis of “it should work”.
 | 10  | Verification loop after actions                    | **PASS** (implementation) / **PARTIAL** (live tool verification)     | Fingerprint diff, navigation settle, download polling; orchestrator evidence tests; echo-tool probe only                                                                                                                 |
 | 11  | Prompt-injection resistance                        | **PASS** (defence in depth + corpus + live red team)                 | Unforgeable untrusted framing, escaped inline titles, deep-escaped structured fields, URL fragment scrubbing, system instruction, code-enforced consent; 17-case corpus; live red team passed (model refused disclosure) |
 | 12  | Approval gates for consequential actions           | **PASS**                                                             | `safety.ts` + orchestrator; 13 orchestrator tests; offline Live E2E approves, denies, and binds execution to the approved tab                                                                                            |
-| 13  | Premium side-panel UI                              | **PASS**                                                             | React UI, 58 KB design system, E2E rendering, screenshots in `docs/assets/`                                                                                                                                              |
+| 13  | Floating overlay UI + side panel fallback          | **PASS**                                                             | React UI shared by both surfaces, overlay host with collapse/drag/close, E2E geometry assertions, screenshots in `docs/assets/`                                                                                          |
 | 14  | Secure local key handling                          | **PASS**                                                             | Key only in bridge, `.env` gitignored, redaction tests, gate secret, origin/host/rate checks                                                                                                                             |
-| 15  | Automated tests                                    | **PASS**                                                             | 211 unit tests + 18 E2E tests, all passing                                                                                                                                                                               |
-| 16  | Production build                                   | **PASS**                                                             | `npm run release`: 12 files, 626.1 kB unpacked                                                                                                                                                                           |
+| 15  | Automated tests                                    | **PASS**                                                             | 217 unit tests + 23 E2E tests, all passing; long soak with heap sampling                                                                                                                                                 |
+| 16  | Production build                                   | **PASS**                                                             | `npm run release`: 17 files, 639.2 kB unpacked                                                                                                                                                                           |
 | 17  | Ready-to-install extension folder                  | **PASS**                                                             | `release/chrome-extension/` with manifest at root                                                                                                                                                                        |
-| 18  | Distributable ZIP                                  | **PASS**                                                             | `release/Gemini-Browser-Live-Chrome.zip`, SHA-256 `fb7171�2cd13`, 12/12 files verified                                                                                                                                   |
+| 18  | Distributable ZIP                                  | **PASS**                                                             | `release/Gemini-Browser-Live-Chrome.zip`, SHA-256 `948410df65a8e6c7…`, 17/17 files verified                                                                                                                              |
 | 19  | Documented test evidence                           | **PASS**                                                             | `docs/TEST_REPORT.md`                                                                                                                                                                                                    |
 | 20  | This status document                               | **PASS**                                                             | You are reading it                                                                                                                                                                                                       |
 
@@ -152,7 +152,10 @@ Nothing is marked PASS on the basis of “it should work”.
 | Approval sheet                                      | **PASS**                                    | Unit + review                                                                                                                                             |
 | Toasts                                              | **PASS**                                    | Review                                                                                                                                                    |
 | Keyboard shortcuts                                  | **PASS** (implementation)                   | Manifest commands; not E2E                                                                                                                                |
-| Responsive layout                                   | **PARTIAL**                                 | Fixed side-panel width; no mobile target                                                                                                                  |
+| Floating overlay surface                            | **PASS**                                    | Injected `chrome-extension://` iframe, open shadow root, 404×648 pinned bottom-right, collapses to 64×64 orb; 4 E2E tests                                 |
+| Side-panel fallback on protected pages              | **PASS** (implementation)                   | `background.ts` checks `chrome://`, `edge:`, `about:`, `devtools:`, `view-source:`, `chrome-extension:` and opens the panel instead                       |
+| Single audio engine across surfaces                 | **PASS** (implementation)                   | `chrome.storage.session` lock, 5 s heartbeat, 15 s expiry; second surface reports "already running in another window"                                     |
+| Responsive layout                                   | **PARTIAL**                                 | Fixed 404 px overlay and side-panel width; no mobile target                                                                                               |
 | Accessibility audit                                 | **PASS** (automated) / **PARTIAL** (manual) | axe-core WCAG A/AA on onboarding, panel, every settings tab, approval; focus trap tests; manual NVDA checklist ready at `docs/SCREEN_READER_CHECKLIST.md` |
 | Reduced motion                                      | **PARTIAL**                                 | CSS respects `prefers-reduced-motion`; not audited                                                                                                        |
 
@@ -199,33 +202,33 @@ Nothing is marked PASS on the basis of “it should work”.
 
 The original directive asked for a production-quality, real-time Gemini Live voice agent as a Chrome extension that can autonomously operate the browser. The table below maps each explicit requirement to its outcome.
 
-| Requirement                             | Outcome                                                       |
-| --------------------------------------- | ------------------------------------------------------------- |
-| Use only the E: drive for project files | **PASS** — project root `E:\Gemetron`                         |
-| Real-time voice conversation            | **PASS** — native audio in/out over Live API                  |
-| Chrome extension                        | **PASS** — MV3, side panel, stable ID                         |
-| Autonomous browser operation            | **PASS** — 52 tools, semantic grounding, verification         |
-| Streaming 16 kHz PCM input              | **PASS** — AudioWorklet capture                               |
-| 24 kHz PCM output                       | **PASS** — ring-buffer playback                               |
-| Barge-in                                | **PASS** — server VAD + local flush                           |
-| Session resumption                      | **PASS** — handles + reconnect                                |
-| Ephemeral tokens                        | **PASS** — bridge-minted, single-use                          |
-| Key never in extension                  | **PASS** — bridge-only custody                                |
-| Async tool calling                      | **PASS** — verified round trip                                |
-| Semantic DOM grounding                  | **PASS** — registry + snapshots                               |
-| Verification loop                       | **PASS** — fingerprints, settles, download polling            |
-| 11                                      | Prompt-injection resistance                                   | **PASS** (defence in depth + corpus + live red team) | Unforgeable untrusted framing, escaped inline titles, deep-escaped structured fields, URL fragment scrubbing, system instruction, code-enforced consent; 17-case corpus; live red team passed (model refused disclosure) |
-| Approval gates                          | **PASS** — code-enforced                                      |
-| Premium UI                              | **PASS** — screenshot-verified                                |
-| Secure local key handling               | **PASS** — `.env`, ACL, redaction                             |
-| Tests                                   | **PASS** — 192 unit + 9 E2E                                   |
-| Production build                        | **PASS** — `release/`                                         |
-| Ready-to-install extension              | **PASS** — unpacked folder                                    |
-| Distributable ZIP                       | **PASS** — verified archive                                   |
-| Documented test evidence                | **PASS** — test report                                        |
-| Status matrix                           | **PASS** — this file                                          |
-| Multi-agent brainstorming               | **PASS** — design decisions recorded in research/architecture |
-| Senior-engineer judgement               | **PASS** — deviations documented with rationale               |
+| Requirement                             | Outcome                                                           |
+| --------------------------------------- | ----------------------------------------------------------------- |
+| Use only the E: drive for project files | **PASS** — project root `E:\Gemetron`                             |
+| Real-time voice conversation            | **PASS** — native audio in/out over Live API                      |
+| Chrome extension                        | **PASS** — MV3, floating overlay + side-panel fallback, stable ID |
+| Autonomous browser operation            | **PASS** — 52 tools, semantic grounding, verification             |
+| Streaming 16 kHz PCM input              | **PASS** — AudioWorklet capture                                   |
+| 24 kHz PCM output                       | **PASS** — ring-buffer playback                                   |
+| Barge-in                                | **PASS** — server VAD + local flush                               |
+| Session resumption                      | **PASS** — handles + reconnect                                    |
+| Ephemeral tokens                        | **PASS** — bridge-minted, single-use                              |
+| Key never in extension                  | **PASS** — bridge-only custody                                    |
+| Async tool calling                      | **PASS** — verified round trip                                    |
+| Semantic DOM grounding                  | **PASS** — registry + snapshots                                   |
+| Verification loop                       | **PASS** — fingerprints, settles, download polling                |
+| 11                                      | Prompt-injection resistance                                       | **PASS** (defence in depth + corpus + live red team) | Unforgeable untrusted framing, escaped inline titles, deep-escaped structured fields, URL fragment scrubbing, system instruction, code-enforced consent; 17-case corpus; live red team passed (model refused disclosure) |
+| Approval gates                          | **PASS** — code-enforced                                          |
+| Premium UI                              | **PASS** — screenshot-verified                                    |
+| Secure local key handling               | **PASS** — `.env`, ACL, redaction                                 |
+| Tests                                   | **PASS** — 192 unit + 9 E2E                                       |
+| Production build                        | **PASS** — `release/`                                             |
+| Ready-to-install extension              | **PASS** — unpacked folder                                        |
+| Distributable ZIP                       | **PASS** — verified archive                                       |
+| Documented test evidence                | **PASS** — test report                                            |
+| Status matrix                           | **PASS** — this file                                              |
+| Multi-agent brainstorming               | **PASS** — design decisions recorded in research/architecture     |
+| Senior-engineer judgement               | **PASS** — deviations documented with rationale                   |
 
 ---
 

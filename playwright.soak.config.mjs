@@ -6,6 +6,11 @@ const rounds = Number(process.env.SOAK_ROUNDS ?? 5);
 const roundBudget = Number.isFinite(rounds) && rounds > 0 ? rounds : 5;
 const timeout = 300_000 + roundBudget * 3_000; // 5 min slack + 3 s per round
 
+// Tracing captures a screencast for the whole test. On a 36 s run that is
+// already ~17 MB of buffered frames; over hours it exhausts memory and takes
+// the renderer down with it. Keep it off unless explicitly requested.
+const trace = process.env.SOAK_TRACE === '1' ? 'retain-on-failure' : 'off';
+
 export default defineConfig({
   testDir: './tests/soak',
   globalSetup: './tests/e2e/global-setup.mjs',
@@ -18,7 +23,9 @@ export default defineConfig({
   use: {
     headless: false,
     viewport: { width: 440, height: 940 },
-    trace: 'retain-on-failure',
-    screenshot: 'only-on-failure',
+    trace,
+    // Screenshots on failure are also a screencast cost in long runs.
+    screenshot: trace === 'off' ? 'off' : 'only-on-failure',
+    video: 'off',
   },
 });

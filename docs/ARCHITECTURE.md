@@ -36,7 +36,7 @@ The content script runs in Chrome's isolated world. It can read and mutate the D
 
 ---
 
-## 2. Why the side panel owns browser control
+## 2. Where the agent runs
 
 MV3 service workers are killed after ~30 s of inactivity, cannot hold an AudioContext reliably, and have no DOM. Putting the agent loop in the service worker would mean:
 
@@ -46,11 +46,16 @@ MV3 service workers are killed after ~30 s of inactivity, cannot hold an AudioCo
 
 Instead:
 
-- The **side panel** is a normal extension page. It owns the microphone, playback, Live WebSocket, tool executor, and approval UI.
-- The **service worker** is intentionally thin: it opens the panel on action click, handles keyboard commands, and routes status queries.
-- The **content script** is injected on demand with `chrome.scripting.executeScript` into the active tab, so no persistent content script runs on every page.
+- An **extension page** is the agent host: `overlay.html` for the floating surface, `sidepanel.html` for the fallback. Both render the same React tree and the same `AgentController`; the page owns the microphone, playback, Live WebSocket, tool executor, and approval UI.
+- The **service worker** is intentionally thin: it injects the overlay host on action click, opens the side panel where injection is blocked, and routes keyboard commands.
+- The **overlay host** is a small content script injected on demand with `chrome.scripting.executeScript`. It creates a `div` with an **open** shadow root containing one `chrome-extension://` iframe, then only moves or collapses that box. It never touches conversation state.
+- The **content script** for page observation is injected on demand into the target tab, so no persistent content script runs on every page.
 
-The trade-off: closing the side panel ends the session. That is documented behaviour, and the transcript is optionally persisted.
+The overlay is a cross-origin `chrome-extension://` iframe, which is what gives it microphone access, `chrome.tabs`, and `chrome.scripting` without fighting the host page's CSP. The shadow root is open only so automated tests can measure the frame; page scripts still cannot read inside the iframe.
+
+Because two surfaces can exist at once, a `chrome.storage.session` key (`gbl.engineLock.v1`) guards the audio engine: 5 s heartbeat, 15 s expiry. A second surface gets "The assistant is already running in another window." instead of opening a second microphone.
+
+The trade-off: closing the overlay or the side panel ends the session. That is documented behaviour, and the transcript is optionally persisted.
 
 ---
 
@@ -78,7 +83,14 @@ Keeping the catalog and safety policy shared means the UI, executor, and tests c
 
 ```
 src/
-  background.ts            service worker: commands, action click, status
+  background.ts            service worker: overlay injection, panel fallback, commands
+  overlay/
+    host.ts                content script: shadow-root host + iframe geometry
+    bridge.ts              typed overlay ↔ host message protocol
+    OverlayBar.tsx         drag strip, collapse, close
+    OverlayOrb.tsx         collapsed 64×64 surface
+    useOverlayShell.ts     collapse/expand state
+    main.tsx, overlay.css  entry point and surface styling
   content/
     content-script.ts      message loop, operation dispatch
     registry.ts            element handle registry with generations
@@ -314,6 +326,8 @@ controller (mutable state + event emitters)
    │  getSnapshot() / subscribe()
    ▼
 App.tsx (useSyncExternalStore)
+   ├── OverlayBar        drag strip, collapse, close   (overlay only)
+   ├── OverlayOrb        collapsed 64×64 surface       (overlay only)
    ├── Header            connection + bridge status
    ├── SessionBar        start/stop, mute, volume
    ├── Transcript        conversation + tool entries
@@ -323,6 +337,8 @@ App.tsx (useSyncExternalStore)
    ├── Onboarding        first-run
    └── Toasts            transient feedback
 ```
+
+`App.tsx` is shared by both surfaces. It reads `document.documentElement.dataset.surface` (set by `overlay/main.tsx`) to decide whether to render the overlay chrome, and returns `OverlayOrb` alone when collapsed. A pending approval forces an expand.
 
 This avoids the classic React bug where an effect re-runs on every render and opens duplicate sockets. It also makes the controller directly unit-testable in Node/happy-dom.
 

@@ -107,6 +107,9 @@ test.beforeAll(async () => {
       '--no-default-browser-check',
       '--use-fake-ui-for-media-stream',
       '--use-fake-device-for-media-stream',
+      // The soak plays a tone every round; without this it is audible for the
+      // whole run, which is unacceptable on a workstation.
+      '--mute-audio',
     ],
   });
   panel = await context.newPage();
@@ -185,11 +188,31 @@ test('stays live and stable across repeated tool calls and audio', async () => {
   panel.on('console', (msg) => {
     if (msg.type() === 'error') errors.push(msg.text());
   });
+  // A renderer crash closes the page without a console error, so record it
+  // explicitly; otherwise the failure looks like a mysterious timeout.
+  let crashed = null;
+  panel.on('crash', () => {
+    crashed = `page crashed at ${new Date().toISOString()}`;
+  });
+  context.on('close', () => {
+    crashed ??= `browser context closed at ${new Date().toISOString()}`;
+  });
 
   const sendToolCall = (calls) => {
     if (!live.socket) throw new Error('no socket');
     live.socket.send(JSON.stringify({ toolCall: { functionCalls: calls } }));
   };
+
+  // Heap sampling turns the soak into a leak detector rather than a
+  // "did it crash" smoke test. Used-heap should plateau once the conversation
+  // cap is reached; steady growth means something is retaining per-round state.
+  const cdp = await context.newCDPSession(panel);
+  const heapSamples = [];
+  const sampleHeap = async () => {
+    const { usedSize } = await cdp.send('Runtime.getHeapUsage');
+    heapSamples.push(Math.round(usedSize / 1024));
+  };
+  await sampleHeap();
 
   // Warm up: snapshot.
   sendToolCall([
@@ -229,6 +252,13 @@ test('stays live and stable across repeated tool calls and audio', async () => {
     live.socket.send(JSON.stringify({ serverContent: { interrupted: true } }));
     await panel.waitForTimeout(200);
 
+    // A tool budget is granted per user turn. Without one, the orchestrator
+    // rejects every call after `maxToolSteps` and the soak stops exercising
+    // the executor entirely.
+    const composer = panel.getByLabel('Message Gemini');
+    await composer.fill(`soak round ${round}`);
+    await composer.press('Enter');
+
     // Tool call.
     const callId = `soak-${round}`;
     sendToolCall([
@@ -245,9 +275,39 @@ test('stays live and stable across repeated tool calls and audio', async () => {
         },
       )
       .toBe(true);
+
+    if (round % Math.max(1, Math.floor(rounds / 20)) === 0) await sampleHeap();
+    if (round > 0 && round % 25 === 0) {
+      console.log(
+        `[soak] round ${round}/${rounds} heap=${heapSamples.at(-1)}KiB${
+          crashed ? ` CRASHED: ${crashed}` : ''
+        }`,
+      );
+    }
   }
+  await sampleHeap();
 
   const devtoolsRe = /Download the React DevTools/i;
   const realErrors = errors.filter((e) => !devtoolsRe.test(e));
+  expect(crashed, crashed ?? '').toBeNull();
   expect(realErrors.length).toBe(0);
+
+  // Report the heap curve so a long run leaves usable evidence.
+  console.log(`[soak] rounds=${rounds} heapKiB=${heapSamples.join(',')}`);
+
+  if (heapSamples.length >= 8) {
+    const quarter = Math.max(1, Math.floor(heapSamples.length / 4));
+    const median = (values) => {
+      const sorted = [...values].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+    };
+    const start = median(heapSamples.slice(0, quarter));
+    const end = median(heapSamples.slice(-quarter));
+    const growthMiB = (end - start) / 1024;
+    console.log(`[soak] heap start=${start}KiB end=${end}KiB growth=${growthMiB.toFixed(1)}MiB`);
+    // Generous ceiling: a bounded conversation should plateau well below this.
+    // A real leak in the audio ring buffer or transcript would blow past it.
+    expect(growthMiB).toBeLessThan(32);
+  }
 });

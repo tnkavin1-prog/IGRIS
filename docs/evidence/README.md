@@ -2,12 +2,16 @@
 
 This directory holds raw output from real protocol probes and the production smoke test. It is kept so the claims in `docs/TECHNICAL_RESEARCH.md` and `docs/TEST_REPORT.md` can be checked against the actual run rather than taken on trust.
 
-| File             | What it is                                                                                     |
-| ---------------- | ---------------------------------------------------------------------------------------------- |
-| `probe-out.txt`  | Console log from the first protocol probe (token shapes, direct key, async tools)              |
-| `probe-out2.txt` | Console log from the constrained-endpoint probe (ephemeral token, tool round trip, single-use) |
-| `probe-out3.txt` | Control probes for extended thinking (no tools, minimal tool, scheduling variants)             |
-| `smoke-live.log` | Production-path smoke test through the built bridge                                            |
+| File                 | What it is                                                                                     |
+| -------------------- | ---------------------------------------------------------------------------------------------- |
+| `probe-out.txt`      | Console log from the first protocol probe (token shapes, direct key, async tools)              |
+| `probe-out2.txt`     | Console log from the constrained-endpoint probe (ephemeral token, tool round trip, single-use) |
+| `probe-out3.txt`     | Control probes for extended thinking (no tools, minimal tool, scheduling variants)             |
+| `smoke-live.log`     | Production-path smoke test through the built bridge                                            |
+| `redteam-1.txt`      | Live-model prompt-injection probe; the model refused to disclose its system prompt             |
+| `ax-tree.json`       | CDP `Accessibility.getFullAXTree` dump for the live panel and settings dialog                  |
+| `soak-multihour.log` | **Historical failure.** The 2-hour soak crashing at ~36 s with Playwright tracing on           |
+| `soak-1000.log`      | 1,000-round soak after tracing was disabled; 725 rounds completed, then stopped manually       |
 
 Related structured results live one level up:
 

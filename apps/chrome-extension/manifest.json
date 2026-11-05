@@ -30,6 +30,12 @@
   "side_panel": {
     "default_path": "sidepanel.html"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["overlay.html", "assets/*"],
+      "matches": ["http://*/*", "https://*/*"]
+    }
+  ],
   "options_page": "sidepanel.html",
   "icons": {
     "16": "icons/icon16.png",

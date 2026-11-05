@@ -21,6 +21,7 @@ export type IconName =
   | 'storage'
   | 'headphones'
   | 'chevron'
+  | 'minus'
   | 'trash'
   | 'key'
   | 'plug'
@@ -55,6 +56,7 @@ const PATHS: Record<IconName, ReactNode> = {
     </>
   ),
   close: <path d="M18 6 6 18M6 6l12 12" />,
+  minus: <path d="M5 12h14" />,
   mic: (
     <>
       <rect x="9" y="2" width="6" height="12" rx="3" />

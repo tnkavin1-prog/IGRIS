@@ -26,6 +26,7 @@
     "test:soak": "playwright test --config=playwright.soak.config.mjs",
     "test:all": "npm run typecheck && npm run lint && npm run test && npm run test:e2e",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm run test",
+    "check:ci": "node scripts/check-ci.mjs",
     "bridge": "node apps/local-bridge/dist/server.mjs",
     "dev:bridge": "node --watch apps/local-bridge/src/server.ts",
     "release": "node scripts/release.mjs",

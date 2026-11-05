@@ -17,6 +17,9 @@ import { SettingsPanel } from './SettingsPanel';
 import { Onboarding } from './Onboarding';
 import { Toast } from './Toast';
 import { Icon } from './ui';
+import { useOverlayShell } from '../overlay/useOverlayShell';
+import { OverlayBar } from '../overlay/OverlayBar';
+import { OverlayOrb } from '../overlay/OverlayOrb';
 
 interface RuntimeMessage {
   type?: string;
@@ -38,6 +41,12 @@ export function App() {
   const [draft, setDraft] = useState('');
   const [settingsHint, setSettingsHint] = useState(false);
   const pendingPrompt = useRef<string | null>(null);
+  const {
+    overlay: overlaySurface,
+    collapsed: overlayCollapsed,
+    toggle: toggleOverlay,
+    expand: expandOverlay,
+  } = useOverlayShell();
 
   useEffect(() => {
     void controller.init();
@@ -164,8 +173,22 @@ export function App() {
 
   const live = isSessionLive(snapshot.status);
 
+  // An approval must never be hidden behind a collapsed orb: a consequential
+  // action would time out unanswered.
+  const approvalPending = Boolean(snapshot.approval);
+  useEffect(() => {
+    if (overlaySurface && approvalPending && overlayCollapsed) expandOverlay();
+  }, [overlaySurface, approvalPending, overlayCollapsed, expandOverlay]);
+
+  if (overlaySurface && overlayCollapsed) {
+    return <OverlayOrb snapshot={snapshot} onExpand={expandOverlay} />;
+  }
+
   return (
     <div className="app-shell">
+      {overlaySurface ? (
+        <OverlayBar collapsed={overlayCollapsed} onToggleCollapsed={toggleOverlay} />
+      ) : null}
       <div className="ambient" aria-hidden="true">
         <span className="ambient-blob blob-a" />
         <span className="ambient-blob blob-b" />

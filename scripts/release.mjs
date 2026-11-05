@@ -128,8 +128,10 @@ function createZip(files) {
 const REQUIRED_FILES = [
   'manifest.json',
   'sidepanel.html',
+  'overlay.html',
   'background.js',
   'content-script.js',
+  'overlay-host.js',
   'audio/worklet-capture.js',
   'audio/worklet-playback.js',
   'icons/icon16.png',

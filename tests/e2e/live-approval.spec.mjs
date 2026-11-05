@@ -183,6 +183,8 @@ test.beforeAll(async () => {
       '--no-default-browser-check',
       '--use-fake-ui-for-media-stream',
       '--use-fake-device-for-media-stream',
+      // Tests play synthetic audio; keep it off the speakers.
+      '--mute-audio',
     ],
   });
 

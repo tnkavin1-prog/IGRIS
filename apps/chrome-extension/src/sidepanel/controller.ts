@@ -113,6 +113,15 @@ export interface PanelSnapshot {
 
 const EMPTY_SUMMARY: ToolSummary = { running: 0, ok: 0, error: 0, denied: 0, cancelled: 0 };
 
+/** `chrome.storage.session` key guarding the single audio engine. */
+const ENGINE_LOCK_KEY = 'gbl.engineLock.v1';
+
+function newInstanceId(): string {
+  const source = globalThis.crypto;
+  if (source && typeof source.randomUUID === 'function') return source.randomUUID();
+  return `gbl-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+}
+
 function summarizeTools(conversation: ConversationEntry[]): ToolSummary {
   const summary: ToolSummary = { ...EMPTY_SUMMARY };
   for (const entry of conversation) {
@@ -172,6 +181,9 @@ export class AgentController {
   private starting = false;
   private stopping = false;
   private muted = false;
+  /** Identifies this surface in the cross-surface engine lock. */
+  private readonly engineId = newInstanceId();
+  private engineTimer = 0;
   private connectedOnce = false;
 
   constructor() {
@@ -451,7 +463,43 @@ export class AgentController {
 
   /* ───────────────────────────── audio ───────────────────────────── */
 
+  /**
+   * Only one surface may hold the microphone at a time. The overlay and the
+   * side panel are both extension pages, so without a lock opening one while
+   * the other is live would capture the mic twice and answer every turn twice.
+   */
+  private async claimEngine(): Promise<void> {
+    const key = ENGINE_LOCK_KEY;
+    const held = (await chrome.storage.session.get(key))[key] as
+      { id?: string; at?: number } | undefined;
+    if (held?.id && held.id !== this.engineId && Date.now() - (held.at ?? 0) < 15_000) {
+      throw new Error(
+        'The assistant is already running in another window. Close it before starting here.',
+      );
+    }
+    await chrome.storage.session.set({ [key]: { id: this.engineId, at: Date.now() } });
+    if (this.engineTimer) window.clearInterval(this.engineTimer);
+    this.engineTimer = window.setInterval(() => {
+      void chrome.storage.session.set({ [key]: { id: this.engineId, at: Date.now() } });
+    }, 5_000);
+  }
+
+  private async releaseEngine(): Promise<void> {
+    if (this.engineTimer) {
+      window.clearInterval(this.engineTimer);
+      this.engineTimer = 0;
+    }
+    const key = ENGINE_LOCK_KEY;
+    try {
+      const held = (await chrome.storage.session.get(key))[key] as { id?: string } | undefined;
+      if (held?.id === this.engineId) await chrome.storage.session.remove(key);
+    } catch {
+      /* Storage can be unavailable during teardown; the heartbeat expires. */
+    }
+  }
+
   private async startAudio(): Promise<void> {
+    await this.claimEngine();
     const settings = this.snapshot.settings;
     try {
       const player = new PcmPlayer();
@@ -510,6 +558,7 @@ export class AgentController {
   }
 
   private async teardownAudio(): Promise<void> {
+    await this.releaseEngine();
     const capture = this.capture;
     this.capture = null;
     capture?.stop();

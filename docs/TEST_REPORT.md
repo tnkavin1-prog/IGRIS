@@ -1,7 +1,7 @@
 # Test Report
 
-**Date:** 2026-11-04
-**Build under test:** Gemini Browser Live v1.0.0
+**Date:** 2026-11-05
+**Build under test:** Gemini Browser Live v1.0.0 (overlay surface)
 **Platform:** Windows 11, Node.js v24.18.0, npm 11.16.0, Chromium 156 (Playwright bundle)
 
 This report contains only results that were actually produced by running the commands below. Where something was not tested, it says so.
@@ -10,16 +10,19 @@ This report contains only results that were actually produced by running the com
 
 ## 1. Results summary
 
-| Check            | Command                      | Result                                  | Evidence                       |
-| ---------------- | ---------------------------- | --------------------------------------- | ------------------------------ |
-| TypeScript       | `node scripts/typecheck.mjs` | ✅ Pass — 3 projects                    | Console output                 |
-| Lint             | `npx eslint .`               | ✅ Pass — 0 errors, 0 warnings          | Console output                 |
-| Formatting       | `npx prettier --check .`     | ✅ Pass                                 | Console output                 |
-| Unit tests       | `npx vitest run`             | ✅ 18 files, 211 tests                  | Console output                 |
-| E2E tests        | `npx playwright test`        | ✅ 18 tests, 25.1 s                     | `test-results/`                |
-| Production build | `npm run release`            | ✅ 12 files, 625.0 kB                   | `release/chrome-extension/`    |
-| ZIP integrity    | Expand + SHA-256 compare     | ✅ 12/12 files match, 0 mismatches      | `release/SHA256SUMS.txt`       |
-| Live API smoke   | `npm run smoke:live`         | ✅ Setup 2,024 ms, first audio 2,743 ms | `docs/evidence/smoke-live.log` |
+| Check              | Command                              | Result                                   | Evidence                       |
+| ------------------ | ------------------------------------ | ---------------------------------------- | ------------------------------ |
+| TypeScript         | `node scripts/typecheck.mjs`         | ✅ Pass — 3 projects                     | Console output                 |
+| Lint               | `npx eslint .`                       | ✅ Pass — 0 errors, 0 warnings           | Console output                 |
+| Formatting         | `npx prettier --check .`             | ✅ Pass                                  | Console output                 |
+| Unit tests         | `npx vitest run`                     | ✅ 19 files, 217 tests                   | Console output                 |
+| E2E tests          | `npx playwright test`                | ✅ 23 tests, 32.8 s                      | `test-results/`                |
+| Soak (200 rounds)  | `SOAK_ROUNDS=200 npm run test:soak`  | ✅ 200 rounds, heap +1.3 MiB             | Console output                 |
+| Soak (1000 rounds) | `SOAK_ROUNDS=1000 npm run test:soak` | ⚠ 725 rounds, stopped manually, no crash | `docs/evidence/soak-1000.log`  |
+| CI pre-flight      | `npm run check:ci`                   | ✅ Pass                                  | Console output                 |
+| Production build   | `npm run release`                    | ✅ 17 files, 639.2 kB                    | `release/chrome-extension/`    |
+| ZIP integrity      | Expand + SHA-256 compare             | ✅ 17/17 files match, 0 mismatches       | `release/SHA256SUMS.txt`       |
+| Live API smoke     | `npm run smoke:live`                 | ✅ Setup 1,556 ms, first audio 2,026 ms  | `docs/evidence/smoke-live.log` |
 
 No test was skipped or marked as passing without execution.
 
@@ -124,7 +127,7 @@ Markdown, TypeScript, TSX, MJS, JSON, CSS, and HTML are covered. Generated artif
 
 **Command:** `npx playwright test`
 **Environment:** headed Chromium, real unpacked extension, local fixture servers, mocked Live WebSocket
-**Result:** 18 passed in 25.1 s
+**Result:** 23 passed in 32.8 s
 
 ### 4.1 Extension and content script (`tests/e2e/extension.spec.mjs`)
 
@@ -154,14 +157,26 @@ This suite uses a loopback fake bridge for token minting and Playwright's WebSoc
 
 axe-core 4.11 is injected into the real side-panel page and run against the WCAG 2.0/2.1 A and AA rule sets. Keyboard checks cover what axe cannot assert.
 
-| #   | Test                                                  | What it proves                                                                                   |
-| --- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| 13  | `onboarding has no WCAG A/AA violations`              | The four-step first-run dialog has no detectable violations                                      |
-| 14  | `the live panel has no WCAG A/AA violations`          | Header, session card, transcript, and composer are clean                                         |
-| 15  | `every settings tab has no WCAG A/AA violations`      | Connection, Voice, Agent, Access, and Privacy panels are each audited                            |
-| 16  | `the settings dialog traps focus and restores it`     | Focus enters the dialog, 10×Tab and 10×Shift+Tab stay inside, Escape returns focus to the opener |
-| 17  | `the onboarding dialog traps focus`                   | The same trap holds for onboarding, including its tablist                                        |
-| 18  | `a settings dialog opened from onboarding owns focus` | Layer priority stops the onboarding trap from stealing focus from the settings dialog            |
+| #   | Test                                                     | What it proves                                                                                                                                                     |
+| --- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 13  | `onboarding has no WCAG A/AA violations`                 | The four-step first-run dialog has no detectable violations                                                                                                        |
+| 14  | `the live panel has no WCAG A/AA violations`             | Header, session card, transcript, and composer are clean                                                                                                           |
+| 15  | `every surface exposes a fully named accessibility tree` | CDP `Accessibility.getFullAXTree` on the panel and settings; every interactive role has a name; dialogs are labelled; tree written to `docs/evidence/ax-tree.json` |
+| 16  | `every settings tab has no WCAG A/AA violations`         | Connection, Voice, Agent, Access, and Privacy panels are each audited                                                                                              |
+| 17  | `the settings dialog traps focus and restores it`        | Focus enters the dialog, 10×Tab and 10×Shift+Tab stay inside, Escape returns focus to the opener                                                                   |
+| 18  | `the onboarding dialog traps focus`                      | The same trap holds for onboarding, including its tablist                                                                                                          |
+| 19  | `a settings dialog opened from onboarding owns focus`    | Layer priority stops the onboarding trap from stealing focus from the settings dialog                                                                              |
+
+### 4.4 Floating overlay (`tests/e2e/overlay.spec.mjs`)
+
+The overlay host script is injected into a real page exactly as the toolbar action injects it, then the real `chrome-extension://` iframe is driven through its shadow root.
+
+| #   | Test                                                                 | What it proves                                                                                                              |
+| --- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| 20  | `injects a floating frame above the page without a side panel`       | One host, fixed positioning, 404×648, 20 px from right/bottom, max z-index, real app inside the frame, page still clickable |
+| 21  | `collapses to an orb and expands back`                               | Collapse sets the host state and animates the frame to 64×64; clicking the orb restores the full surface                    |
+| 22  | `closes and leaves the page untouched`                               | Close removes the host entirely and the underlying page is unchanged                                                        |
+| 23  | `a second request re-focuses the existing frame instead of stacking` | Repeated injection is idempotent; only one overlay ever exists                                                              |
 
 The audit runs against the built extension in headed Chromium, not a component harness. It is a snapshot of the reachable states listed above; it is not a manual screen-reader session.
 
@@ -170,6 +185,7 @@ The audit runs against the built extension in headed Chromium, not a component h
 - It does not connect to the real Gemini service; that path is covered by `npm run smoke:live` and the protocol probes.
 - It uses Chromium's fake audio device; it exercises capture and playback through the real worklets, but does not measure a physical microphone or speaker.
 - It does not test downloads, bookmarks, or history against real Chrome data.
+- It does not verify overlay rendering on pages with hostile CSP or `sandbox` directives; the iframe is an extension origin, but that is not exercised.
 
 Those paths are covered by unit tests (logic), the Live smoke test (protocol), and manual verification (hardware).
 
@@ -196,53 +212,58 @@ Copies used in documentation: `docs/assets/`.
 ▸ Bundling the local bridge
 
 ▸ Build artifacts
-  manifest.json                      2.2 kB
-  sidepanel.html                     0.4 kB
-  background.js                      1.6 kB
-  content-script.js                  89.6 kB
+  manifest.json                      2.4 kB
+  sidepanel.html                     0.5 kB
+  background.js                      2.7 kB
+  content-script.js                 89.6 kB
   audio/worklet-capture.js           0.5 kB
   audio/worklet-playback.js          3.0 kB
   icons/icon128.png                 11.7 kB
-  bridge/dist/server.mjs           783.1 kB
+  bridge/dist/server.mjs           783.7 kB
 
 ▸ Release package
   extension   Gemini Browser Live v1.0.0
-  files       12
-  unpacked    626.1 kB
-  archive     627.4 kB
+  files       17
+  unpacked    639.2 kB
+  archive     641.2 kB
   zip         release/Gemini-Browser-Live-Chrome.zip
-  sha256      fb7171c8c4391c691fd96a98460a38212324fd25b8f6bff03fa1f29d3cd2cd13
+  sha256      948410df65a8e6c77bab267bcde70528507742da9c635a1f3ecb9571779f1474
 ```
 
 ### Artifact inventory
 
-| File                            | Bytes   |
-| ------------------------------- | ------- |
-| `manifest.json`                 | 2,267   |
-| `sidepanel.html`                | 460     |
-| `background.js`                 | 1,618   |
-| `content-script.js`             | 91,757  |
-| `audio/worklet-capture.js`      | 513     |
-| `audio/worklet-playback.js`     | 3,108   |
-| `assets/sidepanel-BxH92Vnn.css` | 41,429  |
-| `assets/sidepanel-DjC4ZAVX.js`  | 481,538 |
-| `icons/icon16.png`              | 844     |
-| `icons/icon32.png`              | 2,100   |
-| `icons/icon48.png`              | 3,489   |
-| `icons/icon128.png`             | 11,960  |
+| File                           | Bytes   |
+| ------------------------------ | ------- |
+| `manifest.json`                | 2,412   |
+| `sidepanel.html`               | 535     |
+| `overlay.html`                 | 631     |
+| `background.js`                | 2,786   |
+| `content-script.js`            | 91,757  |
+| `overlay-host.js`              | 4,987   |
+| `audio/worklet-capture.js`     | 513     |
+| `audio/worklet-playback.js`    | 3,108   |
+| `assets/overlay-Bi_PrMQl.js`   | 984     |
+| `assets/overlay-DP54Kshc.css`  | 1,650   |
+| `assets/sidepanel-CBDdjd2p.js` | 1,090   |
+| `assets/styles-BxH92Vnn.css`   | 41,429  |
+| `assets/styles-Du6xmrjE.js`    | 484,307 |
+| `icons/icon16.png`             | 844     |
+| `icons/icon32.png`             | 2,100   |
+| `icons/icon48.png`             | 3,489   |
+| `icons/icon128.png`            | 11,960  |
 
 ### ZIP verification
 
 The archive was extracted to a temporary directory and every file was compared by SHA-256 against `release/chrome-extension/`:
 
 ```
-files=12 mismatches=0
+files=17 mismatches=0
 ```
 
 `release/SHA256SUMS.txt`:
 
 ```
-289079d6fbe78f3206fa6cd59e0bc5fd9e6f81da897254f91b2d92f91ff4bff0  Gemini-Browser-Live-Chrome.zip
+948410df65a8e6c77bab267bcde70528507742da9c635a1f3ecb9571779f1474  Gemini-Browser-Live-Chrome.zip
 ```
 
 `manifest.json` sits at the archive root, so the ZIP can be distributed directly.
@@ -257,12 +278,12 @@ files=12 mismatches=0
 ```
 ▸ Starting the built local bridge for the smoke test
 ▸ Bridge healthy on 127.0.0.1:47821
-▸ Ephemeral token minted (expires 2026-11-03T18:34:29.470Z)
-▸ Setup complete in 2024 ms
-▸ First audio in 2743 ms (84003 bytes)
+▸ Ephemeral token minted (expires 2026-11-04T12:55:26.736Z)
+▸ Setup complete in 1556 ms
+▸ First audio in 2026 ms (69123 bytes)
 ▸ Transcript: Smoke test passed.
 
-✔ PASS — Live API round-trip completed in 3001 ms
+✔ PASS — Live API round-trip completed in 2231 ms
 ```
 
 ### What this proves
@@ -293,23 +314,24 @@ outTranscript="Returned gamma."
 
 ## 7. Coverage by subsystem
 
-| Subsystem                                 | Unit                                                      | E2E                    | Live API          | Manual                          |
-| ----------------------------------------- | --------------------------------------------------------- | ---------------------- | ----------------- | ------------------------------- |
-| Shared safety / schema / catalog          | ✅ 48 tests                                               | —                      | —                 | —                               |
-| Bridge config / auth / rate limit / token | ✅ 50 tests                                               | —                      | ✅ mint           | —                               |
-| Bridge HTTP surface                       | ✅ 13 tests                                               | —                      | ✅ health         | —                               |
-| Live setup builder                        | ✅ 13 tests                                               | —                      | ✅ accepted       | —                               |
-| System instruction                        | ✅ 6 tests                                                | —                      | —                 | —                               |
-| Orchestrator / approvals                  | ✅ 13 tests                                               | ✅ Approve/deny E2E    | —                 | ✅ UI reviewed                  |
-| Approval tab/document binding             | ✅ 7 tests                                                | ✅ E2E switch-tab case | —                 | —                               |
-| Prompt-injection boundary                 | ✅ 17-case corpus                                         | —                      | —                 | —                               |
-| Audio math / resampling                   | ✅ 16 tests                                               | ✅ Playback E2E        | —                 | ⚠️ Hardware not automated       |
-| Storage / settings                        | ✅ 12 tests                                               | ✅ UI                  | —                 | —                               |
-| UI rendering                              | —                                                         | ✅ 3 + 6 a11y tests    | —                 | ✅ Screenshots                  |
-| Content script                            | —                                                         | ✅ 2 tests             | —                 | ✅ Used during development      |
-| 52 tools                                  | ✅ Catalog + schema                                       | ⚠️ Snapshot/click only | ⚠️ Echo tool only | ✅ Spot-checked                 |
-| Downloads / bookmarks / history           | ✅ 10 download-policy tests; ⚠️ optional-permission paths | —                      | —                 | ❌ Not exercised with real data |
-| Visual click / screenshots                | —                                                         | —                      | —                 | ❌ Not exercised                |
+| Subsystem                                 | Unit                                                      | E2E                             | Live API          | Manual                          |
+| ----------------------------------------- | --------------------------------------------------------- | ------------------------------- | ----------------- | ------------------------------- |
+| Shared safety / schema / catalog          | ✅ 48 tests                                               | —                               | —                 | —                               |
+| Bridge config / auth / rate limit / token | ✅ 50 tests                                               | —                               | ✅ mint           | —                               |
+| Bridge HTTP surface                       | ✅ 13 tests                                               | —                               | ✅ health         | —                               |
+| Live setup builder                        | ✅ 13 tests                                               | —                               | ✅ accepted       | —                               |
+| System instruction                        | ✅ 6 tests                                                | —                               | —                 | —                               |
+| Orchestrator / approvals                  | ✅ 13 tests                                               | ✅ Approve/deny E2E             | —                 | ✅ UI reviewed                  |
+| Approval tab/document binding             | ✅ 7 tests                                                | ✅ E2E switch-tab case          | —                 | —                               |
+| Prompt-injection boundary                 | ✅ 17-case corpus                                         | —                               | —                 | —                               |
+| Audio math / resampling                   | ✅ 16 tests                                               | ✅ Playback E2E                 | —                 | ⚠️ Hardware not automated       |
+| Storage / settings                        | ✅ 12 tests                                               | ✅ UI                           | —                 | —                               |
+| UI rendering                              | —                                                         | ✅ 3 + 7 a11y + 4 overlay tests | —                 | ✅ Screenshots                  |
+| Content script                            | —                                                         | ✅ 2 tests                      | —                 | ✅ Used during development      |
+| Overlay host / bridge protocol            | ✅ 6 tests                                                | ✅ 4 tests                      | —                 | ✅ Manual use                   |
+| 52 tools                                  | ✅ Catalog + schema                                       | ⚠️ Snapshot/click only          | ⚠️ Echo tool only | ✅ Spot-checked                 |
+| Downloads / bookmarks / history           | ✅ 10 download-policy tests; ⚠️ optional-permission paths | —                               | —                 | ❌ Not exercised with real data |
+| Visual click / screenshots                | —                                                         | —                               | —                 | ❌ Not exercised                |
 
 Legend: ✅ covered, ⚠️ partial, ❌ not covered, — not applicable.
 
@@ -322,12 +344,13 @@ Legend: ✅ covered, ⚠️ partial, ❌ not covered, — not applicable.
 3. **Optional-permission tools are not exercised against real Chrome data.** `downloads`, `bookmarks`, and `history` paths are guarded by runtime permission checks and policy tests, but no test creates a real download or reads a real bookmark. **Attempted in Cycle 4 and blocked:** `chrome.permissions.request` shows a native Chrome dialog that Playwright cannot dismiss, so granting the permission never completes in automation. The grant/revoke flow and the permission-gated executor paths remain unit-tested.
 4. **Visual tools are not automated.** `capture_viewport`, `describe_visible_page`, and `click_visual_target` require a real rendered page and model vision. They are implemented and reviewed, not E2E-tested. `capture_viewport` additionally needs the `activeTab` permission, which Chrome grants only after a user gesture on the target tab, so it cannot be driven from Playwright.
 5. **No cross-browser testing.** Chrome/Chromium only. The Side Panel API is not available in Firefox.
-6. **Long-session soak test (partial).** `tests/soak/soak.spec.mjs` runs a fake Live session through 5 rounds of audio bursts, interruptions, and `get_page_snapshot` tool calls, asserting every tool response arrives and no console errors. It is excluded from the default `test:e2e` run (separate `npm run test:soak` config) so the main suite stays fast. It is a stability smoke test, not a multi-hour soak: behaviour beyond the smoke duration is unmeasured.
-7. **Automated accessibility is a snapshot, not a screen-reader session.** axe-core reports zero WCAG A/AA violations on the tested states and the dialogs trap focus, but no manual NVDA/VoiceOver pass was performed.
-8. **No macOS/Linux execution.** Setup was tested on Windows 11. The manual `.env` path is documented but not executed on those platforms.
-9. **CI is unverified.** The workflow is committed but has never run on GitHub because no remote exists.
-10. **Dev-dependency audit warnings.** `npm audit --omit=dev` reports 0 production vulnerabilities; the full tree reports moderate dev-only issues in the ESLint toolchain.
-11. **Single-run latency numbers.** The smoke timings are observations, not a benchmark.
+6. **Long-session soak test (partial).** `tests/soak/soak.spec.mjs` runs a fake Live session through repeated rounds of audio bursts, interruptions, and `get_page_snapshot` tool calls, asserting every tool response arrives and no console errors occur. `SOAK_ROUNDS=N` scales it; the Playwright timeout scales with it. A 200-round run passed with heap growth of +1.3 MiB. A 1,000-round run was stopped manually at round 725 (no crash) after the user reported audible test audio; `--mute-audio` is now set. The earlier crash at round ~50 was root-caused to Playwright's `trace: 'retain-on-failure'` recording a continuous screencast (~17 MB per 36 s); tracing is now off by default in the soak config.
+7. **Automated accessibility is a snapshot, not a screen-reader session.** axe-core reports zero WCAG A/AA violations on the tested states, the dialogs trap focus, and `docs/evidence/ax-tree.json` is the exported CDP accessibility tree. A human NVDA pass against `docs/SCREEN_READER_CHECKLIST.md` has not been performed.
+8. **Windows-only.** macOS and Linux are explicitly out of scope. Setup, ACL hardening, and process handling were executed on Windows 11 only.
+9. **CI is unverified.** The workflow is committed but has never run on GitHub because no remote exists. `npm run check:ci` validates its script references locally.
+10. **Overlay on restricted pages.** Chrome forbids content-script injection on `chrome://`, the Web Store, `devtools:`, and `view-source:`; the side panel is used there instead. Hostile page CSP and `sandbox` directives are not covered by an automated test.
+11. **Dev-dependency audit warnings.** `npm audit --omit=dev` reports 0 production vulnerabilities; the full tree reports moderate dev-only issues in the ESLint toolchain.
+12. **Single-run latency numbers.** The smoke timings are observations, not a benchmark.
 
 ---
 
@@ -352,9 +375,10 @@ npm run smoke:live
 | `npm run typecheck`      | Exit 0, three ✔ lines                        |
 | `npm run lint`           | Exit 0, no output                            |
 | `npx prettier --check .` | “All matched files use Prettier code style!” |
-| `npx vitest run`         | 16 files, 192 tests passed                   |
-| `npx playwright test`    | 18 passed                                    |
-| `npm run release`        | 12 files, ZIP + SHA-256                      |
+| `npx vitest run`         | 19 files, 217 tests passed                   |
+| `npx playwright test`    | 23 passed                                    |
+| `npm run test:soak`      | 5 rounds, heap growth reported, no crash     |
+| `npm run release`        | 17 files, ZIP + SHA-256                      |
 | `npm run smoke:live`     | `PASS — Live API round-trip completed`       |
 
 ### Requirements for the smoke test
@@ -385,6 +409,9 @@ These are recorded because they demonstrate the tests are doing real work.
 | Keyword tokenisation broke on Unicode                     | Risk detection missed non-ASCII labels                     | Unicode-aware tokenisation; test added                                   |
 | BOM-prefixed `.env` hid the first key                     | Bridge failed to start on Windows PowerShell-created files | BOM stripped; regression test added                                      |
 | IPv6 loopback in CSP                                      | Chrome refused to load the extension                       | Removed `[::1]` entries; loopback validation restricted                  |
+| Setup script used a .NET API missing in PowerShell 5.1    | `scripts/setup-windows.ps1` threw before writing `.env`    | Switched to `RandomNumberGenerator.Create().GetBytes()`                  |
+| Soak crashed the renderer after ~50 rounds                | A long live session could take the page down               | Playwright screencast tracing disabled in the soak config by default     |
+| Overlay and side panel could both capture the microphone  | Double capture, duplicated turns                           | `chrome.storage.session` engine lock with heartbeat and expiry           |
 
 ---
 

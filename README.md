@@ -1,10 +1,12 @@
 # Gemini Browser Live
 
-**Talk to your browser.** A real-time Gemini Live voice agent that lives in Chrome's side panel, sees the page you are on, and operates it through 52 typed tools — with a code-enforced approval gate for anything consequential.
+**Talk to your browser.** A real-time Gemini Live voice agent that floats over the page as an orb, sees what you see, and operates Chrome through 52 typed tools — with a code-enforced approval gate for anything consequential.
 
-![Gemini Browser Live side panel](docs/assets/panel.png)
+![Gemini Browser Live panel](docs/assets/panel.png)
 
 > Screenshot captured from the automated Chrome E2E run. The bridge is intentionally offline in that run, so the header shows **Bridge offline**.
+
+The default surface is a **floating overlay**: press `Alt+Shift+S` and a pill-shaped assistant is injected into the current tab, over the page, with no side panel and no separate app window. Collapse it to a 64×64 orb when it is in the way. On pages where Chrome forbids injection (`chrome://`, the Web Store, `devtools:`), the same UI opens in the side panel instead.
 
 ---
 
@@ -24,18 +26,18 @@ The permanent Gemini API key never enters the extension. Chrome only ever holds 
 
 ## Capabilities
 
-| Area                        | What is implemented                                                                                                                                                |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Voice                       | 16 kHz PCM capture, 24 kHz PCM playback, AudioWorklet ring buffer, instant barge-in, mute, output volume, local VAD silence trimming                               |
-| Session                     | Ephemeral token minting, proactive rotation ~60 s before expiry, reconnect with `sessionResumption` handle, exponential backoff, clean cancellation                |
-| Browser control             | 52 tools across tabs, navigation, semantic DOM reading, interaction, forms, screenshots, vision-assisted clicking, page comparison, bookmarks, history, downloads  |
-| Grounding                   | Accessibility/role-aware element registry with stable handles, fingerprints, bounding boxes, visible-text snapshots, page-state hashing                            |
-| Safety                      | Hard blocks on dangerous URL schemes and `chrome://` surfaces, risk classification, approval sheet, 120 s approval timeout, per-tool timeouts                      |
-| Verification                | Post-action observation, navigation settling, download completion checks, "changed" evidence returned to the model                                                 |
-| Prompt-injection resistance | Page text is framed as untrusted data, system instruction forbids following page instructions, approval consent cannot be granted by page content                  |
-| UI                          | Premium dark side panel: onboarding, live session card, transcript with actions, composer, settings (connection, voice, agent, access, privacy), toasts, approvals |
-| Access                      | Optional `downloads` / `bookmarks` / `history` permissions requested at the point of use, with runtime checks                                                      |
-| Privacy                     | Transcript retention is opt-in (session-only by default), URL query secrets stripped before reaching the model, no telemetry                                       |
+| Area                        | What is implemented                                                                                                                                                                                       |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Voice                       | 16 kHz PCM capture, 24 kHz PCM playback, AudioWorklet ring buffer, instant barge-in, mute, output volume, local VAD silence trimming                                                                      |
+| Session                     | Ephemeral token minting, proactive rotation ~60 s before expiry, reconnect with `sessionResumption` handle, exponential backoff, clean cancellation                                                       |
+| Browser control             | 52 tools across tabs, navigation, semantic DOM reading, interaction, forms, screenshots, vision-assisted clicking, page comparison, bookmarks, history, downloads                                         |
+| Grounding                   | Accessibility/role-aware element registry with stable handles, fingerprints, bounding boxes, visible-text snapshots, page-state hashing                                                                   |
+| Safety                      | Hard blocks on dangerous URL schemes and `chrome://` surfaces, risk classification, approval sheet, 120 s approval timeout, per-tool timeouts                                                             |
+| Verification                | Post-action observation, navigation settling, download completion checks, "changed" evidence returned to the model                                                                                        |
+| Prompt-injection resistance | Page text is framed as untrusted data, system instruction forbids following page instructions, approval consent cannot be granted by page content                                                         |
+| UI                          | Floating orb overlay injected into the page (collapse to orb, drag, close), with the side panel as fallback on restricted pages; onboarding, live card, transcript, composer, settings, toasts, approvals |
+| Access                      | Optional `downloads` / `bookmarks` / `history` permissions requested at the point of use, with runtime checks                                                                                             |
+| Privacy                     | Transcript retention is opt-in (session-only by default), URL query secrets stripped before reaching the model, no telemetry                                                                              |
 
 ---
 
@@ -44,7 +46,7 @@ The permanent Gemini API key never enters the extension. Chrome only ever holds 
 ```
 ┌────────────────────────────── Chrome ──────────────────────────────┐
 │                                                                    │
-│  Side panel (React)                                                │
+│  Overlay iframe (React) ── injected by a content script            │
 │   ├── controller.ts ── owns every side effect                      │
 │   ├── LiveSessionManager ── token → connect → setup → reconnect     │
 │   ├── AgentOrchestrator ── validate → approve → execute → verify    │
@@ -53,7 +55,9 @@ The permanent Gemini API key never enters the extension. Chrome only ever holds 
 │         ▼                                                          │
 │  Content script (on demand) ── DOM registry, snapshots, actions     │
 │                                                                    │
-│  Background service worker ── commands, panel opening, messaging    │
+│  Background service worker ── commands, overlay injection, panel    │
+│                                                                    │
+│  Side panel (React) ── same app, used where injection is blocked    │
 └───────────────┬────────────────────────────────────────────────────┘
                 │ HTTPS (ephemeral token + gate secret)
                 ▼
@@ -68,7 +72,7 @@ The permanent Gemini API key never enters the extension. Chrome only ever holds 
      Gemini Live API (gemini-3.8-live)
 ```
 
-Audio never passes through the bridge. The bridge only mints tokens and reports configuration; the side panel connects to Google directly.
+Audio never passes through the bridge. The bridge only mints tokens and reports configuration; the overlay connects to Google directly. Only one surface can hold the microphone at a time: a `chrome.storage.session` lock with a 5 s heartbeat and a 15 s expiry makes a second surface report "already running in another window" instead of capturing twice.
 
 More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -76,13 +80,13 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Requirements
 
-| Requirement       | Version                                                                |
-| ----------------- | ---------------------------------------------------------------------- |
-| Chrome / Chromium | 116 or newer (side panel API)                                          |
-| Node.js           | 20.19 or newer (24.x tested)                                           |
-| npm               | 10 or newer                                                            |
-| Gemini API key    | A key with Live API access                                             |
-| OS                | Windows 10/11 tested; macOS/Linux should work with manual `.env` setup |
+| Requirement       | Version                                   |
+| ----------------- | ----------------------------------------- |
+| Chrome / Chromium | 116 or newer (side panel API)             |
+| Node.js           | 20.19 or newer (24.x tested)              |
+| npm               | 10 or newer                               |
+| Gemini API key    | A key with Live API access                |
+| OS                | Windows 10/11 (the only supported target) |
 
 A microphone and headphones are recommended. Headphones prevent the model from hearing its own voice.
 
@@ -109,7 +113,7 @@ Then:
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
 3. Choose **Load unpacked** and select `release/chrome-extension`.
-4. Click the extension icon (or press `Alt+Shift+S`) to open the side panel.
+4. Click the extension icon (or press `Alt+Shift+S`) to drop the floating overlay onto the current tab.
 5. Click **Connect** on the pairing banner (or open **Settings → Connection**), paste the gate secret printed by the setup script, press **Test connection**, then **Save settings**.
 6. Press **Start live** and allow microphone access.
 
@@ -117,14 +121,7 @@ The setup script derives the extension ID from the manifest `key`, generates a 4
 
 ### macOS / Linux
 
-```bash
-npm install
-cp apps/local-bridge/.env.example apps/local-bridge/.env
-# edit .env: set GEMINI_API_KEY and a 32+ character LOCAL_GATE_SECRET
-# set ALLOWED_EXTENSION_IDS to the ID Chrome shows on chrome://extensions
-npm run build
-npm run bridge
-```
+Not supported. This project targets Windows 10/11 only: the setup script, ACL hardening, and process handling are Windows-specific, and no other platform has been tested. The Node bridge would likely run, but it is untested and unsupported.
 
 The manifest ships a stable `key`, so the extension ID is `hhbdkheccnmpbdadhhppbemcjkaimlob` when loaded unpacked from this manifest. If you change the manifest, update the allowlist.
 
@@ -145,12 +142,14 @@ Try:
 
 ### Keyboard shortcuts
 
-| Shortcut      | Action                       |
-| ------------- | ---------------------------- |
-| `Alt+Shift+S` | Start a live session         |
-| `Alt+Shift+X` | End the session              |
-| `Alt+Shift+M` | Mute / unmute the microphone |
-| `Alt+Shift+O` | Open settings                |
+| Shortcut      | Action                                    |
+| ------------- | ----------------------------------------- |
+| `Alt+Shift+S` | Show the overlay and start a live session |
+| `Alt+Shift+X` | End the session                           |
+| `Alt+Shift+M` | Mute / unmute the microphone              |
+| `Alt+Shift+O` | Open settings                             |
+
+When the overlay is collapsed, click the orb to expand it. An approval always expands a collapsed orb so a pending action cannot time out unseen.
 
 ### Approval gates
 
@@ -193,7 +192,9 @@ Read the full threat model: [docs/SECURITY.md](docs/SECURITY.md).
 ```
 apps/
   chrome-extension/     Manifest V3 extension
+    overlay.html        Floating overlay page (chrome-extension:// iframe)
     src/
+      overlay/          Overlay host content script, bridge, orb, window chrome
       sidepanel/        React UI, controller, settings, approvals
       live/             Live client, setup, session manager, bridge client
       agent/            Orchestrator: approval, verification, cancellation
@@ -203,10 +204,11 @@ apps/
   local-bridge/         Dependency-light Node token broker
 packages/
   shared/               Tool catalog, schemas, safety policy, protocol types
-scripts/                Build, release, setup, probes, smoke test, icons
+scripts/                Build, release, setup, probes, smoke test, icons, CI pre-flight
 tests/
-  unit/                 211 Vitest tests
-  e2e/                  18 Playwright tests against real Chrome
+  unit/                 217 Vitest tests
+  e2e/                  23 Playwright tests against real Chrome
+  soak/                 Long-run stability test with heap sampling
 .github/
   workflows/ci.yml      Checks, browser E2E, and release artifact jobs
 docs/                   Architecture, security, permissions, research, evidence
@@ -223,12 +225,13 @@ release/                Built extension + deterministic ZIP (gitignored)
 | `npm run build:extension` | Extension only                                                         |
 | `npm run bridge`          | Start the built bridge                                                 |
 | `npm run dev:bridge`      | Start the bridge with watch mode                                       |
-| `npm test`                | Run 211 unit tests                                                     |
-| `npm run test:e2e`        | Run 18 Playwright tests in Chrome                                      |
+| `npm test`                | Run 217 unit tests                                                     |
+| `npm run test:e2e`        | Run 23 Playwright tests in Chrome                                      |
 | `npm run test:all`        | Typecheck + lint + unit + E2E                                          |
 | `npm run typecheck`       | TypeScript across all workspaces                                       |
 | `npm run lint`            | ESLint 10 flat config                                                  |
 | `npm run format`          | Prettier write                                                         |
+| `npm run check:ci`        | Validate `.github/workflows/ci.yml` against the package scripts        |
 | `npm run release`         | Build, validate manifest references, write deterministic ZIP + SHA-256 |
 | `npm run docs:api`        | Generate TypeDoc API reference into `docs/api/`                        |
 | `npm run test:soak`       | 5-round stability smoke; `SOAK_ROUNDS=N` scales to a multi-hour soak   |
@@ -239,8 +242,9 @@ release/                Built extension + deterministic ZIP (gitignored)
 ## Evidence and status
 
 - [docs/TEST_REPORT.md](docs/TEST_REPORT.md) — commands, dates, results, and what is _not_ covered.
-- [.github/workflows/ci.yml](.github/workflows/ci.yml) — typecheck/lint/format/unit, headed-Chromium E2E under Xvfb, and release artifact jobs. Committed but not yet executed on GitHub (no remote configured).
+- [.github/workflows/ci.yml](.github/workflows/ci.yml) — typecheck/lint/format/unit, headed-Chromium E2E under Xvfb, and release artifact jobs. Committed but not yet executed on GitHub (no remote configured); `npm run check:ci` validates its script references locally.
 - [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) - requirement-by-requirement PASS / PARTIAL / NOT TESTED matrix.
+- [docs/SCREEN_READER_CHECKLIST.md](docs/SCREEN_READER_CHECKLIST.md) — 25-item NVDA pass, plus the exported accessibility tree in `docs/evidence/ax-tree.json`.
 - [CHANGELOG.md](CHANGELOG.md) - development cycle history.
 - [docs/TECHNICAL_RESEARCH.md](docs/TECHNICAL_RESEARCH.md) — Live API protocol findings, including the dead ends.
 - [docs/PERMISSIONS.md](docs/PERMISSIONS.md) — every Chrome permission and why it exists.
@@ -248,21 +252,23 @@ release/                Built extension + deterministic ZIP (gitignored)
 ### Known limitations
 
 - Automated E2E does not exercise a real microphone or a real Google session; that path is covered by unit tests, a protocol smoke test, and manual use.
+- The overlay cannot be injected into `chrome://`, the Chrome Web Store, `devtools:`, `view-source:`, or other protected pages. The side panel opens instead.
+- Only one surface can run the audio engine at a time; starting a second one shows "already running in another window".
 - `gemini-3.8-live-extended-thinking` cannot call tools in the current API version, so browser control is disabled in that mode.
-- Chrome refuses script injection on `chrome://`, the Web Store, and other protected pages; the agent reports this instead of pretending.
 - The bridge is a local development component, not a multi-user server. Do not expose it to a network.
 
 ---
 
 ## Documentation index
 
-| Document                                                       | Contents                                                         |
-| -------------------------------------------------------------- | ---------------------------------------------------------------- |
-| [docs/INSTALLATION.md](docs/INSTALLATION.md)                   | Setup, loading, pairing, troubleshooting                         |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)                   | Components, data flow, lifecycle, design decisions               |
-| [docs/SECURITY.md](docs/SECURITY.md)                           | Threat model, secret handling, approval model, injection defence |
-| [docs/PERMISSIONS.md](docs/PERMISSIONS.md)                     | Chrome permission rationale and user impact                      |
-| [docs/TOOL_REFERENCE.md](docs/TOOL_REFERENCE.md)               | All 52 tools, risk level, and evidence returned                  |
-| [docs/TECHNICAL_RESEARCH.md](docs/TECHNICAL_RESEARCH.md)       | Protocol probes, model capabilities, rejected approaches         |
-| [docs/TEST_REPORT.md](docs/TEST_REPORT.md)                     | Test evidence and coverage gaps                                  |
-| [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) | Acceptance criteria matrix                                       |
+| Document                                                           | Contents                                                         |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| [docs/INSTALLATION.md](docs/INSTALLATION.md)                       | Setup, loading, pairing, troubleshooting                         |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)                       | Components, data flow, lifecycle, design decisions               |
+| [docs/SECURITY.md](docs/SECURITY.md)                               | Threat model, secret handling, approval model, injection defence |
+| [docs/PERMISSIONS.md](docs/PERMISSIONS.md)                         | Chrome permission rationale and user impact                      |
+| [docs/TOOL_REFERENCE.md](docs/TOOL_REFERENCE.md)                   | All 52 tools, risk level, and evidence returned                  |
+| [docs/TECHNICAL_RESEARCH.md](docs/TECHNICAL_RESEARCH.md)           | Protocol probes, model capabilities, rejected approaches         |
+| [docs/TEST_REPORT.md](docs/TEST_REPORT.md)                         | Test evidence and coverage gaps                                  |
+| [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md)     | Acceptance criteria matrix                                       |
+| [docs/SCREEN_READER_CHECKLIST.md](docs/SCREEN_READER_CHECKLIST.md) | Manual NVDA verification checklist                               |
