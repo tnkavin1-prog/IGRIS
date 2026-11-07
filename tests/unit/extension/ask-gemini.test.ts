@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   CONTROL_SERVER_SUMMON_URL,
   ASK_GEMINI_MENU_ID,
@@ -737,6 +739,29 @@ describe('Ask Gemini Tool & Context Extraction', () => {
       expect(mockWin.webContents.send).toHaveBeenCalledWith('ask-gemini:prompt', {
         prompt: 'Evaluate the integral of e^(-x^2)',
       });
+    });
+  });
+
+  describe('Extension Manifest Commands Quota', () => {
+    it('declares at most 4 commands with suggested_key to satisfy Chrome manifest limits', () => {
+      const manifestPath = resolve(
+        __dirname,
+        '../../../apps/chrome-extension/manifest.json',
+      );
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+
+      expect(manifest.commands).toBeDefined();
+      expect(manifest.commands._execute_action).toBeDefined();
+      expect(manifest.commands._execute_action.suggested_key?.default).toBe('Alt+G');
+
+      const commandsWithSuggestedKey = Object.entries(
+        manifest.commands as Record<string, { suggested_key?: unknown }>,
+      ).filter(([_, cmd]) => Boolean(cmd?.suggested_key));
+
+      // Chrome limits suggested_key to at most 4 commands in manifest.json
+      expect(commandsWithSuggestedKey.length).toBeLessThanOrEqual(4);
+      expect(manifest.commands['open-settings']).toBeDefined();
+      expect(manifest.commands['open-settings'].suggested_key).toBeUndefined();
     });
   });
 });

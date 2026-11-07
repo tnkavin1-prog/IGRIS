@@ -62,7 +62,6 @@
       "description": "Mute or unmute the microphone"
     },
     "open-settings": {
-      "suggested_key": { "default": "Alt+Shift+O" },
       "description": "Open Gemini Browser Live settings"
     }
   }

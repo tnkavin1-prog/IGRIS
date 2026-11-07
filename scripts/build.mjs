@@ -136,7 +136,17 @@ async function buildScripts() {
 function copyManifest() {
   log('Copying the manifest');
   const manifest = readFileSync(join(extensionDir, 'manifest.json'), 'utf8');
-  JSON.parse(manifest); // Fail the build on malformed JSON.
+  const parsed = JSON.parse(manifest); // Fail the build on malformed JSON.
+  if (parsed.commands) {
+    const suggestedKeyCount = Object.values(parsed.commands).filter(
+      (cmd) => cmd && typeof cmd === 'object' && cmd.suggested_key,
+    ).length;
+    if (suggestedKeyCount > 4) {
+      throw new Error(
+        `Too many shortcuts specified for 'commands': ${suggestedKeyCount}. The maximum allowed by Chrome is 4.`,
+      );
+    }
+  }
   cpSync(join(extensionDir, 'manifest.json'), join(outDir, 'manifest.json'));
 }
 
