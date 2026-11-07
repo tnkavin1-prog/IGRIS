@@ -40,7 +40,16 @@ export function App() {
   );
 
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState<string>(() => {
+    if (typeof window !== 'undefined' && window.location?.search) {
+      try {
+        return new URLSearchParams(window.location.search).get('prompt') ?? '';
+      } catch {
+        return '';
+      }
+    }
+    return '';
+  });
   const [settingsHint, setSettingsHint] = useState(false);
   const pendingPrompt = useRef<string | null>(null);
   const { overlay: overlaySurface, view: overlayView, setView: setOverlayView } = useOverlayShell();
@@ -155,6 +164,11 @@ export function App() {
           break;
         case 'GBL_COMMAND_SETTINGS':
           openSettings();
+          break;
+        case 'GBL_SET_PROMPT':
+          if (typeof (message as { prompt?: string })?.prompt === 'string') {
+            setDraft((message as { prompt: string }).prompt);
+          }
           break;
         default:
           break;

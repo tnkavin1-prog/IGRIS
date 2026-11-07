@@ -157,32 +157,37 @@ export async function openDesktopPopup(prompt?: string): Promise<boolean> {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ prompt: prompt ?? '' }),
-        signal: AbortSignal.timeout(1200),
+        signal: AbortSignal.timeout(600),
       });
       if (res.ok) {
         return true;
       }
     } catch {
-      // Desktop HUD port 9228 not responding, try protocol launch
-      try {
-        const tab = await chrome.tabs.create({ url: 'gemetron://summon', active: false });
-        setTimeout(() => {
-          if (typeof tab.id === 'number') {
-            chrome.tabs.remove(tab.id).catch(() => undefined);
-          }
-        }, 1200);
-        return true;
-      } catch {
-        /* proceed to fallback */
-      }
+      // Desktop HUD port 9228 not responding, fall back directly to in-browser Companion HUD
     }
 
     // Ensure active normal tab is recorded so the HUD immediately binds to it
     const currentTab = await activeNormalTab();
     if (currentTab) void notifyActiveTab(currentTab);
 
-    // 1. If an existing HUD window is already open, restore and focus it immediately
+    // 2. If an existing HUD window is already open, restore and focus it immediately
     const existing = await getExistingHudWindow();
+    if (existing && typeof existing.id === 'number') {
+      try {
+        const updateInfo: chrome.windows.UpdateInfo = { focused: true, drawAttention: true };
+        if (existing.state === 'minimized') {
+          updateInfo.state = 'normal';
+        }
+        await chrome.windows.update(existing.id, updateInfo);
+        desktopWindowId = existing.id;
+        if (prompt) {
+          void chrome.runtime.sendMessage({ type: 'GBL_SET_PROMPT', prompt }).catch(() => undefined);
+        }
+        return true;
+      } catch {
+        desktopWindowId = null;
+      }
+    }
     if (existing && typeof existing.id === 'number') {
       try {
         const updateInfo: chrome.windows.UpdateInfo = { focused: true, drawAttention: true };
@@ -229,8 +234,12 @@ export async function openDesktopPopup(prompt?: string): Promise<boolean> {
       /* fallback */
     }
 
+    const targetUrl = prompt
+      ? `${chrome.runtime.getURL(OVERLAY_FILE)}?prompt=${encodeURIComponent(prompt)}`
+      : chrome.runtime.getURL(OVERLAY_FILE);
+
     const win = await chrome.windows.create({
-      url: chrome.runtime.getURL(OVERLAY_FILE),
+      url: targetUrl,
       type: 'popup',
       width,
       height,
@@ -244,6 +253,15 @@ export async function openDesktopPopup(prompt?: string): Promise<boolean> {
     return true;
   } catch (error) {
     console.error('Failed to create Desktop HUD popup window:', error);
+    try {
+      const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      if (active?.windowId) {
+        await chrome.sidePanel.open({ windowId: active.windowId });
+        return true;
+      }
+    } catch {
+      /* ignore */
+    }
     return false;
   }
 }
