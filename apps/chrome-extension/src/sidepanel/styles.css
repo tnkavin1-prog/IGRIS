@@ -23,17 +23,17 @@
   --text-muted: #8b88a8;
   --text-faint: #625f7e;
 
-  --violet: #a78bfa;
-  --violet-strong: #8b5cf6;
-  --violet-soft: rgba(139, 92, 246, 0.16);
-  --cyan: #67e8f9;
-  --cyan-soft: rgba(103, 232, 249, 0.13);
-  --green: #6ee7b7;
-  --green-soft: rgba(110, 231, 183, 0.12);
-  --amber: #fbbf24;
-  --amber-soft: rgba(251, 191, 36, 0.13);
-  --red: #fb7185;
-  --red-soft: rgba(251, 113, 133, 0.13);
+  --violet: #ffffff;
+  --violet-strong: #ffffff;
+  --violet-soft: rgba(255, 255, 255, 0.12);
+  --cyan: #ffffff;
+  --cyan-soft: rgba(255, 255, 255, 0.12);
+  --green: #ffffff;
+  --green-soft: rgba(255, 255, 255, 0.12);
+  --amber: #ffffff;
+  --amber-soft: rgba(255, 255, 255, 0.12);
+  --red: #ffffff;
+  --red-soft: rgba(255, 255, 255, 0.15);
 
   --radius-sm: 10px;
   --radius: 14px;

@@ -5,8 +5,7 @@
  * speaking, the side panel posts `flush` and every buffered sample disappears
  * on the next audio quantum instead of finishing the sentence.
  */
-const MAX_SECONDS = 2;
-const TARGET_BUFFER_SECONDS = 0.45;
+const MAX_SECONDS = 60;
 
 class GblPlaybackProcessor extends AudioWorkletProcessor {
   private buffer = new Float32Array(Math.ceil(sampleRate * MAX_SECONDS));
@@ -32,13 +31,6 @@ class GblPlaybackProcessor extends AudioWorkletProcessor {
 
   private push(samples: Float32Array): void {
     if (samples.length === 0) return;
-    const target = Math.ceil(sampleRate * TARGET_BUFFER_SECONDS);
-    // Keep latency bounded: if the model bursts faster than real time, drop the
-    // oldest audio rather than drifting further behind.
-    if (this.count + samples.length > target) {
-      const drop = Math.min(this.count, this.count + samples.length - target);
-      this.advanceRead(drop);
-    }
 
     for (let i = 0; i < samples.length; i += 1) {
       if (this.count >= this.buffer.length) {

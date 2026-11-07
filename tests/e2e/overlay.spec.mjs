@@ -57,6 +57,7 @@ test.beforeAll(async () => {
       `--load-extension=${extensionDir}`,
       '--no-first-run',
       '--no-default-browser-check',
+      '--mute-audio',
     ],
   });
 
@@ -87,27 +88,23 @@ async function injectOverlay() {
   }, tabId);
 }
 
+async function removeOverlay() {
+  await page.evaluate(() => document.getElementById('gbl-overlay-host')?.remove());
+}
+
 test.beforeEach(async () => {
-  // Idempotent: re-running the host focuses the existing frame and expands it,
-  // so every test starts from the same expanded state.
+  // Start every test from a fresh host so the default pill state is exercised
+  // rather than whatever view the previous test left behind.
+  await removeOverlay();
   await injectOverlay();
 });
 
-test('injects a floating frame above the page without a side panel', async () => {
-  await injectOverlay();
-
-  const host = page.locator('#gbl-overlay-host');
-  await expect(host).toHaveCount(1);
-
-  const frame = page.frameLocator('#gbl-overlay-host iframe');
-  await expect(frame.locator('.app-shell')).toBeVisible();
-  await expect(frame.getByRole('button', { name: 'Open settings' })).toBeVisible();
-
-  // The frame is pinned, not part of the page flow.
-  const box = await host.evaluate((element) => {
+const hostBox = (locator) =>
+  locator.evaluate((element) => {
     const wrap = element.shadowRoot.querySelector('.wrap');
     const rect = wrap.getBoundingClientRect();
     return {
+      view: wrap.dataset.view,
       position: getComputedStyle(wrap).position,
       right: Math.round(window.innerWidth - rect.right),
       bottom: Math.round(window.innerHeight - rect.bottom),
@@ -116,50 +113,70 @@ test('injects a floating frame above the page without a side panel', async () =>
       zIndex: getComputedStyle(element).zIndex,
     };
   });
-  expect(box.position).toBe('fixed');
-  expect(box.right).toBe(20);
-  expect(box.bottom).toBe(20);
-  expect(box.width).toBe(404);
-  expect(box.height).toBe(648);
-  expect(box.zIndex).toBe('2147483647');
+
+test('injects a compact pill by default and expands to the full panel', async () => {
+  const host = page.locator('#gbl-overlay-host');
+  await expect(host).toHaveCount(1);
+
+  const frame = page.frameLocator('#gbl-overlay-host iframe');
+  await expect(frame.locator('.overlay-pill[data-ready="true"]')).toBeVisible();
+  await expect(frame.getByRole('button', { name: 'Open the Gemini assistant' })).toBeVisible();
+
+  const pill = await hostBox(host);
+  expect(pill.view).toBe('pill');
+  expect(pill.position).toBe('fixed');
+  expect(pill.right).toBe(20);
+  expect(pill.bottom).toBe(20);
+  expect(pill.width).toBe(360);
+  expect(pill.height).toBe(64);
+  expect(pill.zIndex).toBe('2147483647');
+
+  await frame.getByRole('button', { name: 'Open the Gemini assistant' }).click();
+  console.log(
+    'click probe',
+    await frame.locator('body').evaluate(() => ({
+      clicks: window.__gblClicks ?? 0,
+      view: document.querySelector('.overlay-pill') ? 'pill' : 'panel',
+    })),
+  );
+  await expect(frame.getByRole('button', { name: 'Open settings' })).toBeVisible();
+  await expect
+    .poll(async () => {
+      const box = await hostBox(host);
+      return `${box.view} ${box.width}x${box.height}`;
+    })
+    .toBe('panel 404x648');
 
   // The page underneath still works.
   await page.locator('#page-button').click();
 });
 
-test('collapses to an orb and expands back', async () => {
+test('minimizes to an orb and expands back', async () => {
   const host = page.locator('#gbl-overlay-host');
   const frame = page.frameLocator('#gbl-overlay-host iframe');
 
-  await frame.getByRole('button', { name: 'Collapse the assistant' }).click();
+  await frame.getByRole('button', { name: 'Open the Gemini assistant' }).click();
+  await expect.poll(async () => (await hostBox(host)).view).toBe('panel');
+  await expect(frame.getByRole('button', { name: 'Minimize to an orb' })).toBeVisible();
 
+  await frame.getByRole('button', { name: 'Minimize to an orb' }).click();
+
+  await expect.poll(async () => (await hostBox(host)).view).toBe('orb');
   await expect
-    .poll(async () =>
-      host.evaluate((element) => element.shadowRoot.querySelector('.wrap').dataset.collapsed),
-    )
-    .toBe('true');
-
-  const collapsed = await expect
-    .poll(async () =>
-      host.evaluate((element) => {
-        const rect = element.shadowRoot.querySelector('.wrap').getBoundingClientRect();
-        return `${Math.round(rect.width)}x${Math.round(rect.height)}`;
-      }),
-    )
+    .poll(async () => {
+      const box = await hostBox(host);
+      return `${box.width}x${box.height}`;
+    })
     .toBe('64x64');
-  void collapsed;
 
   await frame.getByRole('button', { name: 'Open the Gemini assistant' }).click();
 
-  await expect
-    .poll(async () =>
-      host.evaluate((element) => element.shadowRoot.querySelector('.wrap').dataset.collapsed),
-    )
-    .toBe('false');
+  await expect.poll(async () => (await hostBox(host)).view).toBe('panel');
 });
 
 test('closes and leaves the page untouched', async () => {
   const frame = page.frameLocator('#gbl-overlay-host iframe');
+  await expect(frame.locator('.overlay-pill[data-ready="true"]')).toBeVisible();
   await frame.getByRole('button', { name: 'Close the assistant' }).click();
 
   await expect(page.locator('#gbl-overlay-host')).toHaveCount(0);
@@ -170,4 +187,9 @@ test('a second request re-focuses the existing frame instead of stacking', async
   await injectOverlay();
   await injectOverlay();
   await expect(page.locator('#gbl-overlay-host')).toHaveCount(1);
+
+  // Re-injection means "show me the assistant", so it opens the panel.
+  await expect
+    .poll(async () => (await hostBox(page.locator('#gbl-overlay-host'))).view)
+    .toBe('panel');
 });

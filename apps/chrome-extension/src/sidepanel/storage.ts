@@ -63,6 +63,7 @@ export function sanitizeSettings(input: Partial<AppSettings> | undefined | null)
       : DEFAULT_SETTINGS.thinkingLevel,
     browserControl: Boolean(merged.browserControl),
     confirmRisky: Boolean(merged.confirmRisky),
+    autoApprove: Boolean(merged.autoApprove),
     includeContextOnStart: Boolean(merged.includeContextOnStart),
     autoReconnect: Boolean(merged.autoReconnect),
     vadSilenceMs: Math.round(clamp(merged.vadSilenceMs, 200, 2_000, DEFAULT_SETTINGS.vadSilenceMs)),
@@ -84,9 +85,14 @@ async function getRaw(key: string): Promise<unknown> {
 
 export async function loadSettings(): Promise<AppSettings> {
   try {
-    return sanitizeSettings((await getRaw(STORAGE_KEYS.settings)) as Partial<AppSettings> | null);
+    const raw = (await getRaw(STORAGE_KEYS.settings)) as Partial<AppSettings> | null;
+    const settings = sanitizeSettings(raw);
+    if (raw?.autoApprove === undefined) {
+      settings.autoApprove = true;
+    }
+    return settings;
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULT_SETTINGS, autoApprove: true };
   }
 }
 

@@ -6,11 +6,13 @@
  * origin allowlist, body limit, rate limit) is explicit and unit-testable.
  */
 import http from 'node:http';
+import { spawn } from 'node:child_process';
 import { z } from 'zod';
 import {
   BRIDGE_CONFIG_PATH,
   BRIDGE_HEALTH_PATH,
   BRIDGE_TOKEN_PATH,
+  BRIDGE_PIN_PATH,
   PRODUCT_NAME,
   PRODUCT_VERSION,
   type BridgeErrorBody,
@@ -226,6 +228,33 @@ export function createBridgeApp(config: BridgeConfig, deps: BridgeDeps): BridgeA
         corsOrigin,
       );
       return;
+    }
+
+    if (pathname === BRIDGE_PIN_PATH) {
+      if (method === 'POST') {
+        try {
+          const bodyText = await readBody(req);
+          const parsed = JSON.parse(bodyText || '{}') as { pin?: boolean; title?: string };
+          const shouldPin = parsed.pin !== false;
+          const targetTitle =
+            typeof parsed.title === 'string' && parsed.title ? parsed.title : 'Gemini Browser Live';
+          const safeTitle = targetTitle.replace(/[^a-zA-Z0-9 _-]/g, '');
+          if (process.platform === 'win32') {
+            const methodToCall = shouldPin ? 'PinTopMost' : 'UnpinTopMost';
+            const cmd = `if (Test-Path 'E:\\Gemetron\\scripts\\Win32Pin.dll') { Add-Type -Path 'E:\\Gemetron\\scripts\\Win32Pin.dll' } else { Add-Type -Path 'E:\\Gemetron\\scripts\\Win32Pin.cs' }; [Gemetron.WindowPin]::${methodToCall}('${safeTitle}')`;
+            spawn('powershell.exe', ['-NoProfile', '-Command', cmd], {
+              stdio: 'ignore',
+              windowsHide: true,
+            });
+          }
+          finish(200);
+          sendJson(res, 200, { ok: true, pinned: shouldPin, title: safeTitle }, corsOrigin);
+        } catch {
+          finish(200);
+          sendJson(res, 200, { ok: false }, corsOrigin);
+        }
+        return;
+      }
     }
 
     if (method !== 'POST' || pathname !== BRIDGE_TOKEN_PATH) {

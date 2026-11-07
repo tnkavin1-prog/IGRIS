@@ -323,6 +323,10 @@ export class LiveSessionManager {
     return this.session?.sendText(text) ?? false;
   }
 
+  sendContext(text: string): boolean {
+    return this.session?.sendContext(text) ?? false;
+  }
+
   sendImage(base64Jpeg: string, prompt: string): boolean {
     return this.session?.sendImage(base64Jpeg, prompt) ?? false;
   }

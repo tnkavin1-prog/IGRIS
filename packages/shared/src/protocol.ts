@@ -240,6 +240,7 @@ export interface AppSettings {
   /** When false, tools are not declared and the session is conversation-only. */
   browserControl: boolean;
   confirmRisky: boolean;
+  autoApprove?: boolean;
   includeContextOnStart: boolean;
   autoReconnect: boolean;
   vadSilenceMs: number;
@@ -263,6 +264,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   thinkingLevel: 'MEDIUM',
   browserControl: true,
   confirmRisky: true,
+  autoApprove: false,
   includeContextOnStart: true,
   autoReconnect: true,
   vadSilenceMs: 600,
@@ -366,4 +368,17 @@ export interface RuntimeEnvironment {
   chromeVersion: string;
   platform: string;
   bridgeUrl: string;
+}
+
+export interface VisualBlackboardLesson {
+  id: string;
+  title: string;
+  topic?: string;
+  diagramType: 'geometry' | 'graph' | 'formula' | 'mensuration' | 'flowchart' | 'chalk_sketch';
+  latexFormula?: string;
+  svgMarkup: string;
+  steps: string[];
+  activeStep?: number;
+  teachingNarration?: string;
+  createdAt: number;
 }

@@ -52,6 +52,18 @@ const bool = (description: string): SchemaNode => ({
   description,
 });
 
+const longStr = (description: string, maxLength = 30_000): SchemaNode => ({
+  type: 'string',
+  description,
+  maxLength,
+});
+
+const arr = (description: string, items: SchemaNode): SchemaNode => ({
+  type: 'array',
+  description,
+  items,
+});
+
 function params(
   properties: Record<string, SchemaNode>,
   required: readonly string[] = [],
@@ -445,6 +457,20 @@ export const TOOLS: readonly ToolDefinition[] = [
       'Submit the form containing the referenced element. Always requires explicit user confirmation because submission is consequential. Prefer asking the user to review the filled form first.',
     parameters: params({ ref: str(REF_HINT), target: str('Label of a field inside the form.') }),
   },
+  {
+    name: 'read_clipboard',
+    category: 'interaction',
+    approval: 'never',
+    description: 'Inspect and retrieve the current plain text contents from the OS clipboard.',
+    parameters: params({}),
+  },
+  {
+    name: 'write_clipboard',
+    category: 'interaction',
+    approval: 'never',
+    description: 'Copy specified text, code, or formatted data onto the OS clipboard.',
+    parameters: params({ text: str('Text or code to copy to the clipboard.') }, ['text']),
+  },
 
   // ─────────────────────────────── visual ───────────────────────────────
   {
@@ -488,6 +514,50 @@ export const TOOLS: readonly ToolDefinition[] = [
       stateToken: str(
         'Token returned by an earlier tool call. Omit to capture the current state only.',
       ),
+    }),
+  },
+  {
+    name: 'teach_visual_blackboard',
+    category: 'visual',
+    approval: 'never',
+    description:
+      "Open and draw an interactive chalkboard / blackboard visual lesson directly on the user's screen. Use this whenever the user asks to draw, sketch, explain visually, or understand a math problem, geometry shape, formula derivation, science concept, or diagram. Generates chalkboard SVG diagrams, LaTeX formulas, step-by-step annotations, and spoken teaching narration.",
+    parameters: params(
+      {
+        title: str('Clear lesson title, for example "Equilateral Triangle: Altitude & Inradius".'),
+        topic: str('Academic domain or topic, for example "Geometry & Mensuration".'),
+        diagram_type: str(
+          'Type of diagram: "geometry", "graph", "formula", "mensuration", "flowchart", or "chalk_sketch".',
+        ),
+        latex_formula: str(
+          'Primary formula or mathematical equation in LaTeX notation, for example "\\text{Area} = \\frac{1}{2}bh" or "r = \\frac{\\Delta}{s}".',
+        ),
+        svg_markup: longStr(
+          'Complete, clean SVG markup representing the diagram on a blackboard (viewBox="0 0 500 320"). Use chalk styling: stroke="#ffffff", "#6ee7b7", "#fde047", or "#f472b6", strokeWidth 2 to 3, dashed construction lines, labeled vertices (A, B, C), dimension arrows, angle arcs, and text labels.',
+        ),
+        steps: arr(
+          'Step-by-step pedagogical breakdown of the derivation or solution.',
+          str('Step description and formula calculation.'),
+        ),
+        teaching_narration: str(
+          'Spoken pedagogical explanation of the drawing, intuitive insights, and step-by-step walkthrough.',
+        ),
+        open_in_new_tab: bool(
+          'Set to true if the user asked to open a new tab, whiteboard tab, or notepad to explain.',
+        ),
+      },
+      ['title', 'svg_markup', 'steps'],
+    ),
+  },
+  {
+    name: 'open_teaching_blackboard_tab',
+    category: 'visual',
+    approval: 'never',
+    description:
+      'Open a dedicated full-screen interactive Teaching Blackboard tab in Chrome where the user and AI can study diagrams, formulas, geometry sketches, and step-by-step visual proofs in high resolution.',
+    parameters: params({
+      title: str('Title or topic for the blackboard study session.'),
+      topic: str('Optional academic subject, for example "Mensuration Formulas 2D/3D".'),
     }),
   },
 
@@ -572,6 +642,28 @@ export const TOOLS: readonly ToolDefinition[] = [
     approval: 'never',
     description: 'Set the zoom level of the active tab between 50% and 200%.',
     parameters: params({ percent: int('Zoom percentage.', 50, 200) }, ['percent']),
+  },
+  {
+    name: 'search_tab_content',
+    category: 'browser',
+    approval: 'never',
+    description:
+      'Search for text, keywords, or topics across all currently open Chrome browser tabs and return matching tab references and snippets.',
+    parameters: params(
+      {
+        query: str('Text query or keyword to locate across tabs.'),
+        caseSensitive: bool('Whether search should match exact case (default false).'),
+      },
+      ['query'],
+    ),
+  },
+  {
+    name: 'close_duplicate_tabs',
+    category: 'browser',
+    approval: 'never',
+    description:
+      'Automatically find and close redundant or duplicate Chrome browser tabs sharing identical URLs to clean up tab clutter.',
+    parameters: params({}),
   },
 
   // ──────────────────────────────── tasks ───────────────────────────────

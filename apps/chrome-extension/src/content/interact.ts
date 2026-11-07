@@ -138,9 +138,23 @@ function centerOf(el: Element): { x: number; y: number } {
  * host, while `el.click()` still reaches the inner control.
  */
 function hitTestMatches(el: Element, x: number, y: number): boolean {
-  const hit = document.elementFromPoint(x, y);
+  // Use elementsFromPoint to inspect the stack and filter out our extension's floating overlay!
+  const stack =
+    typeof document.elementsFromPoint === 'function' ? document.elementsFromPoint(x, y) : [];
+  const pageHits = stack.filter(
+    (item) => item.id !== 'gbl-overlay-host' && !item.closest?.('#gbl-overlay-host'),
+  );
+
+  const hit = pageHits.length > 0 ? pageHits[0] : document.elementFromPoint(x, y);
   if (!hit) return false;
   if (hit === el || el.contains(hit) || hit.contains(el)) return true;
+
+  // If el (or a descendant/ancestor) is anywhere in the hit stack under our overlay or a non-blocking layer
+  for (const item of pageHits) {
+    if (item === el || el.contains(item) || item.contains(el)) {
+      return true;
+    }
+  }
 
   // Retarget through open shadow roots.
   let current: Element | null = el;
@@ -148,6 +162,9 @@ function hitTestMatches(el: Element, x: number, y: number): boolean {
     const root = current.getRootNode();
     if (root instanceof ShadowRoot && root.host) {
       if (root.host === hit || root.host.contains(hit) || hit.contains(root.host)) return true;
+      for (const item of pageHits) {
+        if (root.host === item || root.host.contains(item) || item.contains(root.host)) return true;
+      }
       current = root.host;
     } else {
       break;
@@ -198,7 +215,23 @@ export async function performClick(options: ClickOptions): Promise<ActionResult>
       retryable: true,
     });
   }
+  const target = describeElement(el, { ref: registry.refFor(el) });
+  const before = beforeFingerprint();
+
   if (!hitTestMatches(el, x, y)) {
+    // If the element is an actionable HTMLElement covered by our overlay or a transient layer,
+    // invoke native .click() directly rather than failing the whole action.
+    if (el instanceof HTMLElement) {
+      try {
+        highlight(el, 900);
+        el.focus({ preventScroll: true });
+        el.click();
+        const after = await afterFingerprint();
+        return actionResult('click', before, after, target);
+      } catch {
+        /* proceed to throw */
+      }
+    }
     throw new ToolError(
       ERROR_CODES.ELEMENT_NOT_VISIBLE,
       'Another element covers the target at its center point.',
@@ -209,8 +242,6 @@ export async function performClick(options: ClickOptions): Promise<ActionResult>
     );
   }
 
-  const target = describeElement(el, { ref: registry.refFor(el) });
-  const before = beforeFingerprint();
   highlight(el, 900);
 
   dispatchPointer(el, 'pointerover', x, y, 0);

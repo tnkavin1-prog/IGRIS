@@ -26,6 +26,7 @@ const projects = onlyExtension
       { name: 'shared', dir: 'packages/shared' },
       { name: 'local-bridge', dir: 'apps/local-bridge' },
       { name: 'chrome-extension', dir: 'apps/chrome-extension' },
+      { name: 'desktop-hud', dir: 'apps/desktop-hud' },
     ];
 
 let failed = 0;

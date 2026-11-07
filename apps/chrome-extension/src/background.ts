@@ -1,17 +1,31 @@
 /**
  * MV3 service worker.
  *
- * It deliberately owns almost no state: the overlay (or the side panel) runs the
- * Live session and all tool execution, so the worker can be suspended at any
- * moment without dropping audio or an approval. Its jobs are:
+ * Implements Option 1 (Native Desktop Companion / Out-of-Browser Sidecar HUD)
+ * matching Google's native "Ask Gemini" (GLIC / GlicFloatingUi) architecture:
  *
- *   1. pin the overlay into the active tab on demand (the default surface),
- *   2. fall back to the side panel where injection is not allowed,
- *   3. forward keyboard commands to whichever surface is running.
+ *   1. Strictly ONE single floating companion window across the entire OS (singleton).
+ *   2. No per-tab iframe injection: completely eliminates duplicate Gemini windows
+ *      appearing when tabs are created or switched.
+ *   3. Dynamic Active Tab Tracking: Monitors Chrome's active normal tab. When the user
+ *      switches tabs or navigates (e.g. "open YouTube"), the single HUD window stays
+ *      in place and shifts its context/vision pointer to the newly active tab.
+ *   4. Seamless command forwarding to the single floating companion HUD.
  */
-const PANEL_PATH = 'sidepanel.html';
-const OVERLAY_HOST_FILE = 'overlay-host.js';
+
+import {
+  setupContextMenu,
+  handleAskGemini,
+  ASK_GEMINI_MENU_ID,
+  CONTROL_SERVER_SUMMON_URL,
+} from './tools/ask-gemini.js';
+
+const OVERLAY_FILE = 'overlay.html';
 const OVERLAY_HOST_ID = 'gbl-overlay-host';
+const SESSION_ACTIVE_TAB_KEY = 'gbl_active_tab_id';
+const SESSION_ACTIVE_WIN_KEY = 'gbl_active_window_id';
+const SESSION_HUD_WIN_KEY = 'gbl_hud_window_id';
+const LOCAL_HUD_POS_KEY = 'gbl_hud_pos';
 
 const COMMAND_MESSAGES: Record<string, string> = {
   'start-session': 'GBL_COMMAND_START',
@@ -20,42 +34,363 @@ const COMMAND_MESSAGES: Record<string, string> = {
   'open-settings': 'GBL_COMMAND_SETTINGS',
 };
 
-/** Pages where content scripts cannot run, so the panel is the only option. */
-const RESTRICTED = /^(chrome|edge|about|devtools|view-source|chrome-extension):/i;
+let desktopWindowId: number | null = null;
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function configurePanel(): Promise<void> {
+/**
+ * Check if a tab is the HUD window itself or an internal overlay tab.
+ */
+function isHudTab(tab?: chrome.tabs.Tab | null): boolean {
+  if (!tab) return false;
+  const url = tab.url || tab.pendingUrl || '';
+  if (url.includes(OVERLAY_FILE)) return true;
+  if (typeof desktopWindowId === 'number' && tab.windowId === desktopWindowId) return true;
+  return false;
+}
+
+/**
+ * Finds any already-running desktop HUD window across Chrome (OS-wide singleton check).
+ */
+async function getExistingHudWindow(): Promise<chrome.windows.Window | null> {
   try {
-    // The action now opens the overlay; the panel is the fallback surface.
-    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
+    const isHudWin = async (winId: number): Promise<chrome.windows.Window | null> => {
+      try {
+        const win = await chrome.windows.get(winId, { populate: true });
+        if (win && win.tabs?.some((t) => isHudTab(t))) {
+          return win;
+        }
+      } catch {
+        /* ignore */
+      }
+      return null;
+    };
+
+    // 1. Check in-memory desktopWindowId
+    if (desktopWindowId !== null) {
+      const win = await isHudWin(desktopWindowId);
+      if (win) return win;
+      desktopWindowId = null;
+    }
+
+    // 2. Check session storage for persisted HUD window ID
+    try {
+      const stored = await chrome.storage.session.get([SESSION_HUD_WIN_KEY]);
+      if (typeof stored?.[SESSION_HUD_WIN_KEY] === 'number') {
+        const win = await isHudWin(stored[SESSION_HUD_WIN_KEY]);
+        if (win) {
+          desktopWindowId = win.id ?? null;
+          return win;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+
+    // 3. Scan all open tabs for overlay.html
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      if (isHudTab(tab) && typeof tab.windowId === 'number') {
+        try {
+          const win = await chrome.windows.get(tab.windowId);
+          if (win) {
+            desktopWindowId = win.id ?? null;
+            await chrome.storage.session.set({ [SESSION_HUD_WIN_KEY]: desktopWindowId });
+            return win;
+          }
+        } catch {
+          /* window query failed */
+        }
+      }
+    }
   } catch {
-    /* Older Chrome builds expose sidePanel without this method. */
+    /* tab query failed */
   }
+  return null;
+}
+
+/**
+ * Resolve the current active normal Chrome tab (ignoring the HUD overlay itself).
+ */
+export async function activeNormalTab(): Promise<chrome.tabs.Tab | undefined> {
   try {
-    await chrome.sidePanel.setOptions({ path: PANEL_PATH, enabled: true });
+    // Check session stored active tab first
+    const stored = await chrome.storage.session.get([SESSION_ACTIVE_TAB_KEY]);
+    if (stored?.[SESSION_ACTIVE_TAB_KEY]) {
+      try {
+        const tab = await chrome.tabs.get(stored[SESSION_ACTIVE_TAB_KEY]);
+        if (tab && !isHudTab(tab)) return tab;
+      } catch {
+        /* stale stored tab */
+      }
+    }
+
+    const [focusedNormal] = await chrome.tabs.query({
+      active: true,
+      windowType: 'normal',
+      lastFocusedWindow: true,
+    });
+    if (focusedNormal && !isHudTab(focusedNormal)) return focusedNormal;
+
+    const [anyNormal] = await chrome.tabs.query({ active: true, windowType: 'normal' });
+    if (anyNormal && !isHudTab(anyNormal)) return anyNormal;
+
+    const allActive = await chrome.tabs.query({ active: true });
+    return allActive.find((t) => !isHudTab(t));
   } catch {
-    /* A missing panel path is reported when the panel is opened. */
+    return undefined;
   }
 }
 
-async function openPanel(windowId?: number): Promise<boolean> {
+/**
+ * Open or restore the strictly singleton Native Desktop Companion HUD window.
+ */
+export async function openDesktopPopup(prompt?: string): Promise<boolean> {
   try {
-    await chrome.sidePanel.open(
-      typeof windowId === 'number' ? { windowId } : { windowId: chrome.windows.WINDOW_ID_CURRENT },
-    );
+    // 1. First, attempt to summon the Native Desktop HUD (Electron) via loopback port 9228
+    try {
+      const res = await fetch(CONTROL_SERVER_SUMMON_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prompt: prompt ?? '' }),
+        signal: AbortSignal.timeout(1200),
+      });
+      if (res.ok) {
+        return true;
+      }
+    } catch {
+      // Desktop HUD port 9228 not responding, try protocol launch
+      try {
+        const tab = await chrome.tabs.create({ url: 'gemetron://summon', active: false });
+        setTimeout(() => {
+          if (typeof tab.id === 'number') {
+            chrome.tabs.remove(tab.id).catch(() => undefined);
+          }
+        }, 1200);
+        return true;
+      } catch {
+        /* proceed to fallback */
+      }
+    }
+
+    // Ensure active normal tab is recorded so the HUD immediately binds to it
+    const currentTab = await activeNormalTab();
+    if (currentTab) void notifyActiveTab(currentTab);
+
+    // 1. If an existing HUD window is already open, restore and focus it immediately
+    const existing = await getExistingHudWindow();
+    if (existing && typeof existing.id === 'number') {
+      try {
+        const updateInfo: chrome.windows.UpdateInfo = { focused: true, drawAttention: true };
+        if (existing.state === 'minimized') {
+          updateInfo.state = 'normal';
+        }
+        await chrome.windows.update(existing.id, updateInfo);
+        desktopWindowId = existing.id;
+        return true;
+      } catch {
+        desktopWindowId = null;
+      }
+    }
+
+    // 2. Compute default or saved position
+    let top = 80;
+    let left = 1000;
+    let width = 440;
+    let height = 680;
+
+    try {
+      const saved = await chrome.storage.local.get([LOCAL_HUD_POS_KEY]);
+      if (saved?.[LOCAL_HUD_POS_KEY]) {
+        const pos = saved[LOCAL_HUD_POS_KEY] as {
+          left?: number;
+          top?: number;
+          width?: number;
+          height?: number;
+        };
+        if (typeof pos.left === 'number' && typeof pos.top === 'number') {
+          left = Math.max(10, pos.left);
+          top = Math.max(10, pos.top);
+        }
+        if (typeof pos.width === 'number') width = pos.width;
+        if (typeof pos.height === 'number') height = pos.height;
+      } else {
+        const currentWin = await chrome.windows.getLastFocused();
+        if (currentWin?.left !== undefined && currentWin?.width !== undefined) {
+          left = Math.max(20, currentWin.left + currentWin.width - 460);
+          top = Math.max(20, (currentWin.top ?? 0) + 60);
+        }
+      }
+    } catch {
+      /* fallback */
+    }
+
+    const win = await chrome.windows.create({
+      url: chrome.runtime.getURL(OVERLAY_FILE),
+      type: 'popup',
+      width,
+      height,
+      top,
+      left,
+      focused: true,
+    });
+
+    desktopWindowId = win.id ?? null;
+    await chrome.storage.session.set({ [SESSION_HUD_WIN_KEY]: desktopWindowId });
     return true;
-  } catch {
+  } catch (error) {
+    console.error('Failed to create Desktop HUD popup window:', error);
     return false;
   }
 }
 
 /**
- * A freshly opened surface needs a moment to mount its React tree and register
- * the runtime listener. Retry briefly instead of racing it.
+ * Remove any legacy or stray in-page iframe injection elements.
  */
+async function cleanupInjectedHosts(): Promise<void> {
+  try {
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      if (tab.id && !isHudTab(tab) && tab.url && !tab.url.startsWith('chrome:')) {
+        void chrome.scripting
+          .executeScript({
+            target: { tabId: tab.id },
+            func: (id: string) => document.getElementById(id)?.remove(),
+            args: [OVERLAY_HOST_ID],
+          })
+          .catch(() => undefined);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+chrome.windows.onRemoved.addListener((windowId) => {
+  if (windowId === desktopWindowId) {
+    desktopWindowId = null;
+    void chrome.storage.session.remove([SESSION_HUD_WIN_KEY]).catch(() => undefined);
+  }
+});
+
+// Configure Side Panel behavior (fallback routing)
+async function configurePanel(): Promise<void> {
+  try {
+    if (chrome.storage?.session?.setAccessLevel) {
+      await chrome.storage.session.setAccessLevel({
+        accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS',
+      });
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
+  } catch {
+    /* Older Chrome builds expose sidePanel without this method */
+  }
+  try {
+    await chrome.sidePanel.setOptions({ path: 'sidepanel.html', enabled: true });
+  } catch {
+    /* ignore */
+  }
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  void configurePanel();
+  void cleanupInjectedHosts();
+  setupContextMenu();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  void configurePanel();
+  void cleanupInjectedHosts();
+  setupContextMenu();
+});
+
+void configurePanel();
+setupContextMenu();
+
+// Action click: Strictly open or focus the Single Desktop Companion HUD with active page context
+chrome.action.onClicked.addListener((tab) => {
+  void handleAskGemini({
+    tab,
+    getActiveTab: activeNormalTab,
+    fallbackSummon: (prompt) => openDesktopPopup(prompt),
+  });
+});
+
+// Context Menu click: Trigger 'Ask Gemini' on right-click on page or selection
+chrome.contextMenus?.onClicked?.addListener((info, tab) => {
+  if (info.menuItemId === ASK_GEMINI_MENU_ID) {
+    void handleAskGemini({
+      tab,
+      info,
+      getActiveTab: activeNormalTab,
+      fallbackSummon: (prompt) => openDesktopPopup(prompt),
+    });
+  }
+});
+
+/**
+ * Record and broadcast active tab changes so the HUD shifts its vision pointer immediately.
+ */
+async function notifyActiveTab(tab: chrome.tabs.Tab): Promise<void> {
+  if (isHudTab(tab)) return;
+  try {
+    await chrome.storage.session.set({
+      [SESSION_ACTIVE_TAB_KEY]: tab.id,
+      [SESSION_ACTIVE_WIN_KEY]: tab.windowId,
+    });
+    chrome.runtime
+      .sendMessage({
+        type: 'GBL_ACTIVE_TAB_CHANGED',
+        tab: { id: tab.id, title: tab.title, url: tab.url, windowId: tab.windowId },
+      })
+      .catch(() => undefined);
+  } catch {
+    /* ignore */
+  }
+}
+
+// Track active tab when user switches tabs
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  try {
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    if (tab && !isHudTab(tab)) {
+      await notifyActiveTab(tab);
+    }
+  } catch {
+    /* tab might be closed */
+  }
+});
+
+// Track active tab when tab updates (title/url/navigation changes)
+chrome.tabs.onUpdated.addListener(async (_tabId, changeInfo, tab) => {
+  if (tab.active && !isHudTab(tab)) {
+    if (changeInfo.status === 'complete' || changeInfo.title || changeInfo.url) {
+      await notifyActiveTab(tab);
+    }
+  }
+});
+
+// Track active tab when user shifts focus between Chrome windows
+chrome.windows.onFocusChanged.addListener(async (windowId) => {
+  if (windowId === chrome.windows.WINDOW_ID_NONE || windowId === desktopWindowId) return;
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, windowId });
+    if (tab && !isHudTab(tab)) {
+      await notifyActiveTab(tab);
+    }
+  } catch {
+    /* window query failed */
+  }
+});
+
 async function sendToSurface(type: string): Promise<boolean> {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     try {
@@ -68,72 +403,28 @@ async function sendToSurface(type: string): Promise<boolean> {
   return false;
 }
 
-async function overlayMounted(tabId: number): Promise<boolean> {
-  try {
-    const [result] = await chrome.scripting.executeScript({
-      target: { tabId },
-      func: (id: string) => Boolean(document.getElementById(id)),
-      args: [OVERLAY_HOST_ID],
-    });
-    return result?.result === true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Inject (or re-focus) the overlay. Returns false when the tab cannot host a
- * content script, so the caller can fall back to the side panel.
- */
-async function showOverlay(tab: chrome.tabs.Tab | undefined): Promise<boolean> {
-  const tabId = tab?.id;
-  if (typeof tabId !== 'number') return false;
-  if (tab?.url && RESTRICTED.test(tab.url)) return false;
-
-  try {
-    if (await overlayMounted(tabId)) {
-      // Re-running the host script focuses an existing frame.
-      await chrome.scripting.executeScript({ target: { tabId }, files: [OVERLAY_HOST_FILE] });
-      return true;
+// Handle runtime messages
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type === 'GBL_CLOSE_OVERLAY') {
+    if (desktopWindowId) {
+      try {
+        void chrome.windows.remove(desktopWindowId);
+      } catch {
+        /* ignore */
+      }
+      desktopWindowId = null;
     }
-    await chrome.scripting.executeScript({ target: { tabId }, files: [OVERLAY_HOST_FILE] });
-    return true;
-  } catch {
-    return false;
+  } else if (message?.type === 'GBL_OPEN_OVERLAY' || message?.type === 'GBL_POP_OUT_DESKTOP') {
+    void openDesktopPopup();
   }
-}
-
-async function activeTab(): Promise<chrome.tabs.Tab | undefined> {
-  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  return tab;
-}
-
-async function openSurface(tab?: chrome.tabs.Tab): Promise<void> {
-  const target = tab ?? (await activeTab());
-  if (await showOverlay(target)) return;
-  await openPanel(target?.windowId);
-}
-
-chrome.runtime.onInstalled.addListener(() => {
-  void configurePanel();
 });
 
-chrome.runtime.onStartup.addListener(() => {
-  void configurePanel();
-});
-
-void configurePanel();
-
-chrome.action.onClicked.addListener((tab) => {
-  void openSurface(tab);
-});
-
+// Keyboard shortcut commands routed directly to the single HUD
 chrome.commands.onCommand.addListener((command) => {
   const type = COMMAND_MESSAGES[command];
   if (!type) return;
   void (async () => {
-    const tab = await activeTab();
-    await openSurface(tab);
+    await openDesktopPopup();
     await sendToSurface(type);
   })();
 });

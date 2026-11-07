@@ -1,46 +1,54 @@
 /**
- * Window chrome for the overlay surface only.
+ * Window chrome for the overlay panel only.
  *
  * The side panel keeps its normal header; the overlay gets a slim drag strip
- * with collapse and close, so the frame can be moved out of the way without
- * leaving the page.
+ * with minimize-to-orb and close, so the frame can be moved out of the way
+ * without leaving the page.
  */
 import { useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import { Icon } from '../sidepanel/ui';
 import { overlay } from './bridge';
 
 interface OverlayBarProps {
-  collapsed: boolean;
-  onToggleCollapsed: () => void;
+  onMinimize: () => void;
 }
 
-export function OverlayBar({ collapsed, onToggleCollapsed }: OverlayBarProps) {
+export function OverlayBar({ onMinimize }: OverlayBarProps) {
   const drag = useRef<{ x: number; y: number } | null>(null);
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
     if (event.button !== 0) return;
-    drag.current = { x: event.clientX, y: event.clientY };
-    event.currentTarget.setPointerCapture(event.pointerId);
+    drag.current = { x: event.screenX, y: event.screenY };
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      /* ignore */
+    }
+    overlay.dragStart();
   };
 
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>): void => {
     const origin = drag.current;
     if (!origin) return;
-    const dx = event.clientX - origin.x;
-    const dy = event.clientY - origin.y;
+    const dx = event.screenX - origin.x;
+    const dy = event.screenY - origin.y;
     if (dx === 0 && dy === 0) return;
-    drag.current = { x: event.clientX, y: event.clientY };
+    drag.current = { x: event.screenX, y: event.screenY };
     overlay.drag(dx, dy);
   };
 
   const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (!drag.current) return;
     drag.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    try {
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+    } catch {
+      /* ignore */
     }
+    overlay.dragEnd();
   };
-
-  if (collapsed) return null;
 
   return (
     <div className="overlay-bar">
@@ -62,9 +70,25 @@ export function OverlayBar({ collapsed, onToggleCollapsed }: OverlayBarProps) {
         <button
           type="button"
           className="overlay-btn"
-          aria-label="Collapse the assistant"
-          title="Collapse"
-          onClick={onToggleCollapsed}
+          aria-label="Open in side panel (follows across all tabs)"
+          title="Dock to side panel"
+          onClick={async () => {
+            try {
+              await chrome.sidePanel.open({ windowId: chrome.windows.WINDOW_ID_CURRENT });
+              overlay.close();
+            } catch (err) {
+              console.error('Failed to open side panel', err);
+            }
+          }}
+        >
+          <Icon name="monitor" size={13} />
+        </button>
+        <button
+          type="button"
+          className="overlay-btn"
+          aria-label="Minimize to an orb"
+          title="Minimize"
+          onClick={onMinimize}
         >
           <Icon name="minus" size={13} />
         </button>

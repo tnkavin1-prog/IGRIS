@@ -432,6 +432,12 @@ export function SettingsPanel({
                   disabled={!model.toolCalling}
                 />
                 <Toggle
+                  checked={draft.autoApprove ?? true}
+                  onChange={(value) => set('autoApprove', value)}
+                  label="Autonomous mode (no approval popups)"
+                  description="Let Gemini execute browser actions directly without pausing for approval dialogs on every form or button click."
+                />
+                <Toggle
                   checked={draft.confirmRisky}
                   onChange={(value) => set('confirmRisky', value)}
                   label="Confirm consequential actions"

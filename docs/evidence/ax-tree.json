@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T07:05:03.289Z",
+  "generatedAt": "2026-11-06T09:09:12.179Z",
   "surfaces": {
     "live panel": [
       {
@@ -59,9 +59,16 @@
         "focused": false
       },
       {
+        "role": "generic",
+        "name": "",
+        "description": "Autonomous mode: Gemini executes browser actions automatically without approval prompts",
+        "disabled": false,
+        "focused": false
+      },
+      {
         "role": "button",
-        "name": "Bridge offline",
-        "description": "The local bridge is unreachable. Start it with \"npm run bridge\" and try again.",
+        "name": "Bridge online",
+        "description": "Check the loopback token bridge",
         "disabled": false,
         "focused": false
       },
@@ -144,7 +151,14 @@
       },
       {
         "role": "StaticText",
-        "name": "Bridge offline",
+        "name": "Autonomous",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Bridge online",
         "description": "",
         "disabled": false,
         "focused": false
@@ -349,14 +363,42 @@
       },
       {
         "role": "InlineTextBox",
-        "name": "VOICE · VISION · ACTION",
+        "name": "Browser L",
         "description": "",
         "disabled": false,
         "focused": false
       },
       {
         "role": "InlineTextBox",
-        "name": "Bridge offline",
+        "name": "…",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "VOICE · VISION · ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "ACTION",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Autonomous",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Bridge online",
         "description": "",
         "disabled": false,
         "focused": false
@@ -847,9 +889,16 @@
         "focused": false
       },
       {
+        "role": "generic",
+        "name": "",
+        "description": "Autonomous mode: Gemini executes browser actions automatically without approval prompts",
+        "disabled": false,
+        "focused": false
+      },
+      {
         "role": "button",
-        "name": "Bridge offline",
-        "description": "The local bridge is unreachable. Start it with \"npm run bridge\" and try again.",
+        "name": "Bridge online",
+        "description": "Check the loopback token bridge",
         "disabled": false,
         "focused": false
       },
@@ -939,7 +988,14 @@
       },
       {
         "role": "StaticText",
-        "name": "Bridge offline",
+        "name": "Autonomous",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Bridge online",
         "description": "",
         "disabled": false,
         "focused": false
@@ -1229,14 +1285,42 @@
       },
       {
         "role": "InlineTextBox",
-        "name": "VOICE · VISION · ACTION",
+        "name": "Browser L",
         "description": "",
         "disabled": false,
         "focused": false
       },
       {
         "role": "InlineTextBox",
-        "name": "Bridge offline",
+        "name": "…",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "VOICE · VISION · ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "ACTION",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Autonomous",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Bridge online",
         "description": "",
         "disabled": false,
         "focused": false
@@ -1496,7 +1580,7 @@
       },
       {
         "role": "StaticText",
-        "name": "Offline",
+        "name": "Online",
         "description": "",
         "disabled": false,
         "focused": false
@@ -1524,7 +1608,14 @@
       },
       {
         "role": "StaticText",
-        "name": "The local bridge is unreachable. Start it with \"npm run bridge\" and try again.",
+        "name": "Gemini Browser Live token bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": " v",
         "description": "",
         "disabled": false,
         "focused": false
@@ -1868,7 +1959,7 @@
       },
       {
         "role": "InlineTextBox",
-        "name": "Offline",
+        "name": "Online",
         "description": "",
         "disabled": false,
         "focused": false
@@ -1911,7 +2002,14 @@
       },
       {
         "role": "InlineTextBox",
-        "name": "The local bridge is unreachable. Start it with \"npm run bridge\" and try again.",
+        "name": "Gemini Browser Live token bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": " v",
         "description": "",
         "disabled": false,
         "focused": false

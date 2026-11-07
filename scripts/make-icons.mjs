@@ -9,7 +9,7 @@
  */
 import { deflateSync } from 'node:zlib';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -152,6 +152,39 @@ export function generateIcons(outDir) {
   }
 }
 
+export function generateIco(outFilePath, sizes = [16, 32, 48, 128, 256]) {
+  mkdirSync(dirname(outFilePath), { recursive: true });
+  const images = sizes.map((s) => ({ size: s, data: render(s) }));
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(0, 0); // reserved
+  header.writeUInt16LE(1, 2); // icon type (1 = ICO)
+  header.writeUInt16LE(images.length, 4);
+
+  let offset = 6 + images.length * 16;
+  const entries = [];
+  for (const img of images) {
+    const entry = Buffer.alloc(16);
+    entry.writeUInt8(img.size >= 256 ? 0 : img.size, 0);
+    entry.writeUInt8(img.size >= 256 ? 0 : img.size, 1);
+    entry.writeUInt8(0, 2); // color count
+    entry.writeUInt8(0, 3); // reserved
+    entry.writeUInt16LE(1, 4); // color planes
+    entry.writeUInt16LE(32, 6); // bits per pixel
+    entry.writeUInt32LE(img.data.length, 8); // image size in bytes
+    entry.writeUInt32LE(offset, 12); // image offset in file
+    entries.push(entry);
+    offset += img.data.length;
+  }
+
+  const icoBuffer = Buffer.concat([header, ...entries, ...images.map((img) => img.data)]);
+  writeFileSync(outFilePath, icoBuffer);
+  return icoBuffer;
+}
+
 const outDir = resolve(process.argv[2] ?? 'release/chrome-extension/icons');
 generateIcons(outDir);
 console.log(`Wrote icons to ${outDir}`);
+
+const jarvisIcoPath = resolve('assets/icons/jarvis.ico');
+generateIco(jarvisIcoPath);
+console.log(`Wrote high-res icon to ${jarvisIcoPath}`);

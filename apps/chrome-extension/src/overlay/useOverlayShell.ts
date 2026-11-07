@@ -1,35 +1,41 @@
-import { useCallback, useEffect, useState } from 'react';
-import { isOverlay, onHostMessage, overlay } from './bridge';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { isOverlay, onHostMessage, overlay, type OverlayView } from './bridge';
 
 /**
  * Overlay geometry state.
  *
- * Collapsing is owned here rather than by the host so the iframe can shrink to
- * a single orb without the host guessing what to render. The host is told
- * through an effect, so React StrictMode's double-invoke cannot post twice.
+ * Three views share one iframe: a compact pill (the default idle surface), the
+ * full panel, and a 64 px orb. The host owns the box; this hook owns which
+ * component is rendered.
+ *
+ * The overlay is authoritative once the user has chosen a view. The host only
+ * reports its own state on mount (to survive an iframe reload) and when a
+ * second toolbar click asks for the panel; those reports must not overwrite a
+ * click that happened in between.
  */
 export function useOverlayShell(): {
   overlay: boolean;
-  collapsed: boolean;
-  toggle: () => void;
-  expand: () => void;
+  view: OverlayView;
+  setView: (view: OverlayView) => void;
 } {
   const active = isOverlay();
-  const [collapsed, setCollapsed] = useState(false);
+  const [view, setView] = useState<OverlayView>('panel');
+  const interacted = useRef(false);
 
   useEffect(() => {
     if (!active) return undefined;
     overlay.ready();
-    return onHostMessage(setCollapsed);
+    return onHostMessage((next) => {
+      if (interacted.current) return;
+      setView(next);
+    });
   }, [active]);
 
-  useEffect(() => {
-    if (!active) return;
-    overlay.setCollapsed(collapsed);
-  }, [active, collapsed]);
+  const set = useCallback((next: OverlayView) => {
+    interacted.current = true;
+    setView(next);
+    overlay.setView(next);
+  }, []);
 
-  const toggle = useCallback(() => setCollapsed((current) => !current), []);
-  const expand = useCallback(() => setCollapsed(false), []);
-
-  return { overlay: active, collapsed, toggle, expand };
+  return { overlay: active, view, setView: set };
 }

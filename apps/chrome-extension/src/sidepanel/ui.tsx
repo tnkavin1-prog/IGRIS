@@ -34,6 +34,9 @@ export type IconName =
   | 'refresh'
   | 'external'
   | 'copy'
+  | 'keyboard'
+  | 'expand'
+  | 'contract'
   | 'eye'
   | 'eyeOff'
   | 'info'
@@ -46,6 +49,8 @@ export type IconName =
   | 'search'
   | 'wand'
   | 'arrowRight'
+  | 'board'
+  | 'pin'
   | 'dots';
 
 const PATHS: Record<IconName, ReactNode> = {
@@ -165,6 +170,14 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
     </>
   ),
+  keyboard: (
+    <>
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 15h8" />
+    </>
+  ),
+  expand: <path d="m15 3 6 6m0-6h-6m6 0v6M9 21l-6-6m0 6h6m-6 0v-6" />,
+  contract: <path d="m4 14 6 6m0-6H4m6 0v6m10-10-6-6m0 6h6m-6 0V4" />,
   eye: (
     <>
       <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
@@ -220,6 +233,19 @@ const PATHS: Record<IconName, ReactNode> = {
     <path d="m15 4 1.2 3.3L19.5 8.5l-3.3 1.2L15 13l-1.2-3.3L10.5 8.5l3.3-1.2L15 4ZM4 20l8-8M3 15l1 1M8 3l1 1M3 9h2" />
   ),
   arrowRight: <path d="M5 12h14m-6-6 6 6-6 6" />,
+  board: (
+    <>
+      <rect x="3" y="4" width="18" height="14" rx="2" />
+      <path d="M7 14h10M7 10l3-3 4 4 3-3" />
+    </>
+  ),
+  pin: (
+    <>
+      <line x1="12" y1="17" x2="12" y2="22" />
+      <path d="M5 17h14v-2l-2-2V5a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v8l-2 2v2Z" />
+      <line x1="9" y1="4" x2="15" y2="4" />
+    </>
+  ),
   dots: (
     <>
       <circle cx="5" cy="12" r="1.2" fill="currentColor" stroke="none" />

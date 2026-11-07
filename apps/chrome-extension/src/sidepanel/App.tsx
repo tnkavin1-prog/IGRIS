@@ -20,6 +20,8 @@ import { Icon } from './ui';
 import { useOverlayShell } from '../overlay/useOverlayShell';
 import { OverlayBar } from '../overlay/OverlayBar';
 import { OverlayOrb } from '../overlay/OverlayOrb';
+import { OverlayPill } from '../overlay/OverlayPill';
+import { CompactOverlay } from '../overlay/CompactOverlay';
 
 interface RuntimeMessage {
   type?: string;
@@ -41,12 +43,7 @@ export function App() {
   const [draft, setDraft] = useState('');
   const [settingsHint, setSettingsHint] = useState(false);
   const pendingPrompt = useRef<string | null>(null);
-  const {
-    overlay: overlaySurface,
-    collapsed: overlayCollapsed,
-    toggle: toggleOverlay,
-    expand: expandOverlay,
-  } = useOverlayShell();
+  const { overlay: overlaySurface, view: overlayView, setView: setOverlayView } = useOverlayShell();
 
   useEffect(() => {
     void controller.init();
@@ -56,12 +53,16 @@ export function App() {
   }, [controller]);
 
   const openSettings = useCallback(() => {
+    if (overlaySurface) setOverlayView('expanded');
     setSettingsOpen(true);
     setSettingsHint(false);
     void controller.refreshPermissions();
-  }, [controller]);
+  }, [controller, overlaySurface, setOverlayView]);
 
-  const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  const closeSettings = useCallback(() => {
+    setSettingsOpen(false);
+    if (overlaySurface) setOverlayView('panel');
+  }, [overlaySurface, setOverlayView]);
 
   const start = useCallback(() => {
     if (!snapshot.secretPresent) {
@@ -80,13 +81,20 @@ export function App() {
   const send = useCallback(
     (text: string): boolean => {
       if (!isSessionLive(snapshot.status)) {
-        setDraft(text);
-        controller.toast('Start a live session, then send your message.', 'info');
-        return false;
+        start();
+        controller.addUserText(text);
+        setTimeout(() => {
+          try {
+            controller.sendText(text);
+          } catch {
+            /* ignore */
+          }
+        }, 1500);
+        return true;
       }
       return controller.sendText(text);
     },
-    [controller, snapshot.status],
+    [controller, snapshot.status, start],
   );
 
   const suggest = useCallback(
@@ -173,22 +181,70 @@ export function App() {
 
   const live = isSessionLive(snapshot.status);
 
-  // An approval must never be hidden behind a collapsed orb: a consequential
-  // action would time out unanswered.
+  // An approval must never be hidden behind a collapsed surface: a
+  // consequential action would time out unanswered.
   const approvalPending = Boolean(snapshot.approval);
   useEffect(() => {
-    if (overlaySurface && approvalPending && overlayCollapsed) expandOverlay();
-  }, [overlaySurface, approvalPending, overlayCollapsed, expandOverlay]);
+    if (overlaySurface && approvalPending && overlayView !== 'expanded') setOverlayView('expanded');
+  }, [overlaySurface, approvalPending, overlayView, setOverlayView]);
 
-  if (overlaySurface && overlayCollapsed) {
-    return <OverlayOrb snapshot={snapshot} onExpand={expandOverlay} />;
+  // Starting a session from the pill opens the panel so status and transcript
+  // are visible. Minimizing to the orb is an explicit user choice and is left
+  // alone.
+  useEffect(() => {
+    if (!overlaySurface) return;
+    if (overlayView === 'pill' && (live || snapshot.starting)) setOverlayView('panel');
+  }, [overlaySurface, overlayView, live, snapshot.starting, setOverlayView]);
+
+  if (overlaySurface && overlayView === 'orb') {
+    return <OverlayOrb snapshot={snapshot} onExpand={() => setOverlayView('panel')} />;
+  }
+
+  if (overlaySurface && overlayView === 'pill') {
+    return (
+      <OverlayPill
+        snapshot={snapshot}
+        onExpand={() => setOverlayView('panel')}
+        onStart={() => {
+          setOverlayView('panel');
+          start();
+        }}
+        onMute={() => controller.toggleMute()}
+      />
+    );
+  }
+
+  if (overlaySurface) {
+    return (
+      <>
+        <CompactOverlay
+          snapshot={snapshot}
+          controller={controller}
+          expanded={overlayView === 'expanded'}
+          onToggleExpand={() => {
+            setOverlayView(overlayView === 'expanded' ? 'panel' : 'expanded');
+          }}
+          onOpenSettings={openSettings}
+          onStart={start}
+          onStop={stop}
+          onSendText={send}
+        />
+        {snapshot.approval ? (
+          <ApprovalSheet
+            request={snapshot.approval}
+            onResolve={(allow) => controller.resolveApproval(allow)}
+          />
+        ) : null}
+        {settingsOpen ? (
+          <SettingsPanel controller={controller} snapshot={snapshot} onClose={closeSettings} />
+        ) : null}
+      </>
+    );
   }
 
   return (
     <div className="app-shell">
-      {overlaySurface ? (
-        <OverlayBar collapsed={overlayCollapsed} onToggleCollapsed={toggleOverlay} />
-      ) : null}
+      {overlaySurface ? <OverlayBar onMinimize={() => setOverlayView('orb')} /> : null}
       <div className="ambient" aria-hidden="true">
         <span className="ambient-blob blob-a" />
         <span className="ambient-blob blob-b" />

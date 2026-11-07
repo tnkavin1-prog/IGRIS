@@ -11,6 +11,9 @@
 # Dependencies
 node_modules/
 .pnpm-store/
+.npm-cache/
+.electron-cache/
+.chrome-debug-*/
 
 # Build output
 dist/

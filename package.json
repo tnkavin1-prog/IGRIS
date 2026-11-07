@@ -7,6 +7,7 @@
   "workspaces": [
     "apps/chrome-extension",
     "apps/local-bridge",
+    "apps/desktop-hud",
     "packages/shared"
   ],
   "engines": {
@@ -15,6 +16,8 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:extension": "node scripts/build.mjs --extension-only",
+    "build:desktop": "node scripts/build.mjs --desktop-only",
+    "desktop": "electron apps/desktop-hud",
     "typecheck": "node scripts/typecheck.mjs",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx,mjs,json,md,css,html}\"",
@@ -42,6 +45,7 @@
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^5.0.0",
     "axe-core": "^4.11.0",
+    "electron": "^34.0.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.14.0",
     "eslint-plugin-react-hooks": "^7.1.1",
@@ -53,5 +57,9 @@
     "typescript-eslint": "^8.44.0",
     "vite": "^8.3.5",
     "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "@types/ws": "^8.18.2",
+    "ws": "^8.22.1"
   }
 }

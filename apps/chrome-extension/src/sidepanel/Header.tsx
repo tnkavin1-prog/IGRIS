@@ -44,6 +44,15 @@ export function Header({
         </div>
       </div>
       <div className="topbar-actions">
+        {snapshot.settings.autoApprove ? (
+          <span
+            className="auto-pill"
+            title="Autonomous mode: Gemini executes browser actions automatically without approval prompts"
+          >
+            <Icon name="spark" size={13} />
+            <span>Autonomous</span>
+          </span>
+        ) : null}
         <button
           type="button"
           className={`bridge-pill ${bridge}`}
@@ -53,6 +62,17 @@ export function Header({
           <StatusDot tone={tone} pulse={bridge === 'checking'} />
           <span>{label}</span>
         </button>
+        <IconButton
+          label="Float as in-page overlay"
+          onClick={() => {
+            if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+              chrome.runtime.sendMessage({ type: 'GBL_POP_TO_OVERLAY' }).catch(() => undefined);
+            }
+          }}
+          className="overlay-button"
+        >
+          <Icon name="expand" size={17} />
+        </IconButton>
         <IconButton label="Open settings" onClick={onOpenSettings} className="settings-button">
           <Icon name="settings" size={18} />
         </IconButton>

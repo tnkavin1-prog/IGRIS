@@ -137,6 +137,9 @@ export class LiveSession {
         this.options.onEvent({ type: 'outputTranscript', text: content.outputTranscription.text });
       }
       for (const part of content.modelTurn?.parts ?? []) {
+        if (part.text) {
+          this.options.onEvent({ type: 'outputTranscript', text: part.text });
+        }
         if (part.inlineData?.data && part.inlineData.mimeType?.startsWith('audio/')) {
           this.options.onEvent({
             type: 'audio',

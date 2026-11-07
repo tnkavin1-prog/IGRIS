@@ -22,8 +22,10 @@ import react from '@vitejs/plugin-react';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const extensionDir = join(root, 'apps', 'chrome-extension');
 const bridgeDir = join(root, 'apps', 'local-bridge');
+const desktopDir = join(root, 'apps', 'desktop-hud');
 const outDir = join(root, 'release', 'chrome-extension');
 const extensionOnly = process.argv.includes('--extension-only');
+const desktopOnly = process.argv.includes('--desktop-only');
 
 const startedAt = Date.now();
 
@@ -62,6 +64,7 @@ async function buildSidePanel() {
         input: {
           sidepanel: resolve(extensionDir, 'sidepanel.html'),
           overlay: resolve(extensionDir, 'overlay.html'),
+          blackboard: resolve(extensionDir, 'blackboard.html'),
         },
         output: {
           entryFileNames: 'assets/[name]-[hash].js',
@@ -73,6 +76,7 @@ async function buildSidePanel() {
   });
   assertFile(join(outDir, 'sidepanel.html'));
   assertFile(join(outDir, 'overlay.html'));
+  assertFile(join(outDir, 'blackboard.html'));
 }
 
 async function buildScripts() {
@@ -191,7 +195,71 @@ function report() {
   process.stdout.write(`Load unpacked: ${outDir}\n`);
 }
 
+function compileWin32Pin() {
+  if (process.platform !== 'win32') return;
+  const csPath = join(root, 'scripts', 'Win32Pin.cs');
+  const dllPath = join(root, 'scripts', 'Win32Pin.dll');
+  if (existsSync(csPath)) {
+    try {
+      log('Compiling Win32Pin.dll for sub-50ms window pinning');
+      spawnSync(
+        'powershell.exe',
+        ['-NoProfile', '-Command', `Add-Type -Path '${csPath}' -OutputAssembly '${dllPath}'`],
+        { stdio: 'ignore' },
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const inputCsPath = join(root, 'scripts', 'Win32Input.cs');
+  const inputDllPath = join(root, 'scripts', 'Win32Input.dll');
+  const inputExePath = join(root, 'scripts', 'Win32Input.exe');
+  if (existsSync(inputCsPath)) {
+    try {
+      log(
+        'Compiling Win32Input.dll and Win32Input.exe for native mouse, keyboard and OS window automation',
+      );
+      spawnSync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-Command',
+          `Add-Type -ReferencedAssemblies System.Windows.Forms,System.Drawing -Path '${inputCsPath}' -OutputAssembly '${inputDllPath}'`,
+        ],
+        { stdio: 'ignore' },
+      );
+
+      spawnSync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-Command',
+          `Add-Type -ReferencedAssemblies System.Windows.Forms,System.Drawing -Path '${inputCsPath}' -OutputAssembly '${inputExePath}' -OutputType ConsoleApplication`,
+        ],
+        { stdio: 'ignore' },
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+async function buildDesktop() {
+  log('Bundling Standalone Native Desktop HUD (Electron)');
+  const scriptPath = join(desktopDir, 'scripts', 'build.mjs');
+  if (existsSync(scriptPath)) {
+    const res = spawnSync(process.execPath, [scriptPath], { stdio: 'inherit' });
+    if (res.status !== 0) throw new Error('Desktop HUD build failed.');
+  }
+}
+
 async function main() {
+  if (desktopOnly) {
+    await buildDesktop();
+    return;
+  }
+
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
 
@@ -199,7 +267,9 @@ async function main() {
   await buildScripts();
   copyManifest();
   buildIcons();
+  compileWin32Pin();
   if (!extensionOnly) await buildBridge();
+  await buildDesktop();
   report();
 }
 

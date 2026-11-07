@@ -35,12 +35,14 @@ describe('overlay bridge', () => {
     expect(isOverlay()).toBe(false);
   });
 
-  it('posts a collapse command with the requested state', () => {
-    overlay.setCollapsed(true);
-    overlay.setCollapsed(false);
+  it('posts view changes for all three surfaces', () => {
+    overlay.setView('pill');
+    overlay.setView('panel');
+    overlay.setView('orb');
     expect(posted).toEqual([
-      { source: 'gbl-overlay', type: 'collapse', collapsed: true },
-      { source: 'gbl-overlay', type: 'collapse', collapsed: false },
+      { source: 'gbl-overlay', type: 'view', view: 'pill' },
+      { source: 'gbl-overlay', type: 'view', view: 'panel' },
+      { source: 'gbl-overlay', type: 'view', view: 'orb' },
     ]);
   });
 
@@ -56,58 +58,71 @@ describe('overlay bridge', () => {
   it('stays silent outside the overlay surface', () => {
     setSurface(null);
     overlay.close();
-    overlay.setCollapsed(true);
+    overlay.setView('panel');
     overlay.drag(1, 1);
     expect(posted).toEqual([]);
   });
 
-  it('delivers host state only from the parent with the right shape', () => {
-    const seen: boolean[] = [];
-    const stop = onHostMessage((collapsed) => seen.push(collapsed));
+  it('delivers host state only from the parent with a known view', () => {
+    const seen: string[] = [];
+    const stop = onHostMessage((view) => seen.push(view));
 
     window.dispatchEvent(
       new MessageEvent('message', {
         source: window.parent,
-        data: { source: 'gbl-host', type: 'state', collapsed: true },
+        data: { source: 'gbl-host', type: 'state', view: 'pill' },
       }),
     );
     window.dispatchEvent(
       new MessageEvent('message', {
         source: window.parent,
-        data: { source: 'gbl-host', type: 'state', collapsed: false },
+        data: { source: 'gbl-host', type: 'state', view: 'panel' },
       }),
     );
-    // Wrong source (a foreign window), wrong type, and junk payloads are ignored.
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window.parent,
+        data: { source: 'gbl-host', type: 'state', view: 'orb' },
+      }),
+    );
+    // Wrong source (a foreign window), wrong type, unknown view, and junk
+    // payloads are ignored.
     window.dispatchEvent(
       new MessageEvent('message', {
         source: {} as unknown as Window,
-        data: { source: 'gbl-host', type: 'state', collapsed: true },
+        data: { source: 'gbl-host', type: 'state', view: 'panel' },
       }),
     );
     window.dispatchEvent(
       new MessageEvent('message', {
         source: window.parent,
-        data: { source: 'gbl-overlay', type: 'state', collapsed: true },
+        data: { source: 'gbl-overlay', type: 'state', view: 'panel' },
       }),
     );
     window.dispatchEvent(
       new MessageEvent('message', {
         source: window.parent,
-        data: { source: 'gbl-host', type: 'drag', dx: 5 },
+        data: { source: 'gbl-host', type: 'state', view: 'fullscreen' },
+      }),
+    );
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window.parent,
+        data: { source: 'gbl-host', type: 'state' },
       }),
     );
     window.dispatchEvent(new MessageEvent('message', { source: window.parent, data: null }));
 
-    expect(seen).toEqual([true, false]);
+    expect(seen).toEqual(['pill', 'panel', 'orb']);
 
     stop();
     window.dispatchEvent(
       new MessageEvent('message', {
         source: window.parent,
-        data: { source: 'gbl-host', type: 'state', collapsed: true },
+        data: { source: 'gbl-host', type: 'state', view: 'panel' },
       }),
     );
-    expect(seen).toEqual([true, false]);
+    expect(seen).toEqual(['pill', 'panel', 'orb']);
   });
 
   it('is a no-op on the side panel surface', () => {
@@ -117,7 +132,7 @@ describe('overlay bridge', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         source: window.parent,
-        data: { source: 'gbl-host', type: 'state', collapsed: true },
+        data: { source: 'gbl-host', type: 'state', view: 'panel' },
       }),
     );
     expect(handler).not.toHaveBeenCalled();

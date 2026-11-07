@@ -14,3 +14,6 @@ docs/probe-results*.json
 docs/api/
 # Unrelated local scratch files
 SSC_CGL_Mock_Exam.html
+notes/
+.chrome-debug-profile/
+.chrome-debug-data/

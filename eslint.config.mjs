@@ -16,6 +16,9 @@ export default tseslint.config(
       'coverage/**',
       '**/*.d.ts',
       'package-lock.json',
+      '.chrome-debug-profile/**',
+      '.chrome-debug-data/**',
+      'notes/**',
     ],
   },
   js.configs.recommended,
@@ -68,6 +71,7 @@ export default tseslint.config(
   {
     files: [
       'scripts/**/*.mjs',
+      'apps/desktop-hud/scripts/**/*.mjs',
       'tests/**/*.mjs',
       'playwright.config.mjs',
       'playwright.soak.config.mjs',
@@ -85,12 +89,37 @@ export default tseslint.config(
     },
   },
   {
+    files: ['apps/desktop-hud/src/main/**/*.ts'],
+    languageOptions: {
+      globals: { ...globals.node },
+    },
+    rules: {
+      'no-console': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      'no-empty': 'off',
+    },
+  },
+  {
+    files: ['apps/desktop-hud/src/renderer/**/*.{ts,tsx}'],
+    plugins: { 'react-hooks': reactHooks },
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+    },
+    rules: {
+      'no-console': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      'no-empty': 'off',
+    },
+  },
+  {
     files: ['tests/unit/**/*.ts'],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
     },
     rules: {
       'no-console': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      'no-empty': 'off',
     },
   },
 );

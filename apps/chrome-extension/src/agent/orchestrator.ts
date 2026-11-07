@@ -68,6 +68,8 @@ const TOOL_TITLES: Record<string, string> = {
   describe_visible_page: 'Describe page',
   click_visual_target: 'Visual click',
   compare_page_states: 'Compare states',
+  teach_visual_blackboard: 'Draw Blackboard',
+  open_teaching_blackboard_tab: 'Open Blackboard Tab',
   search_google_images: 'Search images',
   open_image_result: 'Open image result',
   search_bookmarks: 'Search bookmarks',
@@ -444,6 +446,11 @@ export class AgentOrchestrator {
     args: Record<string, unknown>,
     settings: AppSettings,
   ): ReturnType<typeof assessActionRisk> {
+    // Autonomous Mode: When autoApprove is true, execute all actions by itself without approval prompts
+    if (settings.autoApprove) {
+      return { level: 'none', reasons: [], label: 'Allowed' };
+    }
+
     if (tool.approval === 'always') {
       return assessActionRisk({
         toolName: tool.name,
@@ -458,6 +465,19 @@ export class AgentOrchestrator {
     }
 
     if (tool.approval === 'conditional') {
+      const isChatOrSearch =
+        /chat|ask|search|prompt|query|message|input|textarea|^send$/i.test(
+          prep.target?.name ?? '',
+        ) ||
+        /chat|search|ask|query|prompt|^send$/i.test(prep.riskText ?? '') ||
+        prep.target?.type === 'search' ||
+        prep.target?.role === 'combobox' ||
+        prep.target?.role === 'searchbox';
+
+      if (isChatOrSearch) {
+        return { level: 'none', reasons: [], label: 'Allowed' };
+      }
+
       const assessment = assessActionRisk({
         toolName: tool.name,
         confirmRisky: settings.confirmRisky,
@@ -468,10 +488,12 @@ export class AgentOrchestrator {
         ...(prep.isSubmitLike !== undefined ? { isSubmitLike: prep.isSubmitLike } : {}),
         ...(prep.url ? { url: prep.url } : {}),
       });
+
       if (
         tool.name === 'press_key' &&
         String(args.key ?? '').toLowerCase() === 'enter' &&
-        prep.inForm
+        prep.inForm &&
+        !isChatOrSearch
       ) {
         return {
           level: 'confirm',

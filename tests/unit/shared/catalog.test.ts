@@ -16,8 +16,8 @@ import {
 } from '@gbl/shared';
 
 describe('tool catalog', () => {
-  it('contains exactly 52 tools with unique names', () => {
-    expect(TOOLS).toHaveLength(52);
+  it('contains exactly 58 tools with unique names', () => {
+    expect(TOOLS).toHaveLength(58);
     const names = TOOLS.map((tool) => tool.name);
     expect(new Set(names).size).toBe(names.length);
     expect(TOOL_BY_NAME.size).toBe(names.length);

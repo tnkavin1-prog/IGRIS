@@ -27,6 +27,7 @@ import {
   type PageFingerprint,
   type PageSnapshot,
   type TargetLocator,
+  type VisualBlackboardLesson,
 } from '@gbl/shared';
 import { PageBridge, isNavigationError } from './page.js';
 import { DANGEROUS_DOWNLOAD, assessDownload } from './downloads.js';
@@ -264,9 +265,46 @@ export class ToolExecutor {
   constructor(private readonly deps: ToolExecutorDeps) {}
 
   private async activeTab(): Promise<chrome.tabs.Tab> {
-    let tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    if (!tabs[0]) tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    const tab = tabs[0];
+    const extensionUrlPrefix =
+      typeof chrome !== 'undefined' && chrome.runtime?.getURL
+        ? chrome.runtime.getURL('')
+        : 'chrome-extension://';
+
+    // 1. Check if background recorded the active normal Chrome tab
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage?.session?.get) {
+        const stored = await chrome.storage.session.get(['gbl_active_tab_id']);
+        if (typeof stored?.gbl_active_tab_id === 'number') {
+          const candidate = await chrome.tabs.get(stored.gbl_active_tab_id);
+          if (candidate && !candidate.url?.startsWith(extensionUrlPrefix)) {
+            return candidate;
+          }
+        }
+      }
+    } catch {
+      /* fallback to queries */
+    }
+
+    let tabs: chrome.tabs.Tab[] = [];
+    try {
+      tabs = await chrome.tabs.query({
+        active: true,
+        windowType: 'normal',
+        lastFocusedWindow: true,
+      });
+      if (!tabs[0]) {
+        tabs = await chrome.tabs.query({ active: true, windowType: 'normal' });
+      }
+    } catch {
+      /* ignore */
+    }
+    if (!tabs[0]) {
+      tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    }
+    if (!tabs[0]) {
+      tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    }
+    const tab = tabs.find((t) => !t.url?.startsWith(extensionUrlPrefix)) ?? tabs[0];
     if (!tab) {
       throw new ToolError(ERROR_CODES.NO_ACTIVE_TAB, 'There is no active browser tab.', {
         hint: 'Open a website in Chrome, then retry.',
@@ -274,6 +312,50 @@ export class ToolExecutor {
       });
     }
     return tab;
+  }
+
+  private async getNormalBrowserWindowId(): Promise<number | undefined> {
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage?.session?.get) {
+        const stored = await chrome.storage.session.get(['gbl_active_window_id']);
+        if (typeof stored?.gbl_active_window_id === 'number') {
+          try {
+            const win = await chrome.windows.get(stored.gbl_active_window_id);
+            if (win && win.type === 'normal') return win.id;
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      if (typeof chrome !== 'undefined' && chrome.windows?.getAll) {
+        const normalWins = await chrome.windows.getAll({ windowTypes: ['normal'] });
+        if (normalWins[0]?.id !== undefined) return normalWins[0].id;
+      }
+    } catch {
+      /* ignore */
+    }
+    return undefined;
+  }
+
+  private async recordActiveTab(tab: chrome.tabs.Tab): Promise<void> {
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage?.session?.set && tab.id) {
+        await chrome.storage.session.set({
+          gbl_active_tab_id: tab.id,
+          gbl_active_window_id: tab.windowId,
+        });
+      }
+      if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+        chrome.runtime
+          .sendMessage({
+            type: 'GBL_ACTIVE_TAB_CHANGED',
+            tab: { id: tab.id, title: tab.title, url: tab.url, windowId: tab.windowId },
+          })
+          .catch(() => undefined);
+      }
+    } catch {
+      /* ignore */
+    }
   }
 
   private async tabById(tabId: number): Promise<chrome.tabs.Tab> {
@@ -990,14 +1072,28 @@ export class ToolExecutor {
       }
 
       case 'open_tab': {
-        const valid = validateNavigationUrl(strArg(args, 'url') ?? '');
+        const rawUrl = strArg(args, 'url') ?? '';
+        let valid = validateNavigationUrl(rawUrl);
         if (!valid.ok || !valid.url) {
-          throw new ToolError(ERROR_CODES.URL_BLOCKED, valid.reason ?? 'URL is not allowed.', {
-            retryable: false,
-          });
+          if (!rawUrl || /^(chrome:\/\/|about:blank)/i.test(rawUrl)) {
+            valid = { ok: true, url: 'https://www.google.com' };
+          } else {
+            throw new ToolError(ERROR_CODES.URL_BLOCKED, valid.reason ?? 'URL is not allowed.', {
+              retryable: false,
+            });
+          }
         }
-        const tab = await chrome.tabs.create({ url: valid.url, active: true });
+        const normalWinId = await this.getNormalBrowserWindowId();
+        const tab = await chrome.tabs.create({
+          ...(typeof normalWinId === 'number' ? { windowId: normalWinId } : {}),
+          url: valid.url,
+          active: true,
+        });
+        if (typeof normalWinId === 'number' && chrome.windows?.update) {
+          void chrome.windows.update(normalWinId, { focused: true }).catch(() => undefined);
+        }
         const loaded = await this.waitForTabLoad(this.requireTabId(tab));
+        void this.recordActiveTab(loaded);
         return {
           data: { opened: tabInfo(loaded) },
           summary: `Opened “${inline(loaded.title) || valid.url}”.`,
@@ -1036,6 +1132,7 @@ export class ToolExecutor {
         await chrome.tabs.update(tabId, { active: true });
         await chrome.windows.update(target.windowId, { focused: true }).catch(() => undefined);
         const loaded = target.status === 'loading' ? await this.waitForTabLoad(tabId) : target;
+        void this.recordActiveTab(loaded);
         return {
           data: tabInfo(loaded),
           summary: `Switched to “${inline(loaded.title) || 'tab'}”.`,
@@ -1073,6 +1170,7 @@ export class ToolExecutor {
           await chrome.tabs.update(tabId, { url: valid.url });
         }
         const loaded = await this.waitForTabLoad(tabId);
+        void this.recordActiveTab(loaded);
         return {
           data: { navigated: tabInfo(loaded) },
           summary: `Navigated to “${inline(loaded.title) || valid.url}”.`,
@@ -1322,6 +1420,7 @@ export class ToolExecutor {
           page.op<ActionResult>('click', args),
         );
         if (outcome.kind === 'navigation') {
+          void this.recordActiveTab(outcome.tab);
           return {
             data: this.navigationEvidence(outcome.tab, 'click'),
             summary: `Clicked; the page navigated to “${inline(outcome.tab.title) || 'a new page'}”.`,
@@ -1732,6 +1831,136 @@ export class ToolExecutor {
         };
       }
 
+      case 'teach_visual_blackboard': {
+        const title = strArg(args, 'title') || 'Visual Blackboard Lesson';
+        const topic = strArg(args, 'topic') || 'Academic Concepts & Geometry';
+        const diagramType = (strArg(args, 'diagram_type') ||
+          'geometry') as VisualBlackboardLesson['diagramType'];
+        const latexFormula = strArg(args, 'latex_formula') || '';
+        const rawSvg = typeof args.svg_markup === 'string' ? args.svg_markup.trim() : '';
+        const teachingNarration = strArg(args, 'teaching_narration') || '';
+        const openInNewTab = Boolean(args.open_in_new_tab);
+
+        // Process and normalize steps array
+        let steps: string[] = [];
+        if (Array.isArray(args.steps)) {
+          steps = args.steps.map((s) => String(s).trim()).filter(Boolean);
+        } else if (typeof args.steps === 'string') {
+          steps = [args.steps];
+        }
+        if (steps.length === 0) {
+          steps = [
+            'Observe the geometric figure and notation.',
+            'Apply the governing mathematical theorem.',
+          ];
+        }
+
+        // Validate and ensure a well-formed SVG blackboard drawing
+        let svgMarkup = rawSvg;
+        if (!svgMarkup.includes('<svg')) {
+          svgMarkup = `<svg viewBox="0 0 500 320" xmlns="http://www.w3.org/2000/svg" style="background:rgba(14,16,24,0.9);font-family:sans-serif;">
+            <defs>
+              <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#grid)" />
+            <text x="250" y="160" fill="#ffffff" font-size="18" text-anchor="middle" font-weight="bold">${inline(title)}</text>
+          </svg>`;
+        }
+
+        const lesson: VisualBlackboardLesson = {
+          id: `lesson_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          title,
+          topic,
+          diagramType,
+          latexFormula,
+          svgMarkup,
+          steps,
+          activeStep: 0,
+          teachingNarration,
+          createdAt: Date.now(),
+        };
+
+        // Broadcast to Chrome storage and runtime
+        try {
+          if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+            await chrome.storage.local.set({ gbl_active_blackboard: lesson });
+          }
+          if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+            chrome.runtime
+              .sendMessage({
+                type: 'GBL_BLACKBOARD_UPDATE',
+                lesson,
+              })
+              .catch(() => undefined);
+          }
+        } catch {
+          /* ignore runtime broadcast errors */
+        }
+
+        let tabUrl: string | undefined;
+        if (openInNewTab && typeof chrome !== 'undefined' && chrome.tabs?.create) {
+          const normalWinId = await this.getNormalBrowserWindowId();
+          const tab = await chrome.tabs.create({
+            ...(typeof normalWinId === 'number' ? { windowId: normalWinId } : {}),
+            url: chrome.runtime.getURL('blackboard.html'),
+            active: true,
+          });
+          if (typeof normalWinId === 'number' && chrome.windows?.update) {
+            void chrome.windows.update(normalWinId, { focused: true }).catch(() => undefined);
+          }
+          tabUrl = tab.url;
+        }
+
+        return {
+          data: {
+            lessonId: lesson.id,
+            title: lesson.title,
+            topic: lesson.topic,
+            diagramType: lesson.diagramType,
+            stepsCount: lesson.steps.length,
+            tabOpened: Boolean(tabUrl),
+            note: "The blackboard visual lesson has been drawn and is now displayed on the user's screen with full chalkboard diagrams and step-by-step formulas.",
+          },
+          summary: `Drawn visual blackboard lesson: “${inline(title)}” with ${lesson.steps.length} interactive steps.`,
+          changed: true,
+        };
+      }
+
+      case 'open_teaching_blackboard_tab': {
+        const title = strArg(args, 'title') || 'Interactive Teaching Blackboard';
+        const topic = strArg(args, 'topic');
+        let tabId: number | undefined;
+        let tabUrl: string | undefined;
+
+        if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
+          const normalWinId = await this.getNormalBrowserWindowId();
+          const tab = await chrome.tabs.create({
+            ...(typeof normalWinId === 'number' ? { windowId: normalWinId } : {}),
+            url: chrome.runtime.getURL('blackboard.html'),
+            active: true,
+          });
+          if (typeof normalWinId === 'number' && chrome.windows?.update) {
+            void chrome.windows.update(normalWinId, { focused: true }).catch(() => undefined);
+          }
+          tabId = tab.id;
+          tabUrl = tab.url;
+        }
+
+        return {
+          data: {
+            tabId,
+            url: tabUrl,
+            title,
+            topic,
+            note: 'Opened dedicated full-screen Teaching Blackboard tab.',
+          },
+          summary: `Opened full-screen Teaching Blackboard tab for “${inline(title)}”.`,
+          changed: true,
+        };
+      }
+
       case 'search_google_images': {
         const query = strArg(args, 'query');
         if (!query) {
@@ -2014,8 +2243,27 @@ export class ToolExecutor {
     if (tab.status === 'loading') {
       await this.waitForTabLoad(tabId);
     }
-    const page = await this.pageFor(tab);
-    const fp = await page.op<PageFingerprint>('grabFingerprint');
+    let fp: PageFingerprint = {
+      url: tab.url ?? '',
+      title: tab.title ?? '',
+      generation: 0,
+      scrollY: 0,
+      scrollMax: 0,
+      elementCount: 0,
+      textLength: 0,
+      viewportWidth: tab.width ?? 1280,
+      viewportHeight: tab.height ?? 720,
+      dpr: 1,
+      documentId: 'doc_fallback',
+      digest: '',
+    };
+    try {
+      const page = await this.pageFor(tab);
+      fp = await page.op<PageFingerprint>('grabFingerprint');
+    } catch {
+      // Unscriptable page (e.g. local PDF file:///...pdf, Chrome PDF viewer).
+      // We gracefully use tab metadata and let captureVisibleTab capture the visual rendering.
+    }
     let png: string;
     try {
       png = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });

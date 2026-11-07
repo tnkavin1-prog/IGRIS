@@ -14,6 +14,16 @@ import '../sidepanel/styles.css';
 import './overlay.css';
 
 document.documentElement.dataset.surface = 'overlay';
+if (typeof window !== 'undefined' && window.self === window.top) {
+  document.documentElement.classList.add('is-standalone-hud');
+  if (document.body) {
+    document.body.classList.add('is-standalone-hud');
+  } else {
+    window.addEventListener('DOMContentLoaded', () => {
+      document.body?.classList.add('is-standalone-hud');
+    });
+  }
+}
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   override state: { error: Error | null } = { error: null };

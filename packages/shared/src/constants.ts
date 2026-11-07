@@ -15,6 +15,7 @@ export const BRIDGE_ORIGIN = `http://${BRIDGE_HOST}:${BRIDGE_PORT}`;
 export const BRIDGE_HEALTH_PATH = '/api/health';
 export const BRIDGE_TOKEN_PATH = '/api/token';
 export const BRIDGE_CONFIG_PATH = '/api/config';
+export const BRIDGE_PIN_PATH = '/api/pin';
 
 /** Gemini Live wire protocol. */
 export const LIVE_WS_ORIGIN =

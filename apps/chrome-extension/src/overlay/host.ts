@@ -3,7 +3,7 @@
  *
  * Injected on demand with chrome.scripting when the user asks for the
  * assistant. It does one thing: pin a chrome-extension:// iframe over the page
- * and move/resize it on request. All privileged work happens inside the frame,
+ * and resize/move it on request. All privileged work happens inside the frame,
  * which is an extension page with its own CSP, microphone access, and
  * chrome.tabs — a content script could not do any of that reliably.
  *
@@ -13,23 +13,34 @@
  */
 
 const HOST_ID = 'gbl-overlay-host';
-const FRAME_WIDTH = 404;
-const FRAME_HEIGHT = 648;
-const ORB_SIZE = 64;
 const MARGIN = 20;
+const POSITION_KEY = 'gbl_overlay_pos';
+
+const SIZES = {
+  pill: { width: 380, height: 68, radius: 34 },
+  panel: { width: 440, height: 320, radius: 24 },
+  expanded: { width: 920, height: 860, radius: 24 },
+  orb: { width: 68, height: 68, radius: 34 },
+} as const;
+
+type OverlayView = keyof typeof SIZES;
 
 interface HostMessage {
   source?: string;
   type?: string;
-  collapsed?: boolean;
+  view?: unknown;
   dx?: number;
   dy?: number;
 }
 
 interface OverlayState {
-  collapsed: boolean;
+  view: OverlayView;
   left: number | null;
   top: number | null;
+}
+
+function isView(value: unknown): value is OverlayView {
+  return value === 'pill' || value === 'panel' || value === 'expanded' || value === 'orb';
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -39,9 +50,23 @@ function clamp(value: number, min: number, max: number): number {
 function mount(): void {
   const previous = document.getElementById(HOST_ID);
   if (previous) {
-    // Already mounted: treat the second request as "show me again".
-    previous.style.display = '';
-    previous.dispatchEvent(new CustomEvent('gbl-overlay-focus'));
+    previous.remove();
+  }
+
+  // Strictly avoid embedding an extension iframe in Chrome's PDF viewer or on PDF documents
+  // where extension iframes are blocked by Chromium's PDF Content Security Policy
+  const isPdf =
+    document.contentType === 'application/pdf' ||
+    window.location.href.toLowerCase().includes('.pdf') ||
+    window.location.pathname.toLowerCase().endsWith('.pdf') ||
+    Boolean(document.querySelector('embed[type="application/pdf"], pdf-viewer'));
+
+  if (isPdf) {
+    try {
+      chrome.runtime.sendMessage({ type: 'GBL_OVERLAY_BLOCKED' }).catch(() => undefined);
+    } catch {
+      /* ignore */
+    }
     return;
   }
 
@@ -51,12 +76,16 @@ function mount(): void {
   // like `div { position: static !important }` cannot dislodge the frame.
   host.style.setProperty('all', 'initial', 'important');
   host.style.setProperty('position', 'fixed', 'important');
+  host.style.setProperty('top', '0', 'important');
+  host.style.setProperty('left', '0', 'important');
+  host.style.setProperty('width', '100vw', 'important');
+  host.style.setProperty('height', '100vh', 'important');
   host.style.setProperty('z-index', '2147483647', 'important');
   host.style.setProperty('margin', '0', 'important');
   host.style.setProperty('padding', '0', 'important');
   host.style.setProperty('border', '0', 'important');
   host.style.setProperty('background', 'transparent', 'important');
-  host.style.setProperty('pointer-events', 'auto', 'important');
+  host.style.setProperty('pointer-events', 'none', 'important');
 
   const shadow = host.attachShadow({ mode: 'open' });
 
@@ -66,34 +95,60 @@ function mount(): void {
     .wrap {
       position: fixed;
       right: ${MARGIN}px;
-      bottom: ${MARGIN}px;
-      width: ${FRAME_WIDTH}px;
-      height: ${FRAME_HEIGHT}px;
-      border-radius: 22px;
+      top: 24px;
+      width: ${SIZES.panel.width}px;
+      height: ${SIZES.panel.height}px;
+      border-radius: ${SIZES.panel.radius}px;
       overflow: hidden;
-      background: #07070d;
+      pointer-events: auto;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 40%, rgba(255, 255, 255, 0.01) 100%), rgba(14, 16, 24, 0.45);
+      backdrop-filter: blur(36px) saturate(190%) brightness(108%);
+      -webkit-backdrop-filter: blur(36px) saturate(190%) brightness(108%);
+      border: 1px solid rgba(255, 255, 255, 0.28);
       box-shadow:
-        0 28px 90px rgba(0, 0, 0, 0.62),
-        0 0 0 1px rgba(255, 255, 255, 0.09),
-        0 0 0 6px rgba(10, 10, 18, 0.18);
+        0 24px 70px -10px rgba(0, 0, 0, 0.55),
+        0 0 25px rgba(255, 255, 255, 0.12),
+        inset 0 1.5px 1.5px 0 rgba(255, 255, 255, 0.55),
+        inset 0 -1px 1px 0 rgba(0, 0, 0, 0.25);
       transition:
-        width 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
-        height 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
-        border-radius 160ms ease;
+        width 240ms cubic-bezier(0.16, 1, 0.3, 1),
+        height 240ms cubic-bezier(0.16, 1, 0.3, 1),
+        border-radius 240ms cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 240ms ease,
+        transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
       will-change: width, height, left, top;
     }
-    .wrap[data-collapsed='true'] {
-      width: ${ORB_SIZE}px;
-      height: ${ORB_SIZE}px;
-      border-radius: 50%;
+    .wrap[data-view='pill'] {
+      width: ${SIZES.pill.width}px;
+      height: ${SIZES.pill.height}px;
+      border-radius: ${SIZES.pill.radius}px;
+    }
+    .wrap[data-view='panel'] {
+      width: ${SIZES.panel.width}px;
+      height: ${SIZES.panel.height}px;
+      border-radius: ${SIZES.panel.radius}px;
+    }
+    .wrap[data-view='expanded'] {
+      width: min(${SIZES.expanded.width}px, calc(100vw - 32px)) !important;
+      height: min(${SIZES.expanded.height}px, calc(100vh - 44px)) !important;
+      border-radius: ${SIZES.expanded.radius}px;
+    }
+    .wrap.is-dragging {
+      transition: none !important;
+      user-select: none !important;
+    }
+    .wrap[data-view='orb'] {
+      width: ${SIZES.orb.width}px;
+      height: ${SIZES.orb.height}px;
+      border-radius: ${SIZES.orb.radius}px;
     }
     iframe {
       display: block;
       width: 100%;
       height: 100%;
       border: 0;
-      background: transparent;
-      color-scheme: dark;
+      background: transparent !important;
+      background-color: transparent !important;
     }
     @media (prefers-reduced-motion: reduce) {
       .wrap { transition: none; }
@@ -102,56 +157,117 @@ function mount(): void {
 
   const wrap = document.createElement('div');
   wrap.className = 'wrap';
-  wrap.dataset.collapsed = 'false';
+  wrap.dataset.view = 'panel';
 
   const frame = document.createElement('iframe');
   frame.src = chrome.runtime.getURL('overlay.html');
   frame.title = 'Gemini Browser Live assistant';
   frame.setAttribute('allow', 'microphone');
   frame.allow = 'microphone';
+  frame.setAttribute('allowtransparency', 'true');
+  frame.style.setProperty('background', 'transparent', 'important');
+  frame.style.setProperty('background-color', 'transparent', 'important');
 
   wrap.append(frame);
   shadow.append(style, wrap);
-  document.documentElement.append(host);
+  if (document.body) {
+    document.body.append(host);
+  } else {
+    document.documentElement.append(host);
+  }
 
-  const state: OverlayState = { collapsed: false, left: null, top: null };
+  const state: OverlayState = { view: 'panel', left: null, top: null };
 
   const applyGeometry = (): void => {
-    if (state.left === null || state.top === null) {
-      wrap.style.left = '';
-      wrap.style.top = '';
-      wrap.style.right = `${MARGIN}px`;
-      wrap.style.bottom = `${MARGIN}px`;
+    const isExpanded = state.view === 'expanded';
+
+    if (isExpanded) {
+      // Maximize cleanly over the browser tab with an elegant 16px frosted glass margin
+      wrap.style.setProperty('left', '16px', 'important');
+      wrap.style.setProperty('top', '16px', 'important');
+      wrap.style.setProperty('right', '16px', 'important');
+      wrap.style.setProperty('bottom', '16px', 'important');
+      wrap.style.setProperty('width', 'calc(100vw - 32px)', 'important');
+      wrap.style.setProperty('height', 'calc(100vh - 32px)', 'important');
+      wrap.style.setProperty('border-radius', '24px', 'important');
       return;
     }
-    const width = state.collapsed ? ORB_SIZE : FRAME_WIDTH;
-    const height = state.collapsed ? ORB_SIZE : FRAME_HEIGHT;
-    const maxLeft = window.innerWidth - width - 4;
-    const maxTop = window.innerHeight - height - 4;
-    wrap.style.left = `${clamp(state.left, 4, maxLeft)}px`;
-    wrap.style.top = `${clamp(state.top, 4, maxTop)}px`;
-    wrap.style.right = 'auto';
-    wrap.style.bottom = 'auto';
+
+    // Normal view: compact floating panel
+    wrap.style.setProperty('width', `${SIZES.panel.width}px`, 'important');
+    wrap.style.setProperty('height', `${SIZES.panel.height}px`, 'important');
+    wrap.style.setProperty('border-radius', `${SIZES.panel.radius}px`, 'important');
+    wrap.style.removeProperty('bottom');
+
+    if (state.left === null || state.top === null) {
+      wrap.style.removeProperty('left');
+      wrap.style.setProperty('top', '24px', 'important');
+      wrap.style.setProperty('right', `${MARGIN}px`, 'important');
+      return;
+    }
+
+    const maxLeft = Math.max(16, (window.innerWidth || 1200) - SIZES.panel.width - 16);
+    const maxTop = Math.max(16, (window.innerHeight || 800) - SIZES.panel.height - 16);
+    state.left = clamp(state.left, 16, maxLeft);
+    state.top = clamp(state.top, 16, maxTop);
+    wrap.style.setProperty('left', `${state.left}px`, 'important');
+    wrap.style.setProperty('top', `${state.top}px`, 'important');
+    wrap.style.removeProperty('right');
   };
+
+  // Synchronize overlay position across all tabs
+  try {
+    const storageArea =
+      typeof chrome !== 'undefined' && chrome.storage?.local
+        ? chrome.storage.local
+        : typeof chrome !== 'undefined' && chrome.storage?.session
+          ? chrome.storage.session
+          : null;
+
+    if (storageArea) {
+      void storageArea
+        .get(POSITION_KEY)
+        .then((data) => {
+          const pos = data?.[POSITION_KEY];
+          if (pos && typeof pos.left === 'number' && typeof pos.top === 'number') {
+            state.left = pos.left;
+            state.top = pos.top;
+            applyGeometry();
+          }
+        })
+        .catch(() => undefined);
+
+      chrome.storage?.onChanged?.addListener((changes) => {
+        if (wrap.classList.contains('is-dragging')) return;
+        if (changes[POSITION_KEY]) {
+          const next = changes[POSITION_KEY].newValue;
+          if (next && typeof next.left === 'number' && typeof next.top === 'number') {
+            state.left = next.left;
+            state.top = next.top;
+            applyGeometry();
+          }
+        }
+      });
+    }
+  } catch {
+    /* ignore */
+  }
 
   const postState = (): void => {
-    frame.contentWindow?.postMessage(
-      { source: 'gbl-host', type: 'state', collapsed: state.collapsed },
-      '*',
-    );
+    frame.contentWindow?.postMessage({ source: 'gbl-host', type: 'state', view: state.view }, '*');
   };
 
-  const collapse = (collapsed: boolean): void => {
-    state.collapsed = collapsed;
-    wrap.dataset.collapsed = String(collapsed);
+  const setView = (view: OverlayView): void => {
+    state.view = view;
+    wrap.dataset.view = view;
     applyGeometry();
-    postState();
   };
 
   const remove = (): void => {
     window.removeEventListener('message', onMessage);
     window.removeEventListener('resize', applyGeometry);
     host.remove();
+    chrome.runtime.sendMessage({ type: 'GBL_CLOSE_OVERLAY' }).catch(() => undefined);
   };
 
   const onMessage = (event: MessageEvent): void => {
@@ -163,20 +279,51 @@ function mount(): void {
       case 'ready':
         postState();
         break;
-      case 'collapse':
-        collapse(data.collapsed === true);
+      case 'view':
+        if (isView(data.view)) {
+          setView(data.view);
+          postState();
+        }
         break;
       case 'close':
         remove();
         break;
+      case 'dragStart': {
+        wrap.classList.add('is-dragging');
+        const rect = wrap.getBoundingClientRect();
+        state.left = rect.left;
+        state.top = rect.top;
+        break;
+      }
       case 'drag': {
         const dx = Number(data.dx ?? 0);
         const dy = Number(data.dy ?? 0);
         if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
-        const rect = wrap.getBoundingClientRect();
-        state.left = rect.left + dx;
-        state.top = rect.top + dy;
+        state.left = (state.left ?? 0) + dx;
+        state.top = (state.top ?? 0) + dy;
         applyGeometry();
+        break;
+      }
+      case 'dragEnd': {
+        wrap.classList.remove('is-dragging');
+        applyGeometry();
+        try {
+          const storageArea =
+            typeof chrome !== 'undefined' && chrome.storage?.local
+              ? chrome.storage.local
+              : typeof chrome !== 'undefined' && chrome.storage?.session
+                ? chrome.storage.session
+                : null;
+          if (storageArea && state.left !== null && state.top !== null) {
+            void storageArea
+              .set({
+                [POSITION_KEY]: { left: state.left, top: state.top },
+              })
+              .catch(() => undefined);
+          }
+        } catch {
+          /* ignore */
+        }
         break;
       }
       default:
@@ -187,9 +334,23 @@ function mount(): void {
   window.addEventListener('message', onMessage);
   window.addEventListener('resize', applyGeometry);
 
+  try {
+    if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
+      chrome.runtime.onMessage.addListener((msg) => {
+        if (msg?.type === 'GBL_SET_OVERLAY_VISIBLE') {
+          host.style.display = msg.visible ? '' : 'none';
+          if (msg.visible) applyGeometry();
+        }
+      });
+    }
+  } catch {
+    /* ignore */
+  }
+
   host.addEventListener('gbl-overlay-focus', () => {
-    collapse(false);
-    postState();
+    // A second request from the toolbar means "show me the assistant", so it
+    // opens the full panel rather than leaving a pill the user may not notice.
+    setView('panel');
   });
 
   applyGeometry();

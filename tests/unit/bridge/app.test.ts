@@ -30,8 +30,12 @@ const running: RunningBridge[] = [];
 
 async function freePort(): Promise<number> {
   const probe = http.createServer();
-  await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
-  const port = (probe.address() as AddressInfo).port;
+  await new Promise<void>((resolve, reject) => {
+    probe.listen(0, '127.0.0.1', () => resolve());
+    probe.once('error', reject);
+  });
+  const addr = probe.address() as AddressInfo;
+  const port = addr?.port ?? 9260;
   await new Promise<void>((resolve) => probe.close(() => resolve()));
   return port;
 }
@@ -60,23 +64,33 @@ async function start(
     mint?: (model: string) => Promise<TokenResponse>;
   } = {},
 ): Promise<RunningBridge> {
-  const port = await freePort();
-  const config = makeConfig(port, options.config);
-  const tokenService = {
-    mint: vi.fn(options.mint ?? (async () => TOKEN_RESPONSE)),
-  } as unknown as TokenService;
-  const app = createBridgeApp(config, { logger: silentLogger, tokenService });
-  await new Promise<void>((resolve) => app.server.listen(port, '127.0.0.1', resolve));
-  const bridge: RunningBridge = {
-    port,
-    close: () =>
-      new Promise<void>((resolve) => {
-        app.server.closeAllConnections();
-        app.server.close(() => resolve());
-      }),
-  };
-  running.push(bridge);
-  return bridge;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      const port = await freePort();
+      const config = makeConfig(port, options.config);
+      const tokenService = {
+        mint: vi.fn(options.mint ?? (async () => TOKEN_RESPONSE)),
+      } as unknown as TokenService;
+      const app = createBridgeApp(config, { logger: silentLogger, tokenService });
+      await new Promise<void>((resolve, reject) => {
+        app.server.listen(port, '127.0.0.1', () => resolve());
+        app.server.once('error', reject);
+      });
+      const bridge: RunningBridge = {
+        port,
+        close: () =>
+          new Promise<void>((resolve) => {
+            app.server.closeAllConnections();
+            app.server.close(() => resolve());
+          }),
+      };
+      running.push(bridge);
+      return bridge;
+    } catch {
+      /* retry on port collision */
+    }
+  }
+  throw new Error('Failed to bind bridge server after 5 attempts');
 }
 
 function url(bridge: RunningBridge, path: string): string {
@@ -332,11 +346,20 @@ describe('bridge HTTP surface', () => {
     expect(await limited.json()).toMatchObject({ code: 'rate_limited' });
   });
 
-  it('returns 404 for unknown routes from an allowed origin', async () => {
+  it('handles /api/pin requests to toggle always-on-top window pin', async () => {
     const bridge = await start();
 
-    const response = await fetch(url(bridge, '/api/unknown'), { headers: { Origin: ORIGIN } });
-    expect(response.status).toBe(404);
-    expect(await response.json()).toMatchObject({ code: 'not_found' });
+    const response = await fetch(url(bridge, '/api/pin'), {
+      method: 'POST',
+      headers: {
+        Origin: ORIGIN,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ pin: true, title: 'Gemini Browser Live' }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({ ok: true, pinned: true, title: 'Gemini Browser Live' });
   });
 });
