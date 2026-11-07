@@ -188,19 +188,6 @@ export async function openDesktopPopup(prompt?: string): Promise<boolean> {
         desktopWindowId = null;
       }
     }
-    if (existing && typeof existing.id === 'number') {
-      try {
-        const updateInfo: chrome.windows.UpdateInfo = { focused: true, drawAttention: true };
-        if (existing.state === 'minimized') {
-          updateInfo.state = 'normal';
-        }
-        await chrome.windows.update(existing.id, updateInfo);
-        desktopWindowId = existing.id;
-        return true;
-      } catch {
-        desktopWindowId = null;
-      }
-    }
 
     // 2. Compute default or saved position
     let top = 80;
@@ -338,7 +325,7 @@ chrome.action.onClicked.addListener((tab) => {
   void handleAskGemini({
     tab,
     getActiveTab: activeNormalTab,
-    fallbackSummon: (prompt) => openDesktopPopup(prompt),
+    fallbackSummon: (prompt) => summonInBrowser(prompt, tab),
   });
 });
 
@@ -349,10 +336,29 @@ chrome.contextMenus?.onClicked?.addListener((info, tab) => {
       tab,
       info,
       getActiveTab: activeNormalTab,
-      fallbackSummon: (prompt) => openDesktopPopup(prompt),
+      fallbackSummon: (prompt) => summonInBrowser(prompt, tab),
     });
   }
 });
+
+/**
+ * Open Gemini directly in Chrome (Side Panel) or fall back to companion popup window.
+ */
+async function summonInBrowser(prompt?: string, tab?: chrome.tabs.Tab): Promise<boolean> {
+  const winId = tab?.windowId;
+  if (typeof winId === 'number' && typeof chrome.sidePanel?.open === 'function') {
+    try {
+      await chrome.sidePanel.open({ windowId: winId });
+      if (prompt) {
+        void sendToSurface('GBL_SET_PROMPT', { prompt });
+      }
+      return true;
+    } catch {
+      /* fallback to popup window */
+    }
+  }
+  return openDesktopPopup(prompt);
+}
 
 /**
  * Record and broadcast active tab changes so the HUD shifts its vision pointer immediately.
@@ -409,10 +415,10 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
   }
 });
 
-async function sendToSurface(type: string): Promise<boolean> {
+async function sendToSurface(type: string, extra?: Record<string, unknown>): Promise<boolean> {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     try {
-      await chrome.runtime.sendMessage({ type });
+      await chrome.runtime.sendMessage({ type, ...extra });
       return true;
     } catch {
       await delay(150);
