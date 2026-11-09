@@ -38,6 +38,7 @@ export interface ConversationMessage {
   title?: string;
   detail?: string;
   status?: 'running' | 'ok' | 'error';
+  imageUrl?: string;
   at: number;
 }
 
@@ -184,6 +185,7 @@ export interface LaunchResult {
   ok: boolean;
   pid?: number;
   appName: string;
+  windowTitle?: string;
   error?: string;
 }
 
@@ -213,7 +215,10 @@ export type WorkflowActionType =
   | 'run_command'
   | 'verify_condition'
   | 'clipboard_read'
-  | 'clipboard_write';
+  | 'clipboard_write'
+  | 'execute_skill'
+  | 'operator_goal'
+  | 'ai_dispatch';
 
 export type StepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'needs_approval';
 

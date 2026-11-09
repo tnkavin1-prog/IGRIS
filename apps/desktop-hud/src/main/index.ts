@@ -1,6 +1,20 @@
 import { app, ipcMain, globalShortcut, shell } from 'electron';
 import { join } from 'node:path';
+import { appendFileSync } from 'node:fs';
 import { CDPClient } from './cdp-client.js';
+
+process.on('uncaughtException', (err) => {
+  console.error('[UncaughtException]', err);
+  try {
+    appendFileSync('E:\\Gematron\\logs\\electron-error.log', `[${new Date().toISOString()}] UncaughtException: ${err?.stack || err}\n`);
+  } catch {}
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[UnhandledRejection]', reason);
+  try {
+    appendFileSync('E:\\Gematron\\logs\\electron-error.log', `[${new Date().toISOString()}] UnhandledRejection: ${(reason as Error)?.stack || reason}\n`);
+  } catch {}
+});
 import { ChromeLauncher } from './chrome-launcher.js';
 import { GeminiLiveService } from './gemini-live.js';
 import { ControlServer } from './control-server.js';
@@ -21,17 +35,20 @@ import type {
   WindowTilingLayout,
 } from './types.js';
 
-// Register custom Windows URI protocol (e.g. gemetron://summon)
-if (process.defaultApp) {
-  if (process.argv.length >= 2 && process.argv[1]) {
-    app.setAsDefaultProtocolClient('gemetron', process.execPath, [process.argv[1]]);
+// Register custom Windows URI protocol (e.g. gematron://summon)
+for (const protocol of ['gematron', 'gemetron']) {
+  if (process.defaultApp) {
+    if (process.argv.length >= 2 && process.argv[1]) {
+      app.setAsDefaultProtocolClient(protocol, process.execPath, [process.argv[1]]);
+    }
+  } else {
+    app.setAsDefaultProtocolClient(protocol);
   }
-} else {
-  app.setAsDefaultProtocolClient('gemetron');
 }
 
 // Strictly Singleton: ensure only ONE instance exists across the OS
 const gotLock = app.requestSingleInstanceLock();
+appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] gotLock: ${gotLock}\n`);
 if (!gotLock) {
   console.log('[Singleton] Another instance of Gemini Desktop HUD is already running. Exiting.');
   app.quit();
@@ -42,7 +59,8 @@ if (!gotLock) {
       if (win.isMinimized()) win.restore();
       win.show();
       win.focus();
-      win.setAlwaysOnTop(true, 'screen-saver');
+      win.setAlwaysOnTop(true);
+      win.moveTop();
     }
   });
 
@@ -50,19 +68,41 @@ if (!gotLock) {
   let trayManager: TrayManager | null = null;
 
   app.on('before-quit', () => {
+    appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] app before-quit fired (isQuitting: ${isQuitting})\n`);
     isQuitting = true;
     trayManager?.destroy();
   });
 
+  app.on('will-quit', () => {
+    appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] app will-quit fired\n`);
+  });
+
+  app.on('quit', (_, exitCode) => {
+    appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] app quit fired (exitCode: ${exitCode})\n`);
+  });
+
   const cdpClient = new CDPClient(9222, '127.0.0.1');
-  const liveService = new GeminiLiveService(cdpClient);
-  const controlServer = new ControlServer(9228, '127.0.0.1');
+  let liveService: GeminiLiveService;
+  let controlServer: ControlServer;
 
   app.whenReady().then(async () => {
-    const preloadPath = join(__dirname, 'preload.cjs');
-    const htmlPath = join(__dirname, 'index.html');
+    try {
+      appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] app.whenReady started\n`);
+      liveService = new GeminiLiveService(cdpClient);
+      appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] GeminiLiveService created\n`);
+      controlServer = new ControlServer(9228, '127.0.0.1');
+      appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] ControlServer created\n`);
 
-    const win = createMainWindow(preloadPath, htmlPath);
+      const preloadPath = join(__dirname, 'preload.cjs');
+      const htmlPath = join(__dirname, 'index.html');
+
+      const win = createMainWindow(preloadPath, htmlPath);
+      appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] MainWindow created\n`);
+    try {
+      liveService.input.setDisplayMetrics(liveService.vision.getDisplayMetrics());
+    } catch {
+      /* ignore */
+    }
 
     const summonHUD = () => {
       const w = getMainWindow();
@@ -70,7 +110,8 @@ if (!gotLock) {
         if (w.isMinimized()) w.restore();
         w.show();
         w.focus();
-        w.setAlwaysOnTop(true, 'screen-saver');
+        w.setAlwaysOnTop(true);
+        w.moveTop();
       }
     };
 
@@ -114,7 +155,7 @@ if (!gotLock) {
         },
         onOpenNotes: () => {
           try {
-            void shell.openPath('E:\\Gemetron\\notes');
+            void shell.openPath('E:\\Gematron\\notes');
           } catch {}
         },
         onExit: () => {
@@ -155,8 +196,9 @@ if (!gotLock) {
     // Start background tracking of Chrome tabs
     cdpClient.startTracking(1500);
 
-    // Start in-Chrome loopback summon server (http://127.0.0.1:9224/summon)
+    // Start in-Chrome loopback summon server (http://127.0.0.1:9228/summon)
     await controlServer.start(() => getMainWindow(), cdpClient);
+    appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] ControlServer started on port 9228\n`);
 
     // Auto-launch Chrome with remote debugging if port 9222 is not yet active
     const isChromeActive = await ChromeLauncher.isPortAvailable();
@@ -270,6 +312,10 @@ if (!gotLock) {
     } catch (err) {
       console.warn('[GlobalShortcut] Failed to register Ctrl+Alt+K:', err);
     }
+    appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] app.whenReady completed successfully\n`);
+  } catch (startupErr) {
+    appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] Startup ERROR: ${(startupErr as Error)?.stack || startupErr}\n`);
+  }
   });
 
   // Setup IPC Handlers
@@ -497,16 +543,21 @@ if (!gotLock) {
   );
   ipcMain.handle('clipboard:clear', () => liveService.clipboardService.clear());
 
-  app.on('window-all-closed', () => {
+  app.on('window-all-closed', (e: any) => {
+    appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] app window-all-closed fired (minimizeToTray: ${liveService?.currentSettings?.minimizeToTray})\n`);
+    if (!isQuitting && liveService?.currentSettings?.minimizeToTray) {
+      e?.preventDefault?.();
+      return;
+    }
     try {
       globalShortcut.unregisterAll();
     } catch {
       /* ignore */
     }
     trayManager?.destroy();
-    controlServer.stop();
-    cdpClient.stopTracking();
-    liveService.disconnect();
+    controlServer?.stop?.();
+    cdpClient?.stopTracking?.();
+    liveService?.disconnect?.();
     if (process.platform !== 'darwin') {
       app.quit();
     }

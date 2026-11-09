@@ -1,0 +1,23 @@
+You are DeepSeek V4.1 Flash Free (Primary Backend Agent) for PROJECT GEMATRON.
+
+Task: Implement Subtask 2.1: Application Skill Framework.
+Create the file: E:\Gematron\apps\desktop-hud\src\main\skill-framework.ts
+
+Requirements:
+- TypeScript with standard ESM export syntax.
+- Must compile cleanly under TypeScript 5.9 with apps/desktop-hud/tsconfig.json.
+- Implement and export:
+  1. `export interface SkillActionParam { name: string; type: string; description: string; required?: boolean; default?: unknown; }`
+  2. `export interface SkillActionDefinition { name: string; description: string; parameters?: SkillActionParam[]; dangerous?: boolean; }`
+  3. `export interface SkillResult<T = unknown> { success: boolean; data?: T; error?: string; executionTimeMs?: number; }`
+  4. `export interface ApplicationSkill { id: string; name: string; targetApp: string; description: string; isAvailable(): Promise<boolean>; getActions(): SkillActionDefinition[]; execute(action: string, params: Record<string, unknown>): Promise<SkillResult>; verify(action: string, result: SkillResult): Promise<boolean>; }`
+  5. `export class SkillRegistry`:
+     - Private `skills = new Map<string, ApplicationSkill>()`
+     - `registerSkill(skill: ApplicationSkill): void`
+     - `getSkill(id: string): ApplicationSkill | undefined`
+     - `listSkills(): ApplicationSkill[]`
+     - `hasSkill(id: string): boolean`
+     - `async executeAction(skillId: string, action: string, params?: Record<string, unknown>): Promise<SkillResult>` (validates skill exists, measures time, catches errors cleanly)
+     - `exportCatalog(): Array<{ id: string; name: string; targetApp: string; description: string; actions: SkillActionDefinition[] }>`
+  6. Export a default singleton instance: `export const skillRegistry = new SkillRegistry();`
+- Write the complete code to E:\Gematron\apps\desktop-hud\src\main\skill-framework.ts.

@@ -1,4 +1,5 @@
 import { BrowserWindow, screen } from 'electron';
+import { appendFileSync } from 'node:fs';
 
 let mainWindow: BrowserWindow | null = null;
 let isPinnedAlwaysOnTop = true;
@@ -43,9 +44,44 @@ export function createMainWindow(preloadPath: string, htmlPath: string): Browser
   });
 
   // Ensure window floats above other windows including full screen/maximized Chrome
-  mainWindow.setAlwaysOnTop(true, 'screen-saver');
+  mainWindow.setAlwaysOnTop(true);
+
+  mainWindow.once('ready-to-show', () => {
+    if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+      mainWindow.setAlwaysOnTop(true);
+      mainWindow.moveTop();
+    }
+  });
+
+  mainWindow.webContents.on('console-message', (_, level, message, line, sourceId) => {
+    const lineStr = `[${new Date().toISOString()}] [Renderer] [lvl ${level}] ${message} (${sourceId}:${line})\n`;
+    try {
+      appendFileSync('E:\\Gematron\\logs\\renderer.log', lineStr);
+    } catch {}
+    console.log(`[Renderer Console] [${level}] ${message} (${sourceId}:${line})`);
+  });
+
+  mainWindow.webContents.on('did-fail-load', (_, errorCode, errorDescription) => {
+    const errStr = `[${new Date().toISOString()}] [DesktopHUD] Failed to load HTML: ${errorCode} - ${errorDescription}\n`;
+    try {
+      appendFileSync('E:\\Gematron\\logs\\renderer.log', errStr);
+    } catch {}
+    console.error(`[DesktopHUD] Failed to load HTML: ${errorCode} - ${errorDescription}`);
+  });
+
+  mainWindow.webContents.on('render-process-gone', (_, details) => {
+    const goneStr = `[${new Date().toISOString()}] [DesktopHUD] Render process gone: ${JSON.stringify(details)}\n`;
+    try {
+      appendFileSync('E:\\Gematron\\logs\\renderer.log', goneStr);
+    } catch {}
+    console.error(`[DesktopHUD] Render process gone:`, details);
+  });
 
   mainWindow.loadFile(htmlPath);
+  mainWindow.show();
+  mainWindow.focus();
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -72,7 +108,7 @@ export function toggleMaximize(): boolean {
 export function toggleAlwaysOnTop(): boolean {
   if (!mainWindow) return isPinnedAlwaysOnTop;
   isPinnedAlwaysOnTop = !isPinnedAlwaysOnTop;
-  mainWindow.setAlwaysOnTop(isPinnedAlwaysOnTop, isPinnedAlwaysOnTop ? 'screen-saver' : 'normal');
+  mainWindow.setAlwaysOnTop(isPinnedAlwaysOnTop);
   return isPinnedAlwaysOnTop;
 }
 

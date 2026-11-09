@@ -43,13 +43,13 @@ export class TrayManager {
 
   constructor(options: TrayManagerOptions = {}) {
     this.callbacks = options.callbacks || {};
-    this.iconPath = options.iconPath || resolve('E:\\Gemetron\\assets\\icons\\jarvis.ico');
+    this.iconPath = options.iconPath || resolve('E:\\Gematron\\assets\\icons\\jarvis.ico');
     this.mockMode =
       options.mockMode ??
       (typeof Tray === 'undefined' ||
         typeof Menu === 'undefined' ||
         typeof Menu.buildFromTemplate !== 'function');
-    this.notesDir = options.notesDir || 'E:\\Gemetron\\notes';
+    this.notesDir = options.notesDir || 'E:\\Gematron\\notes';
   }
 
   public setMockMode(enabled: boolean): void {

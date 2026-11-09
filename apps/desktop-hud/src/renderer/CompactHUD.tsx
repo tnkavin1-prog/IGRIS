@@ -13,6 +13,8 @@ import type {
   WorkflowStep,
 } from '../main/types.js';
 import { VisualBlackboard } from './VisualBlackboard.js';
+import { SkillLauncherPanel } from './SkillLauncherPanel.js';
+import { ModelSwitchboard } from './ModelSwitchboard.js';
 
 export interface CompactHUDProps {
   status: LiveHUDStatus;
@@ -162,13 +164,27 @@ export function CompactHUD({
   onToggleSoundMute,
   onSoundVolumeChange,
 }: CompactHUDProps) {
-  const [activeView, setActiveView] = useState<'chat' | 'blackboard' | 'workflow'>('chat');
+  const [activeView, setActiveView] = useState<'chat' | 'blackboard' | 'workflow' | 'skills' | 'models'>('chat');
   const [showKeyboard, setShowKeyboard] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(false);
   const [showDesktopRadar, setShowDesktopRadar] = useState(false);
-  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close More menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setShowMoreMenu(false);
+      }
+    };
+    if (showMoreMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showMoreMenu]);
 
   const isLive = status === 'listening' || status === 'speaking' || status === 'thinking';
 
@@ -202,23 +218,23 @@ export function CompactHUD({
   };
 
   // Status computation
-  let statusText = 'JARVIS v3.8';
+  let statusText = 'Gemini';
   let kineticState: 'idle' | 'listening' | 'speaking' | 'thinking' = 'idle';
 
   if (status === 'connecting') {
-    statusText = 'Initializing…';
+    statusText = 'Connecting…';
     kineticState = 'thinking';
   } else if (status === 'listening') {
-    statusText = 'Voice Online';
+    statusText = 'Online';
     kineticState = 'listening';
   } else if (status === 'speaking') {
-    statusText = 'Synthesizing…';
+    statusText = 'Speaking…';
     kineticState = 'speaking';
   } else if (status === 'thinking') {
-    statusText = 'Computing…';
+    statusText = 'Thinking…';
     kineticState = 'thinking';
   } else if (status === 'error') {
-    statusText = 'Offline (Error)';
+    statusText = 'Offline';
     kineticState = 'idle';
   }
 
@@ -358,22 +374,10 @@ export function CompactHUD({
 
           {currentTask && currentTask.status === 'running' ? (
             <span className="hud-telemetry-tag pulse">
-              AGENT: {completedSteps}/{totalSteps}
+              {completedSteps}/{totalSteps}
             </span>
           ) : currentTask && currentTask.status === 'paused' ? (
             <span className="hud-telemetry-tag warning">PAUSED</span>
-          ) : telemetry?.workflowActive ? (
-            <span className="hud-telemetry-tag">TELEMETRY ON</span>
-          ) : null}
-
-          {telemetry?.cpuUsage !== undefined ? (
-            <span
-              className={`hud-telemetry-tag ${telemetry.cpuUsage > 75 ? 'warning pulse' : ''}`}
-              title={`Live Telemetry: CPU ${telemetry.cpuUsage}% | RAM ${telemetry.memoryUsagePercent ?? 0}% | Procs ${telemetry.processCount ?? 0} | Uptime ${Math.round((telemetry.uptimeSeconds ?? 0) / 60)}m`}
-            >
-              CPU {Math.round(telemetry.cpuUsage)}% · RAM{' '}
-              {Math.round(telemetry.memoryUsagePercent ?? 0)}%
-            </span>
           ) : null}
 
           {/* Autonomous Killswitch & Pause Controls */}
@@ -386,7 +390,7 @@ export function CompactHUD({
                   title="Pause autonomous workflow"
                   onClick={onPauseWorkflow}
                 >
-                  ⏸ Pause
+                  ⏸
                 </button>
               ) : (
                 <button
@@ -395,7 +399,7 @@ export function CompactHUD({
                   title="Resume paused autonomous workflow"
                   onClick={onResumeWorkflow}
                 >
-                  ▶ Resume
+                  ▶
                 </button>
               )}
               <button
@@ -404,131 +408,188 @@ export function CompactHUD({
                 title="EMERGENCY STOP (Ctrl+Alt+K / Esc x3): Instantly halt all active steps and release input states"
                 onClick={onEmergencyStop}
               >
-                🛑 STOP
+                🛑
               </button>
             </div>
           ) : null}
-
-          {/* Autonomous Approval Mode */}
-          <div
-            className={`compact-auto-pill ${settings.autoApprove ? 'is-active' : ''}`}
-            title={
-              settings.autoApprove
-                ? 'Autonomous Co-Pilot: Auto-approve enabled'
-                : 'Autonomous Co-Pilot: Confirmation required'
-            }
-          >
-            <span className="auto-dot" />
-            <span>{settings.autoApprove ? 'Auto' : 'Guard'}</span>
-          </div>
         </div>
 
         <div className="compact-top-actions no-drag">
-          {/* View: Chat Dialogue */}
+          {/* Main View: Chat Dialogue */}
           <button
             type="button"
             className={`compact-board-pill ${activeView === 'chat' ? 'is-active' : ''}`}
             title="Chat dialogue & speech transcripts"
-            onClick={() => setActiveView('chat')}
+            onClick={() => {
+              setActiveView('chat');
+              setShowMoreMenu(false);
+            }}
           >
             <span>💬 Chat</span>
           </button>
 
-          {/* View: Blackboard */}
-          <button
-            type="button"
-            className={`compact-board-pill ${activeView === 'blackboard' ? 'is-active' : ''} ${blackboardLesson ? 'has-lesson' : ''}`}
-            title="Visual Blackboard (LaTeX & Chalkboard drawings)"
-            onClick={() => setActiveView('blackboard')}
-          >
-            <span>📐 Board{blackboardLesson ? ' •' : ''}</span>
-          </button>
+          {/* Subview Pill if not on Chat */}
+          {activeView !== 'chat' && (
+            <div className="compact-board-pill is-active active-subview-pill">
+              <span>
+                {activeView === 'blackboard' ? '📐 Board' :
+                 activeView === 'workflow' ? '⚡ Jarvis' :
+                 activeView === 'skills' ? '🛠 Skills' :
+                 activeView === 'models' ? '🧠 Models' : ''}
+              </span>
+              <button
+                type="button"
+                className="subview-close-btn"
+                title="Return to Chat"
+                onClick={() => setActiveView('chat')}
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
-          {/* View: Autonomous Jarvis Workflow */}
-          <button
-            type="button"
-            className={`compact-board-pill ${activeView === 'workflow' ? 'is-active' : ''} ${pendingApproval ? 'needs-attention' : ''}`}
-            title="Autonomous OS Workflow & Multi-App Pipeline"
-            onClick={() => setActiveView('workflow')}
-          >
-            <span>
-              ⚡ Jarvis{pendingApproval ? ' (!)' : currentTask?.status === 'running' ? ' ▶' : ''}
-            </span>
-          </button>
-
-          {/* View: Desktop Radar (Active Apps Minimap) */}
-          <button
-            type="button"
-            className={`compact-board-pill ${showDesktopRadar ? 'is-active' : ''}`}
-            title="Desktop Radar: Active running application windows & 1-click focus"
-            onClick={() => {
-              const next = !showDesktopRadar;
-              setShowDesktopRadar(next);
-              if (next) onRefreshWindows?.();
-            }}
-          >
-            <span>📡 Radar</span>
-          </button>
-
-          {/* Acoustic Telemetry Sound & Volume Controls */}
-          <div
-            className="compact-sound-group no-drag"
-            onContextMenu={(e) => {
-              e.preventDefault();
-              setShowVolumeSlider(!showVolumeSlider);
-            }}
-            onMouseLeave={() => setShowVolumeSlider(false)}
-          >
+          {/* More Tools & System Dropdown */}
+          <div className="more-menu-container" ref={moreMenuRef}>
             <button
               type="button"
-              className={`compact-btn sound-toggle-btn ${soundMuted ? 'is-muted' : ''}`}
-              title={
-                soundMuted
-                  ? 'Acoustic Telemetry Muted (Click to unmute, right-click for volume)'
-                  : `Acoustic Telemetry: ${Math.round((soundVolume ?? 0.5) * 100)}% (Click to mute, right-click for volume)`
-              }
-              onClick={onToggleSoundMute}
+              className={`compact-board-pill more-btn ${showMoreMenu ? 'is-active' : ''}`}
+              title="More views, skills, and system controls"
+              onClick={() => setShowMoreMenu(!showMoreMenu)}
             >
-              {soundMuted ? (
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                  <line x1="23" y1="9" x2="17" y2="15" />
-                  <line x1="17" y1="9" x2="23" y2="15" />
-                </svg>
-              ) : (
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
-                </svg>
-              )}
+              <span>⋯ More ▾</span>
             </button>
-            {showVolumeSlider && (
-              <div className="compact-volume-flyout">
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={soundVolume}
-                  onChange={(e) => onSoundVolumeChange?.(parseFloat(e.target.value))}
-                  className="compact-volume-slider"
-                  title={`Volume: ${Math.round((soundVolume ?? 0.5) * 100)}%`}
-                />
-                <span className="volume-percent">{Math.round((soundVolume ?? 0.5) * 100)}%</span>
+
+            {showMoreMenu && (
+              <div className="more-dropdown-menu">
+                <div className="dropdown-section-title">Views & Tools</div>
+
+                <button
+                  type="button"
+                  className={`more-menu-item ${activeView === 'blackboard' ? 'selected' : ''}`}
+                  onClick={() => {
+                    setActiveView('blackboard');
+                    setShowMoreMenu(false);
+                  }}
+                >
+                  <span className="item-icon">📐</span>
+                  <div className="item-info">
+                    <span className="item-title">Visual Blackboard</span>
+                    <span className="item-desc">LaTeX & drawings</span>
+                  </div>
+                  {blackboardLesson && <span className="item-badge">New</span>}
+                </button>
+
+                <button
+                  type="button"
+                  className={`more-menu-item ${activeView === 'workflow' ? 'selected' : ''}`}
+                  onClick={() => {
+                    setActiveView('workflow');
+                    setShowMoreMenu(false);
+                  }}
+                >
+                  <span className="item-icon">⚡</span>
+                  <div className="item-info">
+                    <span className="item-title">Jarvis Co-Pilot</span>
+                    <span className="item-desc">Autonomous workflow</span>
+                  </div>
+                  {pendingApproval && <span className="item-badge attention">!</span>}
+                </button>
+
+                <button
+                  type="button"
+                  className={`more-menu-item ${activeView === 'skills' ? 'selected' : ''}`}
+                  onClick={() => {
+                    setActiveView('skills');
+                    setShowMoreMenu(false);
+                  }}
+                >
+                  <span className="item-icon">🛠</span>
+                  <div className="item-info">
+                    <span className="item-title">Skills Launcher</span>
+                    <span className="item-desc">Windows, Office, Blender, Creative</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className={`more-menu-item ${activeView === 'models' ? 'selected' : ''}`}
+                  onClick={() => {
+                    setActiveView('models');
+                    setShowMoreMenu(false);
+                  }}
+                >
+                  <span className="item-icon">🧠</span>
+                  <div className="item-info">
+                    <span className="item-title">Model Switchboard</span>
+                    <span className="item-desc">Gemini, DeepSeek, GLM</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className={`more-menu-item ${showDesktopRadar ? 'selected' : ''}`}
+                  onClick={() => {
+                    const next = !showDesktopRadar;
+                    setShowDesktopRadar(next);
+                    if (next) onRefreshWindows?.();
+                    setShowMoreMenu(false);
+                  }}
+                >
+                  <span className="item-icon">📡</span>
+                  <div className="item-info">
+                    <span className="item-title">Desktop Radar</span>
+                    <span className="item-desc">Active application windows</span>
+                  </div>
+                </button>
+
+                <div className="dropdown-divider" />
+
+                <div className="dropdown-section-title">System & Controls</div>
+
+                {/* Performance stats */}
+                {telemetry?.cpuUsage !== undefined && (
+                  <div className="more-telemetry-row">
+                    <span className="telemetry-label">Performance:</span>
+                    <span className="telemetry-value">
+                      CPU {Math.round(telemetry.cpuUsage)}% · RAM {Math.round(telemetry.memoryUsagePercent ?? 0)}%
+                    </span>
+                  </div>
+                )}
+
+                {/* Autonomous Approval Mode */}
+                <div className="more-telemetry-row">
+                  <span className="telemetry-label">Co-Pilot Mode:</span>
+                  <span className="telemetry-value">
+                    {settings.autoApprove ? 'Auto-Approve' : 'Guard (Manual)'}
+                  </span>
+                </div>
+
+                {/* Acoustic Sound */}
+                <div className="more-control-row">
+                  <span className="control-label">Acoustic Sound:</span>
+                  <button
+                    type="button"
+                    className="more-toggle-btn"
+                    onClick={onToggleSoundMute}
+                  >
+                    {soundMuted ? '🔇 Muted' : '🔊 Sound On'}
+                  </button>
+                </div>
+
+                {/* Sound Volume Slider */}
+                <div className="more-control-row">
+                  <span className="control-label">Volume: {Math.round((soundVolume ?? 0.5) * 100)}%</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={soundVolume}
+                    onChange={(e) => onSoundVolumeChange?.(parseFloat(e.target.value))}
+                    className="compact-volume-slider"
+                    title={`Volume: ${Math.round((soundVolume ?? 0.5) * 100)}%`}
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -886,6 +947,20 @@ export function CompactHUD({
             </div>
           )}
         </div>
+      ) : activeView === 'skills' ? (
+        <div className="compact-body skills-view" style={{ overflowY: 'auto', padding: '8px' }}>
+          <SkillLauncherPanel
+            onExecuteGoal={(goal) => onStartAutonomousTask(goal)}
+            cpuUsage={telemetry?.cpuUsage}
+            memoryUsagePercent={telemetry?.memoryUsagePercent}
+          />
+        </div>
+      ) : activeView === 'models' ? (
+        <div className="compact-body models-view" style={{ overflowY: 'auto', padding: '8px' }}>
+          <ModelSwitchboard
+            onDispatchTest={(modelKey, prompt) => onStartAutonomousTask(`Dispatch task to ${modelKey}: ${prompt}`)}
+          />
+        </div>
       ) : (
         <div className="compact-body" ref={scrollRef}>
           {conversation.length === 0 ? (
@@ -900,7 +975,7 @@ export function CompactHUD({
             </div>
           ) : (
             <div className="captions-stream">
-              {conversation.slice(-15).map((entry) => {
+              {conversation.slice(-50).map((entry) => {
                 if (entry.kind === 'user') {
                   return (
                     <div key={entry.id} className="caption-bubble user-caption">
@@ -912,7 +987,17 @@ export function CompactHUD({
                   return (
                     <div key={entry.id} className="caption-bubble gemini-caption">
                       <span className="caption-spark-icon">✦</span>
-                      <span>{entry.text}</span>
+                      <span className="caption-paragraph">{entry.text}</span>
+                      {entry.imageUrl && (
+                        <div className="caption-screenshot-container">
+                          <img
+                            src={entry.imageUrl}
+                            alt="Screenshot"
+                            className="caption-screenshot-img"
+                            loading="lazy"
+                          />
+                        </div>
+                      )}
                     </div>
                   );
                 }

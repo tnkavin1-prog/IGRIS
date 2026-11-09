@@ -46,6 +46,101 @@ const BLOCKED_COMMAND_PATTERNS = [
   /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;/i, // fork bomb
 ];
 
+function findExecutableForApp(appName: string): { exe: string; defaultArgs: string[] } | null {
+  const raw = appName.trim().toLowerCase();
+
+  if (raw === 'chrome' || raw === 'google chrome' || raw.includes('chrome')) {
+    const candidates = [
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      process.env.LOCALAPPDATA
+        ? join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'Application', 'chrome.exe')
+        : undefined,
+      process.env.PROGRAMFILES
+        ? join(process.env.PROGRAMFILES, 'Google', 'Chrome', 'Application', 'chrome.exe')
+        : undefined,
+    ].filter((c): c is string => typeof c === 'string' && existsSync(c));
+
+    if (candidates.length > 0 && candidates[0]) {
+      return {
+        exe: candidates[0],
+        defaultArgs: ['--remote-debugging-port=9222', 'https://www.google.com'],
+      };
+    }
+    return { exe: 'chrome.exe', defaultArgs: ['https://www.google.com'] };
+  }
+
+  if (raw === 'code' || raw === 'vscode' || raw.includes('visual studio code')) {
+    const candidates = [
+      process.env.LOCALAPPDATA
+        ? join(process.env.LOCALAPPDATA, 'Programs', 'Microsoft VS Code', 'Code.exe')
+        : undefined,
+      'C:\\Program Files\\Microsoft VS Code\\Code.exe',
+    ].filter((c): c is string => typeof c === 'string' && existsSync(c));
+
+    if (candidates.length > 0 && candidates[0]) {
+      return { exe: candidates[0], defaultArgs: [] };
+    }
+    return { exe: 'code.cmd', defaultArgs: [] };
+  }
+
+  if (raw === 'edge' || raw === 'msedge' || raw === 'pdf') {
+    const candidates = [
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+    ].filter((c): c is string => typeof c === 'string' && existsSync(c));
+
+    if (candidates.length > 0 && candidates[0]) {
+      return { exe: candidates[0], defaultArgs: [] };
+    }
+    return { exe: 'msedge.exe', defaultArgs: [] };
+  }
+
+  if (raw === 'word' || raw === 'winword') {
+    const candidates = [
+      'C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE',
+      'C:\\Program Files (x86)\\Microsoft Office\\root\\Office16\\WINWORD.EXE',
+    ].filter((c): c is string => typeof c === 'string' && existsSync(c));
+    if (candidates.length > 0 && candidates[0]) {
+      return { exe: candidates[0], defaultArgs: [] };
+    }
+    return { exe: 'winword.exe', defaultArgs: [] };
+  }
+
+  if (raw === 'excel') {
+    const candidates = [
+      'C:\\Program Files\\Microsoft Office\\root\\Office16\\EXCEL.EXE',
+      'C:\\Program Files (x86)\\Microsoft Office\\root\\Office16\\EXCEL.EXE',
+    ].filter((c): c is string => typeof c === 'string' && existsSync(c));
+    if (candidates.length > 0 && candidates[0]) {
+      return { exe: candidates[0], defaultArgs: [] };
+    }
+    return { exe: 'excel.exe', defaultArgs: [] };
+  }
+
+  if (raw === 'notepad') {
+    return { exe: 'notepad.exe', defaultArgs: [] };
+  }
+
+  if (raw === 'calc' || raw === 'calculator') {
+    return { exe: 'calc.exe', defaultArgs: [] };
+  }
+
+  if (raw === 'explorer' || raw === 'files') {
+    return { exe: 'explorer.exe', defaultArgs: [] };
+  }
+
+  if (raw === 'terminal' || raw === 'powershell') {
+    return { exe: 'powershell.exe', defaultArgs: [] };
+  }
+
+  if (raw === 'cmd') {
+    return { exe: 'cmd.exe', defaultArgs: [] };
+  }
+
+  return null;
+}
+
 export class AppManagerService {
   private mockMode: boolean;
   private scriptsDir: string;
@@ -153,9 +248,15 @@ export class AppManagerService {
       finalArgs = memAlias.arguments ? [...memAlias.arguments, ...args] : args;
       this.memoryStore?.recordAliasUsage(raw);
     } else {
-      const alias = APP_ALIASES[raw];
-      executable = alias ? alias.cmd : appName;
-      finalArgs = alias?.defaultArgs ? [...alias.defaultArgs, ...args] : args;
+      const resolved = findExecutableForApp(raw);
+      if (resolved) {
+        executable = resolved.exe;
+        finalArgs = args.length > 0 ? args : resolved.defaultArgs;
+      } else {
+        const alias = APP_ALIASES[raw];
+        executable = alias ? alias.cmd : appName;
+        finalArgs = alias?.defaultArgs ? [...alias.defaultArgs, ...args] : args;
+      }
     }
 
     if (this.mockMode) {
@@ -174,10 +275,11 @@ export class AppManagerService {
     return new Promise((resolve) => {
       let settled = false;
       try {
+        const useShell = !executable.includes('\\');
         const child = spawn(executable, finalArgs, {
           detached: true,
           stdio: 'ignore',
-          shell: true,
+          shell: useShell,
         });
 
         child.on('error', (err) => {
@@ -191,18 +293,30 @@ export class AppManagerService {
           }
         });
 
-        // Small delay to catch immediate ENOENT on spawn failure
-        setTimeout(() => {
+        // Allow app window to spawn and verify presence
+        setTimeout(async () => {
           if (!settled) {
             settled = true;
             child.unref();
+
+            let foundTitle: string | undefined;
+            try {
+              const windows = await this.listRunningWindows();
+              const found = this.resolveAppWindow(appName, windows);
+              if (found) {
+                foundTitle = found.title;
+                await this.focusWindow(found.hwnd);
+              }
+            } catch {}
+
             resolve({
               ok: true,
               appName,
               pid: child.pid,
+              windowTitle: foundTitle,
             });
           }
-        }, 50);
+        }, 500);
       } catch (err) {
         if (!settled) {
           settled = true;
@@ -248,9 +362,12 @@ export class AppManagerService {
   public async minimizeWindow(query: string | number): Promise<boolean> {
     const q = String(query).trim();
     if (this.mockMode) {
-      const win = this.simulatedWindows.find(
-        (w) => String(w.hwnd) === q || w.title.toLowerCase().includes(q.toLowerCase()),
-      );
+      const isForegroundQuery = !q || q === 'active' || q === 'current' || q === 'foreground';
+      const win = isForegroundQuery
+        ? this.simulatedWindows[0]
+        : this.simulatedWindows.find(
+            (w) => String(w.hwnd) === q || w.title.toLowerCase().includes(q.toLowerCase()),
+          );
       if (win) {
         win.isIconic = true;
         return true;
@@ -273,9 +390,12 @@ export class AppManagerService {
   public async maximizeWindow(query: string | number): Promise<boolean> {
     const q = String(query).trim();
     if (this.mockMode) {
-      const win = this.simulatedWindows.find(
-        (w) => String(w.hwnd) === q || w.title.toLowerCase().includes(q.toLowerCase()),
-      );
+      const isForegroundQuery = !q || q === 'active' || q === 'current' || q === 'foreground';
+      const win = isForegroundQuery
+        ? this.simulatedWindows[0]
+        : this.simulatedWindows.find(
+            (w) => String(w.hwnd) === q || w.title.toLowerCase().includes(q.toLowerCase()),
+          );
       if (win) {
         win.isIconic = false;
         return true;
@@ -293,15 +413,46 @@ export class AppManagerService {
   }
 
   /**
+   * Restore an application window from minimized or maximized state
+   */
+  public async restoreWindow(query: string | number): Promise<boolean> {
+    const q = String(query).trim();
+    if (this.mockMode) {
+      const isForegroundQuery = !q || q === 'active' || q === 'current' || q === 'foreground';
+      const win = isForegroundQuery
+        ? this.simulatedWindows[0]
+        : this.simulatedWindows.find(
+            (w) => String(w.hwnd) === q || w.title.toLowerCase().includes(q.toLowerCase()),
+          );
+      if (win) {
+        win.isIconic = false;
+        return true;
+      }
+      return false;
+    }
+
+    try {
+      const res = await this.runCli('restore', [q]);
+      return res.toLowerCase().includes('true');
+    } catch {
+      const escaped = q.replace(/'/g, "''");
+      return this.invokeWin32(`[Gemetron.Win32Input]::RestoreWindow('${escaped}')`);
+    }
+  }
+
+  /**
    * Close an application window
    */
   public async closeWindow(query: string | number): Promise<boolean> {
     const q = String(query).trim();
     if (this.mockMode) {
-      const idx = this.simulatedWindows.findIndex(
-        (w) => String(w.hwnd) === q || w.title.toLowerCase().includes(q.toLowerCase()),
-      );
-      if (idx >= 0) {
+      const isForegroundQuery = !q || q === 'active' || q === 'current' || q === 'foreground';
+      const idx = isForegroundQuery
+        ? 0
+        : this.simulatedWindows.findIndex(
+            (w) => String(w.hwnd) === q || w.title.toLowerCase().includes(q.toLowerCase()),
+          );
+      if (idx >= 0 && this.simulatedWindows[idx]) {
         this.simulatedWindows.splice(idx, 1);
         return true;
       }
@@ -563,8 +714,11 @@ export class AppManagerService {
         if (options.monitorIndex !== undefined && options.monitorIndex > 0) {
           await this.moveWindow(targetQuery, workArea);
         }
-        await this.maximizeWindow(targetQuery);
         await this.focusWindow(targetQuery);
+        await this.maximizeWindow(targetQuery);
+        if (typeof targetApp === 'string' && targetApp.toLowerCase().includes('chrome')) {
+          await this.maximizeWindow('chrome');
+        }
 
         tiledWindows.push({
           title: targetWin?.title || targetApp,
@@ -646,6 +800,13 @@ export class AppManagerService {
           error: `Unsupported layout: ${layout}`,
         };
     }
+  }
+
+  public async findTextOnScreen(
+    query: string,
+    windowScope?: string,
+  ) {
+    return this.findText(query, windowScope);
   }
 
   /**

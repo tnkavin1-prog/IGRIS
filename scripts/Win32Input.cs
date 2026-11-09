@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
+using System.Text.RegularExpressions;
 
 namespace Gemetron {
     [StructLayout(LayoutKind.Sequential)]
@@ -20,7 +21,23 @@ namespace Gemetron {
         public int Bottom;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WINDOWPLACEMENT {
+        public int length;
+        public int flags;
+        public int showCmd;
+        public POINT ptMinPosition;
+        public POINT ptMaxPosition;
+        public RECT rcNormalPosition;
+    }
+
     public static class Win32Input {
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool SetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
+
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
@@ -53,6 +70,12 @@ namespace Gemetron {
 
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
@@ -134,7 +157,21 @@ namespace Gemetron {
         public static readonly IntPtr DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = new IntPtr(-4);
         public static readonly IntPtr DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED = new IntPtr(-5);
 
+        public static bool AttachToInputDesktop() {
+            try {
+                IntPtr hDesk = OpenInputDesktop(0, false, DESKTOP_ALL);
+                if (hDesk == IntPtr.Zero) {
+                    hDesk = OpenDesktop("default", 0, false, DESKTOP_ALL);
+                }
+                if (hDesk != IntPtr.Zero) {
+                    return SetThreadDesktop(hDesk);
+                }
+            } catch { }
+            return false;
+        }
+
         static Win32Input() {
+            AttachToInputDesktop();
             InitDpiAwareness();
         }
 
@@ -167,6 +204,11 @@ namespace Gemetron {
         private const int SW_MINIMIZE = 6;
         private const int SW_MAXIMIZE = 3;
         private const uint WM_CLOSE = 0x0010;
+        private const uint WM_SYSCOMMAND = 0x0112;
+        private const int SC_MAXIMIZE = 0xF030;
+        private const int SC_MINIMIZE = 0xF020;
+        private const int SC_RESTORE = 0xF120;
+        private const byte VK_MENU = 0x12;
         private const uint DESKTOP_ALL = 0x01FF;
 
         private static void RunOnInputDesktop(Action action) {
@@ -265,8 +307,26 @@ namespace Gemetron {
         }
 
         public static bool Scroll(int deltaY) {
+            return ScrollAt(-1, -1, deltaY);
+        }
+
+        public static bool ScrollAt(int x, int y, int deltaY) {
             RunOnInputDesktop(() => {
-                mouse_event(MOUSEEVENTF_WHEEL, 0, 0, (uint)deltaY, UIntPtr.Zero);
+                if (x >= 0 && y >= 0) {
+                    SetCursorPos(x, y);
+                    Thread.Sleep(15);
+                }
+
+                int totalSteps = Math.Max(1, Math.Min(5, Math.Abs(deltaY) / 120));
+                int stepDelta = deltaY / totalSteps;
+                if (stepDelta == 0) stepDelta = deltaY > 0 ? 120 : -120;
+
+                for (int i = 0; i < totalSteps; i++) {
+                    unchecked {
+                        mouse_event(MOUSEEVENTF_WHEEL, 0, 0, (uint)stepDelta, UIntPtr.Zero);
+                    }
+                    if (totalSteps > 1) Thread.Sleep(15);
+                }
             });
             return true;
         }
@@ -444,11 +504,13 @@ namespace Gemetron {
         }
 
         private static void EnumerateAllWindows(Action<IntPtr> callback) {
+            AttachToInputDesktop();
             HashSet<IntPtr> visited = new HashSet<IntPtr>();
 
             // 1. Try input desktop
             IntPtr hDesk = OpenInputDesktop(0, false, DESKTOP_ALL);
             if (hDesk != IntPtr.Zero) {
+                SetThreadDesktop(hDesk);
                 EnumDesktopWindows(hDesk, (hWnd, lParam) => {
                     if (visited.Add(hWnd)) callback(hWnd);
                     return true;
@@ -459,6 +521,7 @@ namespace Gemetron {
             // 2. Try default desktop
             IntPtr hDefault = OpenDesktop("default", 0, false, DESKTOP_ALL);
             if (hDefault != IntPtr.Zero && hDefault != hDesk) {
+                SetThreadDesktop(hDefault);
                 EnumDesktopWindows(hDefault, (hWnd, lParam) => {
                     if (visited.Add(hWnd)) callback(hWnd);
                     return true;
@@ -519,25 +582,38 @@ namespace Gemetron {
         }
 
         public static IntPtr FindWindowByQuery(string query) {
-            if (string.IsNullOrEmpty(query)) return IntPtr.Zero;
+            AttachToInputDesktop();
+            string q = (query ?? "").Trim();
+            if (string.IsNullOrEmpty(q) ||
+                q.Equals("active", StringComparison.OrdinalIgnoreCase) ||
+                q.Equals("foreground", StringComparison.OrdinalIgnoreCase) ||
+                q.Equals("current", StringComparison.OrdinalIgnoreCase)) {
+                return GetForegroundWindow();
+            }
 
             long numericHwnd;
-            if (long.TryParse(query, out numericHwnd) && numericHwnd > 0) {
+            if (long.TryParse(q, out numericHwnd) && numericHwnd > 0) {
                 return new IntPtr(numericHwnd);
             }
 
             IntPtr found = IntPtr.Zero;
-            string q = query.Trim();
+            int bestScore = -1;
 
             EnumerateAllWindows((hWnd) => {
-                if (found != IntPtr.Zero) return;
                 if (!IsWindowVisible(hWnd) && !IsIconic(hWnd)) return;
                 int length = GetWindowTextLength(hWnd);
                 if (length == 0) return;
 
+                RECT rect;
+                if (!GetWindowRect(hWnd, out rect)) return;
+                int width = rect.Right - rect.Left;
+                int height = rect.Bottom - rect.Top;
+                if (width < 80 || height < 80) return; // Ignore invisible background worker windows
+
                 StringBuilder titleBuilder = new StringBuilder(length + 1);
                 GetWindowText(hWnd, titleBuilder, titleBuilder.Capacity);
                 string title = titleBuilder.ToString();
+                if (string.IsNullOrWhiteSpace(title)) return;
 
                 uint pid = 0;
                 GetWindowThreadProcessId(hWnd, out pid);
@@ -547,8 +623,13 @@ namespace Gemetron {
                     processName = p.ProcessName;
                 } catch {}
 
-                if (title.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    processName.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0) {
+                int score = 0;
+                if (title.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0) score += 10;
+                if (processName.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0) score += 5;
+                if (q.Equals("chrome", StringComparison.OrdinalIgnoreCase) && processName.Equals("chrome", StringComparison.OrdinalIgnoreCase)) score += 20;
+
+                if (score > bestScore) {
+                    bestScore = score;
                     found = hWnd;
                 }
             });
@@ -557,6 +638,7 @@ namespace Gemetron {
         }
 
         public static bool FocusWindow(string query) {
+            AttachToInputDesktop();
             IntPtr hwnd = FindWindowByQuery(query);
             if (hwnd != IntPtr.Zero) {
                 if (IsIconic(hwnd)) {
@@ -565,50 +647,102 @@ namespace Gemetron {
                     ShowWindow(hwnd, SW_SHOW);
                 }
 
-                IntPtr foreWnd = GetForegroundWindow();
-                if (foreWnd == hwnd) return true;
-
-                uint foreThread = 0;
-                if (foreWnd != IntPtr.Zero) {
-                    uint dummyPid;
-                    foreThread = GetWindowThreadProcessId(foreWnd, out dummyPid);
-                }
-                uint appThread = GetCurrentThreadId();
-
-                bool attached = false;
-                if (foreThread != appThread && foreThread != 0) {
-                    attached = AttachThreadInput(appThread, foreThread, true);
-                }
+                // Alt key simulation ensures Windows foreground rights
+                keybd_event(VK_MENU, 0, 0, UIntPtr.Zero);
+                keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
 
                 BringWindowToTop(hwnd);
                 bool ok = SetForegroundWindow(hwnd);
-
-                if (attached) {
-                    AttachThreadInput(appThread, foreThread, false);
-                }
-
-                return ok;
+                return ok || GetForegroundWindow() == hwnd;
             }
             return false;
         }
 
         public static bool MinimizeWindow(string query) {
+            AttachToInputDesktop();
             IntPtr hwnd = FindWindowByQuery(query);
+            if (hwnd == IntPtr.Zero) {
+                hwnd = GetForegroundWindow();
+            }
             if (hwnd != IntPtr.Zero) {
-                return ShowWindow(hwnd, SW_MINIMIZE);
+                SendMessage(hwnd, WM_SYSCOMMAND, (IntPtr)SC_MINIMIZE, IntPtr.Zero);
+                ShowWindow(hwnd, SW_MINIMIZE);
+                return true;
             }
             return false;
         }
 
         public static bool MaximizeWindow(string query) {
+            AttachToInputDesktop();
             IntPtr hwnd = FindWindowByQuery(query);
+            if (hwnd == IntPtr.Zero) {
+                hwnd = GetForegroundWindow();
+            }
             if (hwnd != IntPtr.Zero) {
-                return ShowWindow(hwnd, SW_MAXIMIZE);
+                // Ensure foreground focus
+                keybd_event(VK_MENU, 0, 0, UIntPtr.Zero);
+                keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                BringWindowToTop(hwnd);
+                SetForegroundWindow(hwnd);
+
+                // If window was minimized, restore first
+                if (IsIconic(hwnd)) {
+                    ShowWindow(hwnd, SW_RESTORE);
+                    Thread.Sleep(50);
+                }
+
+                // Send WM_SYSCOMMAND SC_MAXIMIZE
+                SendMessage(hwnd, WM_SYSCOMMAND, (IntPtr)SC_MAXIMIZE, IntPtr.Zero);
+
+                // Direct ShowWindow SW_MAXIMIZE
+                ShowWindow(hwnd, SW_MAXIMIZE);
+
+                // SetWindowPlacement ensuring maximized state across Win10/11
+                try {
+                    WINDOWPLACEMENT wp = new WINDOWPLACEMENT();
+                    wp.length = Marshal.SizeOf(typeof(WINDOWPLACEMENT));
+                    if (GetWindowPlacement(hwnd, ref wp)) {
+                        wp.showCmd = SW_MAXIMIZE;
+                        SetWindowPlacement(hwnd, ref wp);
+                    }
+                } catch {}
+
+                return true;
+            }
+            return false;
+        }
+
+        public static bool RestoreWindow(string query) {
+            AttachToInputDesktop();
+            IntPtr hwnd = FindWindowByQuery(query);
+            if (hwnd == IntPtr.Zero) {
+                hwnd = GetForegroundWindow();
+            }
+            if (hwnd != IntPtr.Zero) {
+                keybd_event(VK_MENU, 0, 0, UIntPtr.Zero);
+                keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                BringWindowToTop(hwnd);
+                SetForegroundWindow(hwnd);
+
+                SendMessage(hwnd, WM_SYSCOMMAND, (IntPtr)SC_RESTORE, IntPtr.Zero);
+                ShowWindow(hwnd, SW_RESTORE);
+
+                try {
+                    WINDOWPLACEMENT wp = new WINDOWPLACEMENT();
+                    wp.length = Marshal.SizeOf(typeof(WINDOWPLACEMENT));
+                    if (GetWindowPlacement(hwnd, ref wp)) {
+                        wp.showCmd = SW_RESTORE;
+                        SetWindowPlacement(hwnd, ref wp);
+                    }
+                } catch {}
+
+                return true;
             }
             return false;
         }
 
         public static bool CloseWindow(string query) {
+            AttachToInputDesktop();
             IntPtr hwnd = FindWindowByQuery(query);
             if (hwnd != IntPtr.Zero) {
                 return PostMessage(hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
@@ -742,6 +876,7 @@ namespace Gemetron {
         }
 
         public static int Main(string[] args) {
+            AttachToInputDesktop();
             InitDpiAwareness();
 
             if (args.Length == 0) {
@@ -810,6 +945,16 @@ namespace Gemetron {
                         }
                         break;
 
+                    case "scroll-at":
+                        if (args.Length >= 4) {
+                            int sx = int.Parse(args[1]);
+                            int sy = int.Parse(args[2]);
+                            int sdelta = int.Parse(args[3]);
+                            Console.WriteLine(ScrollAt(sx, sy, sdelta));
+                            return 0;
+                        }
+                        break;
+
                     case "type-b64":
                         if (args.Length >= 2) {
                             byte[] bytes = Convert.FromBase64String(args[1]);
@@ -820,11 +965,39 @@ namespace Gemetron {
                         break;
 
                     case "chord":
+                    case "hotkey":
                         if (args.Length >= 2) {
                             Console.WriteLine(SendKeyChord(args[1]));
                             return 0;
                         }
                         break;
+
+                    case "pagedown":
+                    case "page-down":
+                        Console.WriteLine(SendKeyChord("PageDown"));
+                        return 0;
+
+                    case "pageup":
+                    case "page-up":
+                        Console.WriteLine(SendKeyChord("PageUp"));
+                        return 0;
+
+                    case "click-text":
+                        if (args.Length >= 2) {
+                            string text = args[1];
+                            string scope = args.Length >= 3 ? args[2] : null;
+                            string res = FindTextOnScreen(text, scope);
+                            Match mx = Regex.Match(res, "\"x\":(\\d+)");
+                            Match my = Regex.Match(res, "\"y\":(\\d+)");
+                            if (mx.Success && my.Success) {
+                                int cx = int.Parse(mx.Groups[1].Value);
+                                int cy = int.Parse(my.Groups[1].Value);
+                                Console.WriteLine(Click(cx, cy, "left", false));
+                                return 0;
+                            }
+                        }
+                        Console.WriteLine("false");
+                        return 0;
 
                     case "list-windows":
                         Console.WriteLine(ListWindows());
@@ -847,6 +1020,13 @@ namespace Gemetron {
                     case "maximize":
                         if (args.Length >= 2) {
                             Console.WriteLine(MaximizeWindow(args[1]));
+                            return 0;
+                        }
+                        break;
+
+                    case "restore":
+                        if (args.Length >= 2) {
+                            Console.WriteLine(RestoreWindow(args[1]));
                             return 0;
                         }
                         break;

@@ -1,0 +1,14 @@
+You are NVIDIA Nemotron 3.5 Lightning Free.
+Fix syntax error in E:\Gematron\apps\desktop-hud\src\main\security-auditor.ts:
+
+At line 59:
+Replace:
+```typescript
+public checkPermission(role: UserRole, operation: 'read' | 'execute' | 'admin_override': SecurityCheckResult {
+```
+With:
+```typescript
+public checkPermission(role: UserRole, operation: 'read' | 'execute' | 'admin_override'): SecurityCheckResult {
+```
+
+Make the change in E:\Gematron\apps\desktop-hud\src\main\security-auditor.ts now. Do not ask questions.

@@ -758,10 +758,9 @@ describe('Ask Gemini Tool & Context Extraction', () => {
         manifest.commands as Record<string, { suggested_key?: unknown }>,
       ).filter(([_, cmd]) => Boolean(cmd?.suggested_key));
 
-      // Chrome limits suggested_key to at most 4 commands in manifest.json
+      // Chrome MV3 strictly limits 'commands' to at most 4 commands total (kMaxCommandsPerExtension = 4)
+      expect(Object.keys(manifest.commands).length).toBeLessThanOrEqual(4);
       expect(commandsWithSuggestedKey.length).toBeLessThanOrEqual(4);
-      expect(manifest.commands['open-settings']).toBeDefined();
-      expect(manifest.commands['open-settings'].suggested_key).toBeUndefined();
     });
   });
 });

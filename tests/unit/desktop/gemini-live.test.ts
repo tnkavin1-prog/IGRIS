@@ -26,6 +26,7 @@ describe('GeminiLiveService', () => {
     expect(settings.alwaysOnTop).toBe(true);
     expect(settings.soundEffectsEnabled).toBe(true);
     expect(settings.soundVolume).toBe(0.5);
+    expect(settings.minimizeToTray).toBe(true);
   });
 
   it('updates settings and emits settings-updated', () => {
@@ -114,6 +115,56 @@ describe('GeminiLiveService', () => {
       }),
     );
     expect(turnCompleted).toBe(true);
+  });
+
+  it('assigns consistent turn ID to streaming outputTranscription chunks to form a single paragraph', async () => {
+    const live = new GeminiLiveService(cdpClient);
+    const messages: any[] = [];
+    live.on('conversation-message', (m) => messages.push(m));
+
+    const handler = (live as any).handleServerMessage.bind(live);
+
+    // Emit two chunks in the same assistant turn
+    await handler(
+      JSON.stringify({
+        serverContent: {
+          outputTranscription: { text: 'I can capture ' },
+        },
+      }),
+    );
+    await handler(
+      JSON.stringify({
+        serverContent: {
+          outputTranscription: { text: 'and process screenshots.' },
+        },
+      }),
+    );
+
+    expect(messages.length).toBe(2);
+    expect(messages[0].id).toBe(messages[1].id);
+    expect(messages[0].kind).toBe('assistant');
+    expect(messages[1].kind).toBe('assistant');
+
+    // Turn completes
+    await handler(
+      JSON.stringify({
+        serverContent: {
+          turnComplete: true,
+        },
+      }),
+    );
+
+    // Next turn gets a new ID
+    await handler(
+      JSON.stringify({
+        serverContent: {
+          outputTranscription: { text: 'Next response paragraph.' },
+        },
+      }),
+    );
+
+    expect(messages.length).toBe(3);
+    expect(messages[2].id).not.toBe(messages[0].id);
   });
 
   it('handles teach_visual_blackboard tool call and emits blackboard-lesson', async () => {
@@ -429,6 +480,59 @@ describe('GeminiLiveService', () => {
     expect(responses[3].response.result.ok).toBe(true);
   });
 
+  it('handles dedicated window operations: maximize_window, minimize_window, restore_window, close_window and mouse_scroll', async () => {
+    let sentPayload: any = null;
+    (service as any).socket = {
+      readyState: 1,
+      send: (str: string) => {
+        sentPayload = JSON.parse(str);
+      },
+    };
+
+    const handler = (service as any).handleServerMessage.bind(service);
+    await handler(
+      JSON.stringify({
+        toolCall: {
+          functionCalls: [
+            {
+              id: 'call_max_1',
+              name: 'maximize_window',
+              args: { window_title: 'Chrome' },
+            },
+            {
+              id: 'call_min_1',
+              name: 'minimize_window',
+              args: { window_title: 'active' },
+            },
+            {
+              id: 'call_res_1',
+              name: 'restore_window',
+              args: { window_title: 'Chrome' },
+            },
+            {
+              id: 'call_scroll_1',
+              name: 'mouse_scroll',
+              args: { direction: 'down', amount: 500 },
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(sentPayload).not.toBeNull();
+    const responses = sentPayload.toolResponse.functionResponses;
+    expect(responses.length).toBe(4);
+    expect(responses[0].name).toBe('maximize_window');
+    expect(responses[0].response.result.success).toBe(true);
+    expect(responses[0].response.result.maximized).toBe(true);
+    expect(responses[1].name).toBe('minimize_window');
+    expect(responses[1].response.result.success).toBe(true);
+    expect(responses[2].name).toBe('restore_window');
+    expect(responses[2].response.result.success).toBe(true);
+    expect(responses[3].name).toBe('mouse_scroll');
+    expect(responses[3].response.result.success).toBe(true);
+  });
+
   it('handles manage_browser_tabs and plan_autonomous_task', async () => {
     let sentPayload: any = null;
     (service as any).socket = {
@@ -525,6 +629,58 @@ describe('GeminiLiveService', () => {
     expect(responses[2].response.result.success).toBe(true);
     expect(responses[2].response.result.layout).toBe('grid-2x2');
     expect(responses[2].response.result.tiledWindows.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('handles human-like computer control tools: mouse_move, mouse_drag, click_element_by_text, press_key', async () => {
+    let sentPayload: any = null;
+    (service as any).socket = {
+      readyState: 1,
+      send: (str: string) => {
+        sentPayload = JSON.parse(str);
+      },
+    };
+
+    const handler = (service as any).handleServerMessage.bind(service);
+    await handler(
+      JSON.stringify({
+        toolCall: {
+          functionCalls: [
+            {
+              id: 'call_move_1',
+              name: 'computer_use_mouse_move',
+              args: { x: 300, y: 400 },
+            },
+            {
+              id: 'call_drag_1',
+              name: 'computer_use_mouse_drag',
+              args: { start_x: 100, start_y: 100, end_x: 500, end_y: 500 },
+            },
+            {
+              id: 'call_click_text_1',
+              name: 'click_element_by_text',
+              args: { text: 'CLOUD RESUME DOWNLOAD' },
+            },
+            {
+              id: 'call_press_key_1',
+              name: 'press_key',
+              args: { key: 'PageDown' },
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(sentPayload).not.toBeNull();
+    const responses = sentPayload.toolResponse.functionResponses;
+    expect(responses.length).toBe(4);
+    expect(responses[0].name).toBe('computer_use_mouse_move');
+    expect(responses[0].response.result.success).toBe(true);
+    expect(responses[1].name).toBe('computer_use_mouse_drag');
+    expect(responses[1].response.result.success).toBe(true);
+    expect(responses[2].name).toBe('click_element_by_text');
+    expect(responses[2].response.result.clickedText).toBe('CLOUD RESUME DOWNLOAD');
+    expect(responses[3].name).toBe('press_key');
+    expect(responses[3].response.result.key).toBe('PageDown');
   });
 
   it('emits telemetry-updated including hardware metrics (CPU, RAM, procs, uptime)', async () => {

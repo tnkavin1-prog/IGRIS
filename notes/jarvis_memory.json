@@ -1,6 +1,6 @@
 {
   "version": "2.0.0",
-  "updatedAt": 1794025036133,
+  "updatedAt": 1794223068361,
   "preferences": {
     "theme": "dark",
     "voice": "Kore",
@@ -26,8 +26,8 @@
     "notepad": {
       "alias": "notepad",
       "targetApp": "notepad.exe",
-      "lastUsed": 1794025036130,
-      "useCount": 143
+      "lastUsed": 1794223068361,
+      "useCount": 219
     },
     "editor": {
       "alias": "editor",
@@ -38,8 +38,8 @@
     "calc": {
       "alias": "calc",
       "targetApp": "calc.exe",
-      "lastUsed": 1794025035863,
-      "useCount": 56
+      "lastUsed": 1794223068181,
+      "useCount": 81
     },
     "calculator": {
       "alias": "calculator",
@@ -68,8 +68,8 @@
     "chrome": {
       "alias": "chrome",
       "targetApp": "chrome.exe",
-      "lastUsed": 1793990430848,
-      "useCount": 1
+      "lastUsed": 1794221111601,
+      "useCount": 6
     },
     "browser": {
       "alias": "browser",
@@ -183,6 +183,256 @@
     }
   ],
   "recentContext": [
+    {
+      "id": "ctx_1794223068345_wtmh",
+      "timestamp": 1794223068345,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794223068339",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794221722673_2c8t",
+      "timestamp": 1794221722673,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794221722671",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794221144435_auar",
+      "timestamp": 1794221144435,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794221144431",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794220184701_f21h",
+      "timestamp": 1794220184701,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794220184694",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794220168427_ccbz",
+      "timestamp": 1794220168427,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794220168421",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794219975318_tkdl",
+      "timestamp": 1794219975318,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794219975313",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794219882384_p93v",
+      "timestamp": 1794219882384,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794219882380",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794218695533_d3qo",
+      "timestamp": 1794218695533,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794218695530",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794215571430_bx2a",
+      "timestamp": 1794215571430,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794215571423",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794215430160_hedq",
+      "timestamp": 1794215430160,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794215430157",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794215390148_bcuk",
+      "timestamp": 1794215390148,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794215390138",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794214742985_oa8i",
+      "timestamp": 1794214742985,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794214742983",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794214695597_r6h5",
+      "timestamp": 1794214695597,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794214695591",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794207644762_uleq",
+      "timestamp": 1794207644762,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794207644759",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794205790729_vdkf",
+      "timestamp": 1794205790729,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794205790687",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794204886687_kk48",
+      "timestamp": 1794204886687,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794204886680",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794204431221_6ee8",
+      "timestamp": 1794204431221,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794204431213",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794204401174_nmxd",
+      "timestamp": 1794204401174,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794204401167",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794204159183_o5j9",
+      "timestamp": 1794204159183,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794204159177",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794204055494_apdl",
+      "timestamp": 1794204055494,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794204055485",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794201379764_h1p8",
+      "timestamp": 1794201379764,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794201379757",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794069743675_5wy6",
+      "timestamp": 1794069743675,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794069743670",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794037795629_hym9",
+      "timestamp": 1794037795629,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794037795625",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794037194347_i96h",
+      "timestamp": 1794037194347,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794037194343",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794025227296_w5uo",
+      "timestamp": 1794025227296,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794025227286",
+        "steps": 4
+      }
+    },
     {
       "id": "ctx_1794025036079_t6gw",
       "timestamp": 1794025036079,
@@ -430,256 +680,6 @@
       "category": "workflow",
       "metadata": {
         "taskId": "task_1794000557780",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793999385593_2iof",
-      "timestamp": 1793999385593,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793999385587",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793999241937_ldd3",
-      "timestamp": 1793999241937,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793999241931",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793999023422_9zdj",
-      "timestamp": 1793999023422,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793999023415",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793998948737_rguy",
-      "timestamp": 1793998948737,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793998948728",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793998303007_gfq1",
-      "timestamp": 1793998303007,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793998303000",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793998198587_1b5v",
-      "timestamp": 1793998198587,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793998198582",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793998137917_79td",
-      "timestamp": 1793998137917,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793998137911",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793996950408_ahox",
-      "timestamp": 1793996950408,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793996950402",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793996846954_9hee",
-      "timestamp": 1793996846954,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793996846949",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793996650265_8o7j",
-      "timestamp": 1793996650265,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793996650257",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793996559407_mlti",
-      "timestamp": 1793996559407,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793996559402",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793996468807_1w33",
-      "timestamp": 1793996468807,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793996468788",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793995866417_fj5v",
-      "timestamp": 1793995866417,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793995866407",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793995750155_jnxh",
-      "timestamp": 1793995750155,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793995750148",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793995071885_krx6",
-      "timestamp": 1793995071885,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793995071878",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793995040916_2lcd",
-      "timestamp": 1793995040916,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793995040910",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793994920624_ihri",
-      "timestamp": 1793994920624,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793994920618",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793993171929_gvxc",
-      "timestamp": 1793993171929,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793993171921",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793993070769_ah0b",
-      "timestamp": 1793993070769,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793993070763",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793992872222_kwv4",
-      "timestamp": 1793992872222,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793992872215",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793992744724_ebas",
-      "timestamp": 1793992744724,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793992744719",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793992612501_e67h",
-      "timestamp": 1793992612501,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793992612494",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793992491069_u8zs",
-      "timestamp": 1793992491069,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793992491064",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793991399885_svx7",
-      "timestamp": 1793991399886,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793991399880",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1793991182833_bn7i",
-      "timestamp": 1793991182833,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1793991182828",
         "steps": 4
       }
     }

@@ -5,6 +5,7 @@ import { NativeInputService } from '../../../apps/desktop-hud/src/main/native-in
 import { ComputerVisionService } from '../../../apps/desktop-hud/src/main/computer-vision.js';
 import { AppManagerService } from '../../../apps/desktop-hud/src/main/app-manager.js';
 import { ClipboardService } from '../../../apps/desktop-hud/src/main/clipboard-manager.js';
+import { computerOperator } from '../../../apps/desktop-hud/src/main/computer-operator.js';
 
 describe('AgenticWorkflowEngine', () => {
   let cdpClient: CDPClient;
@@ -238,6 +239,158 @@ describe('AgenticWorkflowEngine', () => {
       expect(writeSpy).toHaveBeenCalledWith('Verified AI benchmark data 2026');
       expect(readSpy).toHaveBeenCalled();
       expect(clipboardService.readText()).toBe('Verified AI benchmark data 2026');
+    });
+  });
+
+  describe('Phase Four: Skills & Dual-Model Orchestration', () => {
+    it('decomposes an Office Word goal into an office:createWordDoc skill step', () => {
+      const goal = 'Create a Word document summarising the sprint';
+      const steps = engine.decomposeGoal(goal);
+
+      expect(steps).toHaveLength(2);
+      expect(steps[0]?.actionType).toBe('execute_skill');
+      expect(steps[0]?.params).toMatchObject({
+        skillId: 'office',
+        action: 'createWordDoc',
+      });
+      expect(steps[0]?.params.params).toMatchObject({
+        filePath: 'E:\\Gematron\\temp\\doc.docx',
+        title: 'Gematron Autonomous Doc',
+        content: goal,
+      });
+      expect(steps[1]?.actionType).toBe('computer_screenshot');
+    });
+
+    it('decomposes an Excel spreadsheet goal into an office:createExcelSheet skill step', () => {
+      const goal = 'Build an Excel spreadsheet of project tasks';
+      const steps = engine.decomposeGoal(goal);
+
+      expect(steps).toHaveLength(1);
+      expect(steps[0]?.actionType).toBe('execute_skill');
+      expect(steps[0]?.params).toMatchObject({
+        skillId: 'office',
+        action: 'createExcelSheet',
+      });
+      expect(steps[0]?.params.params).toMatchObject({
+        filePath: 'E:\\Gematron\\temp\\sheet.xlsx',
+        headers: ['ID', 'Task', 'Date'],
+      });
+      const rows = steps[0]?.params.params?.rows as unknown[][];
+      expect(rows[0]?.[0]).toBe(1);
+      expect(rows[0]?.[1]).toBe(goal);
+    });
+
+    it('decomposes a 3D Blender goal into a blender:renderScene skill step', () => {
+      const steps = engine.decomposeGoal('Render the 3D scene in Blender');
+
+      expect(steps).toHaveLength(1);
+      expect(steps[0]?.actionType).toBe('execute_skill');
+      expect(steps[0]?.params).toMatchObject({
+        skillId: 'blender',
+        action: 'renderScene',
+        params: {
+          blendFile: 'E:\\Gematron\\temp\\scene.blend',
+          outputImg: 'E:\\Gematron\\temp\\scene.png',
+        },
+      });
+    });
+
+    it('decomposes a DeepSeek backend goal into an ai_dispatch step', () => {
+      const goal = 'Implement backend API logic with DeepSeek';
+      const steps = engine.decomposeGoal(goal);
+
+      expect(steps).toHaveLength(1);
+      expect(steps[0]?.actionType).toBe('ai_dispatch');
+      expect(steps[0]?.params).toMatchObject({
+        modelKey: 'deepseek',
+        prompt: goal,
+        title: 'DeepSeek Backend Logic Dispatch',
+      });
+    });
+
+    it('decomposes a GLM frontend goal into an ai_dispatch step', () => {
+      const goal = 'Build a frontend UI component with GLM';
+      const steps = engine.decomposeGoal(goal);
+
+      expect(steps).toHaveLength(1);
+      expect(steps[0]?.actionType).toBe('ai_dispatch');
+      expect(steps[0]?.params).toMatchObject({
+        modelKey: 'glm',
+        prompt: goal,
+        title: 'GLM Frontend Architecture Dispatch',
+      });
+    });
+
+    it('executes an execute_skill step in mock mode', async () => {
+      const skillSpy = vi.spyOn(computerOperator, 'executeSkillAction').mockResolvedValue({
+        success: true,
+        data: { created: true, filePath: 'E:\\Gematron\\temp\\doc.docx' },
+      });
+
+      engine.setAutoApprove(true);
+      const task = engine.createTask('Skill execution task', [
+        {
+          description: 'Create a Word document via the Office skill',
+          actionType: 'execute_skill',
+          params: {
+            skillId: 'office',
+            action: 'createWordDoc',
+            params: {
+              filePath: 'E:\\Gematron\\temp\\doc.docx',
+              title: 'Gematron Autonomous Doc',
+              content: 'Autonomous skill execution',
+            },
+          },
+        },
+      ]);
+
+      await engine.startTask(task.id);
+      await new Promise((r) => setTimeout(r, 60));
+
+      const cur = engine.getCurrentTask();
+      expect(cur?.status).toBe('completed');
+      expect(cur?.steps[0]?.status).toBe('completed');
+      expect(skillSpy).toHaveBeenCalledWith(
+        'office',
+        'createWordDoc',
+        expect.objectContaining({ filePath: 'E:\\Gematron\\temp\\doc.docx' }),
+      );
+    });
+
+    it('executes an ai_dispatch step in mock mode', async () => {
+      const skillSpy = vi.spyOn(computerOperator, 'executeSkillAction').mockResolvedValue({
+        success: true,
+        data: { sessionId: 'ses_mock123', promptQueued: true },
+      });
+
+      engine.setAutoApprove(true);
+      const task = engine.createTask('AI dispatch task', [
+        {
+          description: 'Dispatch frontend architecture to GLM',
+          actionType: 'ai_dispatch',
+          params: {
+            modelKey: 'glm',
+            prompt: 'Build a frontend UI component with GLM',
+            title: 'GLM Frontend Architecture Dispatch',
+          },
+        },
+      ]);
+
+      await engine.startTask(task.id);
+      await new Promise((r) => setTimeout(r, 60));
+
+      const cur = engine.getCurrentTask();
+      expect(cur?.status).toBe('completed');
+      expect(cur?.steps[0]?.status).toBe('completed');
+      expect(skillSpy).toHaveBeenCalledWith(
+        'opencode',
+        'dispatchTask',
+        expect.objectContaining({
+          modelKey: 'glm',
+          prompt: 'Build a frontend UI component with GLM',
+          title: 'GLM Frontend Architecture Dispatch',
+        }),
+      );
     });
   });
 });

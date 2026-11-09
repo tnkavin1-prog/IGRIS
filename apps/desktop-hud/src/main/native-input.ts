@@ -298,8 +298,17 @@ export class NativeInputService extends EventEmitter {
    * Scroll vertical wheel (positive = up, negative = down)
    */
   public async mouseScroll(deltaY: number): Promise<boolean> {
+    return this.mouseScrollAt(-1, -1, deltaY);
+  }
+
+  /**
+   * Scroll vertical wheel at specific desktop coordinates
+   */
+  public async mouseScrollAt(x: number, y: number, deltaY: number): Promise<boolean> {
     const action: InputActionEvent = {
       type: 'scroll',
+      x: x >= 0 ? x : undefined,
+      y: y >= 0 ? y : undefined,
       timestamp: Date.now(),
     };
     this.actionHistory.push(action);
@@ -308,10 +317,19 @@ export class NativeInputService extends EventEmitter {
     if (this.mockMode) return true;
 
     try {
-      const res = await this.runCli('scroll', [String(Math.round(deltaY))]);
-      return res.toLowerCase().includes('true');
+      if (x >= 0 && y >= 0) {
+        const res = await this.runCli('scroll-at', [String(Math.round(x)), String(Math.round(y)), String(Math.round(deltaY))]);
+        return res.toLowerCase().includes('true');
+      } else {
+        const res = await this.runCli('scroll', [String(Math.round(deltaY))]);
+        return res.toLowerCase().includes('true');
+      }
     } catch {
-      return this.invokeWin32(`[Gemetron.Win32Input]::Scroll(${Math.round(deltaY)})`);
+      if (x >= 0 && y >= 0) {
+        return this.invokeWin32(`[Gemetron.Win32Input]::ScrollAt(${Math.round(x)}, ${Math.round(y)}, ${Math.round(deltaY)})`);
+      } else {
+        return this.invokeWin32(`[Gemetron.Win32Input]::Scroll(${Math.round(deltaY)})`);
+      }
     }
   }
 

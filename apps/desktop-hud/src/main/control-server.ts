@@ -54,7 +54,7 @@ export class ControlServer {
             if (typeof win.moveTop === 'function') {
               win.moveTop();
             }
-            win.setAlwaysOnTop?.(true, 'screen-saver');
+            win.setAlwaysOnTop?.(true);
             if (
               prompt &&
               win.webContents &&

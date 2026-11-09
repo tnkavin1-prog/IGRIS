@@ -1,4 +1,4 @@
-import { desktopCapturer, screen } from 'electron';
+import { app, desktopCapturer, screen } from 'electron';
 import type {
   CaptureResult,
   DesktopSourceInfo,
@@ -157,7 +157,10 @@ export class ComputerVisionService {
   /**
    * Capture full desktop screen (primary display by default or matching sourceId)
    */
-  public async captureScreen(sourceId?: string): Promise<CaptureResult> {
+  public async captureScreen(
+    sourceId?: string,
+    options?: { maxWidth?: number; maxHeight?: number; quality?: number },
+  ): Promise<CaptureResult> {
     if (this.mockMode || typeof desktopCapturer === 'undefined') {
       // 1x1 black JPEG pixel base64 for simulation
       const mockJpeg =
@@ -174,8 +177,12 @@ export class ComputerVisionService {
     }
 
     const metrics = this.getDisplayMetrics();
-    const targetWidth = Math.max(1920, Math.round(metrics.bounds.width * metrics.scaleFactor));
-    const targetHeight = Math.max(1080, Math.round(metrics.bounds.height * metrics.scaleFactor));
+    const targetWidth = options?.maxWidth
+      ? options.maxWidth
+      : Math.max(1920, Math.round(metrics.bounds.width * metrics.scaleFactor));
+    const targetHeight = options?.maxHeight
+      ? options.maxHeight
+      : Math.max(1080, Math.round(metrics.bounds.height * metrics.scaleFactor));
 
     const sources = await desktopCapturer.getSources({
       types: ['screen'],
@@ -189,7 +196,8 @@ export class ComputerVisionService {
 
     const img = target.thumbnail;
     const size = img.getSize();
-    const base64 = img.toJPEG(85).toString('base64');
+    const quality = options?.quality ?? 85;
+    const base64 = img.toJPEG(quality).toString('base64');
 
     return {
       data: base64,
@@ -253,7 +261,13 @@ export class ComputerVisionService {
    * Retrieve current display resolution, bounds, and scale factor across all displays
    */
   public getDisplayMetrics(): DisplayMetrics {
-    if (this.mockMode || typeof screen === 'undefined') {
+    const isAppReady =
+      typeof app !== 'undefined' &&
+      app !== null &&
+      typeof app.isReady === 'function' &&
+      app.isReady();
+
+    if (this.mockMode || !isAppReady) {
       return {
         width: 1920,
         height: 1080,
@@ -271,8 +285,9 @@ export class ComputerVisionService {
       };
     }
 
-    const primary = screen.getPrimaryDisplay();
-    const displays = screen.getAllDisplays();
+    try {
+      const primary = screen.getPrimaryDisplay();
+      const displays = screen.getAllDisplays();
 
     let minX = 0;
     let minY = 0;
@@ -306,6 +321,23 @@ export class ComputerVisionService {
         height: maxY - minY,
       },
     };
+  } catch {
+    return {
+      width: 1920,
+      height: 1080,
+      scaleFactor: 1.0,
+      bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+      allDisplays: [
+        {
+          id: 1,
+          bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+          scaleFactor: 1.0,
+          isPrimary: true,
+        },
+      ],
+      virtualBounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    };
+  }
   }
 
   /**

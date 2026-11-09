@@ -58,11 +58,7 @@
       "description": "End the live session"
     },
     "toggle-mic": {
-      "suggested_key": { "default": "Alt+Shift+M" },
       "description": "Mute or unmute the microphone"
-    },
-    "open-settings": {
-      "description": "Open Gemini Browser Live settings"
     }
   }
 }

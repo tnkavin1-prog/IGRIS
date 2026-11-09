@@ -160,7 +160,62 @@ export function App() {
 
     cleanups.push(
       window.geminiHUD.gemini.onConversationMessage((msg) => {
-        setConversation((prev) => [...prev, msg]);
+        setConversation((prev) => {
+          if (prev.length === 0) return [msg];
+          const lastIndex = prev.length - 1;
+          const last = prev[lastIndex];
+          if (!last) return [...prev, msg];
+
+          // Merge assistant streaming fragments into a single coherent paragraph
+          if (msg.kind === 'assistant' && last.kind === 'assistant') {
+            const incoming = msg.text || '';
+            let existing = last.text || '';
+            if (existing && incoming) {
+              const needsSpace =
+                !existing.endsWith(' ') &&
+                !existing.endsWith('\n') &&
+                !incoming.startsWith(' ') &&
+                !/^[.,!?;:'")]/.test(incoming);
+              if (needsSpace) {
+                existing += ' ';
+              }
+            }
+            const updated: ConversationMessage = {
+              ...last,
+              id: last.id || msg.id,
+              text: existing + incoming,
+            };
+            const next = [...prev];
+            next[lastIndex] = updated;
+            return next;
+          }
+
+          // Merge consecutive user speech fragments into a single coherent paragraph
+          if (msg.kind === 'user' && last.kind === 'user') {
+            const incoming = msg.text || '';
+            let existing = last.text || '';
+            if (existing && incoming) {
+              const needsSpace =
+                !existing.endsWith(' ') &&
+                !existing.endsWith('\n') &&
+                !incoming.startsWith(' ') &&
+                !/^[.,!?;:'")]/.test(incoming);
+              if (needsSpace) {
+                existing += ' ';
+              }
+            }
+            const updated: ConversationMessage = {
+              ...last,
+              id: last.id || msg.id,
+              text: existing + incoming,
+            };
+            const next = [...prev];
+            next[lastIndex] = updated;
+            return next;
+          }
+
+          return [...prev, msg];
+        });
       }),
     );
 

@@ -1,0 +1,193 @@
+You are DeepSeek V4.1 Flash Free (Primary Backend Agent) for PROJECT GEMATRON.
+
+Task: Implement Subtask 2.6: Universal AI Computer Operator.
+Target file to write: E:\Gematron\apps\desktop-hud\src\main\computer-operator.ts
+
+Here is the exact code specification to write directly to E:\Gematron\apps\desktop-hud\src\main\computer-operator.ts:
+
+```typescript
+import { skillRegistry, SkillRegistry, type SkillResult, type SkillCatalogEntry } from './skill-framework.js';
+import { windowsSkill, WindowsSkill } from './skills/windows.skill.js';
+import { officeSkill, OfficeSkill } from './skills/office.skill.js';
+import { blenderSkill, BlenderSkill } from './skills/blender.skill.js';
+import { creativeSkill, CreativeSkill } from './skills/creative.skill.js';
+import { openCodeSkill, OpenCodeSkill } from './skills/opencode.skill.js';
+import type { AppManagerService } from './app-manager.js';
+import type { CdpClient } from './cdp-client.js';
+
+export interface ComputerOperatorOptions {
+  mockMode?: boolean;
+  appManager?: AppManagerService;
+  cdpClient?: CdpClient;
+}
+
+export interface OperatorGoalResult {
+  goal: string;
+  skillId: string;
+  action: string;
+  success: boolean;
+  data?: unknown;
+  error?: string;
+  executionTimeMs: number;
+}
+
+export class UniversalComputerOperator {
+  public readonly registry: SkillRegistry;
+  private mockMode: boolean;
+  private appManager?: AppManagerService;
+  private cdpClient?: CdpClient;
+  private initialized = false;
+
+  constructor(options: ComputerOperatorOptions = {}) {
+    this.mockMode = Boolean(options.mockMode);
+    this.appManager = options.appManager;
+    this.cdpClient = options.cdpClient;
+    this.registry = skillRegistry;
+  }
+
+  /**
+   * Initializes and registers all application skills into the skill registry.
+   */
+  public async initialize(): Promise<void> {
+    if (this.initialized) return;
+
+    // Register all primary application skills
+    this.registry.registerSkill(this.mockMode ? new WindowsSkill({ mockMode: true }) : windowsSkill);
+    this.registry.registerSkill(this.mockMode ? new OfficeSkill({ mockMode: true }) : officeSkill);
+    this.registry.registerSkill(this.mockMode ? new BlenderSkill({ mockMode: true }) : blenderSkill);
+    this.registry.registerSkill(this.mockMode ? new CreativeSkill({ mockMode: true }) : creativeSkill);
+    this.registry.registerSkill(this.mockMode ? new OpenCodeSkill({ mockMode: true }) : openCodeSkill);
+
+    this.initialized = true;
+  }
+
+  /**
+   * Directly executes an action on a specific registered skill.
+   */
+  public async executeSkillAction(
+    skillId: string,
+    action: string,
+    params: Record<string, unknown> = {},
+  ): Promise<SkillResult> {
+    await this.initialize();
+    return this.registry.executeAction(skillId, action, params);
+  }
+
+  /**
+   * Returns a complete catalog of all registered skills and their action signatures.
+   */
+  public getCapabilities(): SkillCatalogEntry[] {
+    return this.registry.exportCatalog();
+  }
+
+  /**
+   * Autonomous Natural Language Goal Router.
+   * Parses user intent and dispatches to the most appropriate application skill.
+   */
+  public async executeGoal(goal: string, context: Record<string, unknown> = {}): Promise<OperatorGoalResult> {
+    await this.initialize();
+    const startedAt = Date.now();
+    const normalized = goal.toLowerCase().trim();
+
+    let targetSkill = 'windows';
+    let targetAction = 'getSystemTelemetry';
+    let params: Record<string, unknown> = { ...context };
+
+    if (normalized.includes('word') || normalized.includes('document') || normalized.includes('doc')) {
+      targetSkill = 'office';
+      targetAction = normalized.includes('read') ? 'readWordDoc' : 'createWordDoc';
+      if (!params.filePath) params.filePath = 'E:\\Gematron\\temp\\document.docx';
+      if (!params.title) params.title = 'Gematron Generated Document';
+      if (!params.content) params.content = goal;
+    } else if (normalized.includes('excel') || normalized.includes('sheet') || normalized.includes('spreadsheet') || normalized.includes('table')) {
+      targetSkill = 'office';
+      targetAction = normalized.includes('read') ? 'readExcelSheet' : 'createExcelSheet';
+      if (!params.filePath) params.filePath = 'E:\\Gematron\\temp\\data.xlsx';
+      if (!params.headers) params.headers = ['Item', 'Value', 'Timestamp'];
+      if (!params.rows) params.rows = [['Goal', goal, Date.now()]];
+    } else if (normalized.includes('powerpoint') || normalized.includes('presentation') || normalized.includes('slides') || normalized.includes('slide')) {
+      targetSkill = 'office';
+      targetAction = 'createPowerPoint';
+      if (!params.filePath) params.filePath = 'E:\\Gematron\\temp\\presentation.pptx';
+      if (!params.slides) params.slides = [{ title: 'Gematron Autonomous Slide', bullets: [goal] }];
+    } else if (normalized.includes('blender') || normalized.includes('3d') || normalized.includes('render scene')) {
+      targetSkill = 'blender';
+      targetAction = normalized.includes('render') ? 'renderScene' : 'checkBlender';
+    } else if (normalized.includes('photoshop') || normalized.includes('psd') || normalized.includes('premiere') || normalized.includes('after effects')) {
+      targetSkill = 'creative';
+      targetAction = normalized.includes('batch') || normalized.includes('export') ? 'renderPhotoshopBatch' : 'checkCreativeApps';
+    } else if (normalized.includes('opencode') || normalized.includes('model') || normalized.includes('free model') || normalized.includes('deepseek') || normalized.includes('glm')) {
+      targetSkill = 'opencode';
+      targetAction = normalized.includes('dispatch') || normalized.includes('code') ? 'dispatchTask' : 'listFreeModels';
+      if (!params.prompt) params.prompt = goal;
+    } else if (normalized.includes('open') || normalized.includes('launch') || normalized.includes('start')) {
+      targetSkill = 'windows';
+      targetAction = 'openApp';
+      const words = normalized.split(/\s+/);
+      const appIdx = words.findIndex((w) => ['open', 'launch', 'start'].includes(w));
+      const appName = words[appIdx + 1] || 'notepad.exe';
+      params.name = appName;
+    } else if (normalized.includes('close') || normalized.includes('kill') || normalized.includes('terminate')) {
+      targetSkill = 'windows';
+      targetAction = 'closeApp';
+      const words = normalized.split(/\s+/);
+      const killIdx = words.findIndex((w) => ['close', 'kill', 'terminate'].includes(w));
+      const procName = words[killIdx + 1] || 'notepad.exe';
+      params.processName = procName.endsWith('.exe') ? procName : `${procName}.exe`;
+    } else if (normalized.includes('search file') || normalized.includes('find file')) {
+      targetSkill = 'windows';
+      targetAction = 'searchFiles';
+      params.directory = params.directory || 'E:\\Gematron';
+      params.query = params.query || normalized.replace(/.*(search|find)\s+files?\s+/i, '').trim();
+    } else if (normalized.includes('organize') || normalized.includes('organise')) {
+      targetSkill = 'windows';
+      targetAction = 'organizeFiles';
+      params.sourceDir = params.sourceDir || 'E:\\Gematron\\temp';
+    } else if (normalized.includes('window') || normalized.includes('active windows')) {
+      targetSkill = 'windows';
+      targetAction = 'listWindows';
+    }
+
+    const result = await this.registry.executeAction(targetSkill, targetAction, params);
+
+    return {
+      goal,
+      skillId: targetSkill,
+      action: targetAction,
+      success: result.success,
+      data: result.data,
+      error: result.error,
+      executionTimeMs: Date.now() - startedAt,
+    };
+  }
+
+  /**
+   * Aggregates telemetry and system health across Windows and all registered skills.
+   */
+  public async getSystemHealth(): Promise<Record<string, unknown>> {
+    await this.initialize();
+    const telemetry = await this.registry.executeAction('windows', 'getSystemTelemetry');
+    const skillsList = this.registry.listSkills();
+    const skillAvailability: Record<string, boolean> = {};
+
+    for (const skill of skillsList) {
+      try {
+        skillAvailability[skill.id] = await skill.isAvailable();
+      } catch {
+        skillAvailability[skill.id] = false;
+      }
+    }
+
+    return {
+      timestamp: Date.now(),
+      system: telemetry.data || null,
+      skills: skillAvailability,
+      registeredSkillsCount: skillsList.length,
+    };
+  }
+}
+
+export const computerOperator = new UniversalComputerOperator();
+```
+
+Please write this exact code to E:\Gematron\apps\desktop-hud\src\main\computer-operator.ts.

@@ -259,10 +259,146 @@ export class CDPClient extends EventEmitter {
     return res.result?.value as T;
   }
 
+  /**
+   * Dispatches a synthetic hardware mouse wheel event to Chrome via CDP Input domain.
+   * Works on Chrome PDF viewer, canvas, iframes, and shadow DOM elements.
+   */
+  public async dispatchMouseWheel(
+    deltaY: number,
+    x = 600,
+    y = 400,
+    tabId?: string,
+  ): Promise<boolean> {
+    try {
+      const tab = tabId
+        ? (await this.listTabs()).find((t) => t.id === tabId)
+        : await this.getActiveTab();
+      if (!tab || !tab.webSocketDebuggerUrl) {
+        return false;
+      }
+      await this.executeCDPCommand(
+        tab.webSocketDebuggerUrl,
+        'Input.dispatchMouseEvent',
+        {
+          type: 'mouseWheel',
+          x,
+          y,
+          deltaX: 0,
+          deltaY,
+        },
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Dispatches keyboard key event to Chrome via CDP Input domain.
+   */
+  public async dispatchKeyEvent(
+    type: 'keyDown' | 'keyUp' | 'rawKeyDown',
+    key: string,
+    code: string,
+    windowsVirtualKeyCode: number,
+    tabId?: string,
+  ): Promise<boolean> {
+    try {
+      const tab = tabId
+        ? (await this.listTabs()).find((t) => t.id === tabId)
+        : await this.getActiveTab();
+      if (!tab || !tab.webSocketDebuggerUrl) {
+        return false;
+      }
+      await this.executeCDPCommand(
+        tab.webSocketDebuggerUrl,
+        'Input.dispatchKeyEvent',
+        {
+          type,
+          key,
+          code,
+          windowsVirtualKeyCode,
+        },
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   public async scroll(direction: 'up' | 'down', amount = 450, tabId?: string): Promise<boolean> {
     const yDelta = direction === 'down' ? amount : -amount;
-    const expr = `window.scrollBy({ top: ${yDelta}, left: 0, behavior: 'smooth' }); true;`;
-    return Boolean(await this.evaluate(expr, tabId));
+
+    // 1. Send hardware-level mouse wheel event via CDP Input domain (scrolls PDFs, canvas, iframes)
+    await this.dispatchMouseWheel(yDelta, 600, 400, tabId);
+
+    // 2. Send PageDown / PageUp key event via CDP to advance document pages
+    const isDown = direction === 'down';
+    await this.dispatchKeyEvent(
+      'rawKeyDown',
+      isDown ? 'PageDown' : 'PageUp',
+      isDown ? 'PageDown' : 'PageUp',
+      isDown ? 0x22 : 0x21,
+      tabId,
+    ).catch(() => undefined);
+    await this.dispatchKeyEvent(
+      'keyUp',
+      isDown ? 'PageDown' : 'PageUp',
+      isDown ? 'PageDown' : 'PageUp',
+      isDown ? 0x22 : 0x21,
+      tabId,
+    ).catch(() => undefined);
+
+    // 3. Also execute multi-container DOM scroll as web fallback
+    const expr = `(() => {
+      try {
+        window.scrollBy({ top: ${yDelta}, left: 0, behavior: 'smooth' });
+
+        const pdfViewer = document.querySelector('pdf-viewer');
+        const pdfContainer = pdfViewer?.shadowRoot?.querySelector('#viewerContainer') ||
+                             document.querySelector('#viewerContainer') ||
+                             document.querySelector('#viewer');
+        if (pdfContainer && typeof pdfContainer.scrollBy === 'function') {
+          pdfContainer.scrollBy({ top: ${yDelta}, left: 0, behavior: 'smooth' });
+        }
+
+        if (document.scrollingElement && typeof document.scrollingElement.scrollBy === 'function') {
+          document.scrollingElement.scrollBy({ top: ${yDelta}, left: 0, behavior: 'smooth' });
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    })()`;
+    await this.evaluate(expr, tabId).catch(() => undefined);
+    return true;
+  }
+
+  public async clickElementByText(text: string, tabId?: string): Promise<boolean> {
+    const escaped = JSON.stringify(text.trim().toLowerCase());
+    const expr = `(() => {
+      try {
+        const search = ${escaped};
+        const elements = Array.from(document.querySelectorAll('button, a, input, [role="button"], span, div, h1, h2, h3, p'));
+        for (const el of elements) {
+          const t = (el.innerText || el.textContent || el.value || '').trim().toLowerCase();
+          if (t === search || (search.length > 3 && t.includes(search))) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.click();
+            return true;
+          }
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    })()`;
+    try {
+      const res = await this.evaluate<boolean>(expr, tabId);
+      return Boolean(res);
+    } catch {
+      return false;
+    }
   }
 
   public async click(selector: string, tabId?: string): Promise<boolean> {

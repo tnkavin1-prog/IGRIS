@@ -1,0 +1,56 @@
+You are GLM 5.3 Flash, the Frontend UI/UX Specialist for Project Gematron.
+Update E:\Gematron\apps\desktop-hud\src\renderer\CompactHUD.tsx to wire up the new SkillLauncherPanel and ModelSwitchboard:
+
+1. Import SkillLauncherPanel and ModelSwitchboard at the top of CompactHUD.tsx:
+```tsx
+import { SkillLauncherPanel } from './SkillLauncherPanel.js';
+import { ModelSwitchboard } from './ModelSwitchboard.js';
+```
+
+2. Update activeView state:
+```tsx
+const [activeView, setActiveView] = useState<'chat' | 'blackboard' | 'workflow' | 'skills' | 'models'>('chat');
+```
+
+3. In compact-top-actions no-drag button group (around lines 455-460), add pills for Skills and Models:
+```tsx
+          {/* View: Universal Skill Launcher */}
+          <button
+            type="button"
+            className={`compact-board-pill ${activeView === 'skills' ? 'is-active' : ''}`}
+            title="Universal Skill Launcher (Windows, Office, Blender, Creative, OpenCode)"
+            onClick={() => setActiveView('skills')}
+          >
+            <span>🛠 Skills</span>
+          </button>
+
+          {/* View: Tri-Model Switchboard */}
+          <button
+            type="button"
+            className={`compact-board-pill ${activeView === 'models' ? 'is-active' : ''}`}
+            title="Tri-Model Orchestration Switchboard (Gemini, DeepSeek, GLM)"
+            onClick={() => setActiveView('models')}
+          >
+            <span>🧠 Models</span>
+          </button>
+```
+
+4. In the Center Body View condition (around line 753), add branches for 'skills' and 'models':
+```tsx
+      ) : activeView === 'skills' ? (
+        <div className="compact-body skills-view" style={{ overflowY: 'auto', padding: '8px' }}>
+          <SkillLauncherPanel
+            onExecuteGoal={(goal) => onStartAutonomousTask(goal)}
+            cpuUsage={telemetry?.cpuUsage}
+            memoryUsagePercent={telemetry?.memoryUsagePercent}
+          />
+        </div>
+      ) : activeView === 'models' ? (
+        <div className="compact-body models-view" style={{ overflowY: 'auto', padding: '8px' }}>
+          <ModelSwitchboard
+            onDispatchTest={(modelKey, prompt) => onStartAutonomousTask(`Dispatch task to ${modelKey}: ${prompt}`)}
+          />
+        </div>
+```
+
+Apply this edit to CompactHUD.tsx cleanly. Do not ask questions.

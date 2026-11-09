@@ -43,9 +43,12 @@ export class GeminiLiveService extends EventEmitter {
   private memoryStore: JarvisMemoryStore;
   private hardwareMonitor: HardwareMonitorService;
   private clipboard: ClipboardService;
+  private currentAssistantTurnId: string | null = null;
+  private currentUserTurnId: string | null = null;
 
   private settings: HUDSettings;
   private status: LiveHUDStatus = 'idle';
+  private screenStreamTimer: NodeJS.Timeout | null = null;
 
   constructor(cdpClient: CDPClient, deps?: GeminiLiveServiceDeps) {
     super();
@@ -221,6 +224,7 @@ export class GeminiLiveService extends EventEmitter {
       this.socket.on('open', () => {
         this.setStatus('listening');
         this.sendSetup();
+        this.startScreenStream();
         this.emit('connected');
         this.emitTelemetry();
       });
@@ -234,6 +238,7 @@ export class GeminiLiveService extends EventEmitter {
       });
 
       this.socket.on('close', (code: number, reason: Buffer) => {
+        this.stopScreenStream();
         this.setStatus('closed');
         this.socket = null;
         this.emit('disconnected', { code, reason: reason.toString() });
@@ -249,6 +254,7 @@ export class GeminiLiveService extends EventEmitter {
   }
 
   public disconnect(): void {
+    this.stopScreenStream();
     if (this.socket) {
       try {
         this.socket.close();
@@ -259,10 +265,44 @@ export class GeminiLiveService extends EventEmitter {
     this.emitTelemetry();
   }
 
+  public startScreenStream(intervalMs = 2500): void {
+    if (this.screenStreamTimer) return;
+    this.screenStreamTimer = setInterval(async () => {
+      if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+      try {
+        const shot = await this.computerVision.captureScreen(undefined, {
+          maxWidth: 1024,
+          maxHeight: 576,
+          quality: 70,
+        });
+        if (shot?.data) {
+          this.sendImageFrame(shot.data);
+        }
+      } catch {}
+    }, intervalMs);
+  }
+
+  public stopScreenStream(): void {
+    if (this.screenStreamTimer) {
+      clearInterval(this.screenStreamTimer);
+      this.screenStreamTimer = null;
+    }
+  }
+
   public sendText(text: string): boolean {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       return false;
     }
+
+    // Auto-capture live screen on user interaction so Gemini always has fresh visual context
+    void this.computerVision
+      .captureScreen(undefined, { maxWidth: 1024, maxHeight: 576, quality: 75 })
+      .then((shot) => {
+        if (shot?.data) {
+          this.sendImageFrame(shot.data);
+        }
+      })
+      .catch(() => undefined);
 
     const msg = {
       clientContent: {
@@ -340,10 +380,21 @@ export class GeminiLiveService extends EventEmitter {
             {
               text: [
                 'You are Jarvis, an advanced Autonomous Multimodal Computer-Use Co-Pilot embedded in a native desktop HUD.',
-                'You possess OS-wide computer vision and full native control over Windows: mouse clicking and movement, keyboard typing and hotkeys, application lifecycle management, and Google Chrome browser tabs via CDP.',
-                'When requested to operate the computer, invoke the appropriate tools: computer_use_click, computer_use_type, computer_use_hotkey, computer_use_screenshot, find_text_on_screen, launch_application, switch_active_window, run_system_command, manage_browser_tabs, and plan_autonomous_task.',
-                'When the user asks you to explain, solve, or derive a concept in math, physics, or geometry, invoke teach_visual_blackboard to project SVG chalkboard diagrams and LaTeX proofs.',
-                'Keep your spoken voice responses concise, confident, and professional while letting your actions execute seamlessly on the user desktop.',
+                'You possess complete human-like, OS-wide autonomous control over Windows: mouse clicking, dragging, moving, hardware mouse wheel scrolling, keyboard typing and hotkeys, window management (maximize, minimize, restore, close), application management, and Chrome browser tabs via CDP.',
+                'FAST-PATH AUTONOMOUS ACTIONS (CRITICAL):',
+                '- When asked to MAXIMIZE a window (e.g. "maximize Chrome", "maximize window", "make it full screen"): IMMEDIATELY call maximize_window({ window_title: "Chrome" }). Do NOT call switch_active_window or tile_windows.',
+                '- When asked to SCROLL DOWN or SCROLL UP in a document, PDF, or webpage (e.g. "scroll down", "scroll up", "scroll pdf", "read further"): IMMEDIATELY call scroll_page({ direction: "down" }) or scroll_page({ direction: "up" }). Never merely claim you scrolled—always invoke the tool call.',
+                '- When asked to TAKE A SCREENSHOT, show screen, paste screenshot in chat, or view what is on screen: IMMEDIATELY call computer_use_screenshot({}). It captures the screen and displays the screenshot directly in the chat.',
+                '- When asked to CLICK a button, link, or label on screen (e.g. "click Download", "click Resume", "click Close"): IMMEDIATELY call click_element_by_text({ text: "..." }) or computer_use_click({ x, y }).',
+                '- When asked to PRESS a key (e.g. "press Enter", "press PageDown", "press Esc"): IMMEDIATELY call press_key({ key: "..." }) or computer_use_hotkey({ keys: ["..."] }).',
+                '- When asked to MINIMIZE, RESTORE, or CLOSE a window: call minimize_window, restore_window, or close_window.',
+                '- When asked to type or navigate: immediately invoke computer_use_type, computer_use_click, navigate_to_url, or launch_application.',
+                '- When asked to explain or derive concepts in math/physics: invoke teach_visual_blackboard.',
+                'SCREEN & APPLICATION VISIBILITY GROUNDING (CRITICAL):',
+                '- You receive real-time streaming video frames of the user live desktop screen.',
+                '- Always observe the actual visual screen before asserting whether an application is open or visible. If the desktop wallpaper is showing and no application window is visible on screen, it is NOT open.',
+                '- If the user tells you an app is NOT open, NEVER argue or claim it is open. Immediately call launch_application({ app_name: "..." }) or switch_active_window({ window_title: "..." }) to bring it up.',
+                'Keep your spoken responses ultra-concise, natural, and confident (strictly under 6 words: e.g. "Maximized.", "Scrolling down.", "Screenshot captured.", "Clicked.", "Done."). Execute physical tools on Turn 1 without hesitation.',
                 this.memoryStore.buildSystemContextPrompt(),
               ].join('\n\n'),
             },
@@ -463,6 +514,67 @@ export class GeminiLiveService extends EventEmitter {
                 },
               },
               {
+                name: 'computer_use_mouse_move',
+                behavior: 'NON_BLOCKING',
+                description: 'Moves the native mouse cursor to coordinate (x, y) on screen.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    x: { type: 'INTEGER', description: 'Screen X pixel coordinate' },
+                    y: { type: 'INTEGER', description: 'Screen Y pixel coordinate' },
+                  },
+                  required: ['x', 'y'],
+                },
+              },
+              {
+                name: 'computer_use_mouse_drag',
+                behavior: 'NON_BLOCKING',
+                description: 'Drags mouse cursor from (start_x, start_y) to (end_x, end_y).',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    start_x: { type: 'INTEGER', description: 'Start X coordinate' },
+                    start_y: { type: 'INTEGER', description: 'Start Y coordinate' },
+                    end_x: { type: 'INTEGER', description: 'End X coordinate' },
+                    end_y: { type: 'INTEGER', description: 'End Y coordinate' },
+                    steps: { type: 'INTEGER', description: 'Interpolation steps (default 10)' },
+                  },
+                  required: ['start_x', 'start_y', 'end_x', 'end_y'],
+                },
+              },
+              {
+                name: 'click_element_by_text',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Visually locates any button, link, menu item, or text label on screen and clicks it like a human.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    text: {
+                      type: 'STRING',
+                      description: 'Exact text or button label to click (e.g. "CLOUD RESUME DOWNLOAD", "Next", "Submit", "Close")',
+                    },
+                  },
+                  required: ['text'],
+                },
+              },
+              {
+                name: 'press_key',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Presses a specific keyboard key directly (e.g. PageDown, PageUp, Enter, Escape, Tab, Space, Down, Up).',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    key: {
+                      type: 'STRING',
+                      description: 'Key name to press (PageDown, PageUp, Enter, Escape, Tab, Space, Down, Up)',
+                    },
+                  },
+                  required: ['key'],
+                },
+              },
+              {
                 name: 'computer_use_type',
                 behavior: 'NON_BLOCKING',
                 description:
@@ -555,8 +667,93 @@ export class GeminiLiveService extends EventEmitter {
                       type: 'STRING',
                       description: 'Title or substring of window to focus',
                     },
+                    maximize: {
+                      type: 'BOOLEAN',
+                      description: 'Set true to also maximize the window upon focusing',
+                    },
                   },
                   required: ['window_title'],
+                },
+              },
+              {
+                name: 'maximize_window',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Maximizes a desktop application window to fill the screen (e.g. Chrome, Word, Notepad, PDF, or active window).',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    window_title: {
+                      type: 'STRING',
+                      description: 'Window title or application name to maximize (e.g. "Chrome", "Notepad", or "active")',
+                    },
+                  },
+                },
+              },
+              {
+                name: 'minimize_window',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Minimizes a desktop application window to the taskbar.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    window_title: {
+                      type: 'STRING',
+                      description: 'Window title or application name to minimize (default: active)',
+                    },
+                  },
+                },
+              },
+              {
+                name: 'restore_window',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Restores a maximized or minimized window to its previous regular window size.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    window_title: {
+                      type: 'STRING',
+                      description: 'Window title or application name to restore',
+                    },
+                  },
+                },
+              },
+              {
+                name: 'close_window',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Closes a specified application window.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    window_title: {
+                      type: 'STRING',
+                      description: 'Window title or application name to close',
+                    },
+                  },
+                },
+              },
+              {
+                name: 'mouse_scroll',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Performs a native hardware mouse scroll wheel action up or down on the active window or document (scrolls PDFs, Chrome, Word, code editors).',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    direction: {
+                      type: 'STRING',
+                      enum: ['up', 'down'],
+                      description: 'Scroll direction',
+                    },
+                    amount: {
+                      type: 'INTEGER',
+                      description: 'Scroll distance in pixels (default: 450)',
+                    },
+                  },
+                  required: ['direction'],
                 },
               },
               {
@@ -777,12 +974,17 @@ export class GeminiLiveService extends EventEmitter {
               {
                 name: 'scroll_page',
                 behavior: 'NON_BLOCKING',
-                description: 'Scrolls the active Chrome webpage up or down.',
+                description:
+                  'Scrolls the active window, document, PDF viewer, or webpage up or down.',
                 parameters: {
                   type: 'OBJECT',
                   properties: {
                     direction: { type: 'STRING', enum: ['up', 'down'] },
                     amount: { type: 'INTEGER', description: 'Scroll distance in pixels' },
+                    target_app: {
+                      type: 'STRING',
+                      description: 'Application or window name to scroll (default: active window)',
+                    },
                   },
                   required: ['direction'],
                 },
@@ -817,12 +1019,17 @@ export class GeminiLiveService extends EventEmitter {
         if (sc.interrupted) {
           this.emit('interrupted');
           this.setStatus('listening');
+          this.currentAssistantTurnId = null;
+          this.currentUserTurnId = null;
         }
 
         if (sc.inputTranscription?.text) {
+          if (!this.currentUserTurnId) {
+            this.currentUserTurnId = `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          }
           this.emit('user-transcript', sc.inputTranscription.text);
           this.emit('conversation-message', {
-            id: `usr_${Date.now()}`,
+            id: this.currentUserTurnId,
             kind: 'user',
             text: sc.inputTranscription.text,
             at: Date.now(),
@@ -830,9 +1037,12 @@ export class GeminiLiveService extends EventEmitter {
         }
 
         if (sc.outputTranscription?.text) {
+          if (!this.currentAssistantTurnId) {
+            this.currentAssistantTurnId = `asst_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          }
           this.emit('gemini-transcript', sc.outputTranscription.text);
           this.emit('conversation-message', {
-            id: `asst_${Date.now()}`,
+            id: this.currentAssistantTurnId,
             kind: 'assistant',
             text: sc.outputTranscription.text,
             at: Date.now(),
@@ -853,6 +1063,8 @@ export class GeminiLiveService extends EventEmitter {
 
         if (sc.turnComplete) {
           this.setStatus('listening');
+          this.currentAssistantTurnId = null;
+          this.currentUserTurnId = null;
           this.emit('turn-complete');
         }
       }
@@ -879,6 +1091,8 @@ export class GeminiLiveService extends EventEmitter {
   private async handleToolCalls(
     calls: Array<{ id: string; name: string; args: Record<string, any> }>,
   ): Promise<void> {
+    this.currentAssistantTurnId = null;
+    this.currentUserTurnId = null;
     const responses: Array<{ id: string; name: string; response: Record<string, any> }> = [];
 
     for (const call of calls) {
@@ -991,6 +1205,57 @@ export class GeminiLiveService extends EventEmitter {
             break;
           }
 
+          case 'computer_use_mouse_move': {
+            const x = Number(call.args.x) || 0;
+            const y = Number(call.args.y) || 0;
+            const ok = await this.nativeInput.mouseMove(x, y);
+            result = { success: ok, x, y };
+            break;
+          }
+
+          case 'computer_use_mouse_drag': {
+            const sx = Number(call.args.start_x) || 0;
+            const sy = Number(call.args.start_y) || 0;
+            const ex = Number(call.args.end_x) || 0;
+            const ey = Number(call.args.end_y) || 0;
+            const steps = Number(call.args.steps) || 10;
+            const ok = await this.nativeInput.mouseDrag(sx, sy, ex, ey, steps);
+            result = { success: ok, from: { x: sx, y: sy }, to: { x: ex, y: ey } };
+            break;
+          }
+
+          case 'click_element_by_text': {
+            const textToClick = call.args.text || call.args.query || '';
+            let clicked = false;
+            try {
+              clicked = await this.cdpClient.clickElementByText(textToClick);
+            } catch {}
+            if (!clicked) {
+              try {
+                const matches = await this.appManager.findText(textToClick);
+                const target = matches[0];
+                if (target) {
+                  clicked = await this.nativeInput.mouseClick(target.x, target.y);
+                  this.emit('crosshair-target', {
+                    x: target.x,
+                    y: target.y,
+                    label: `Clicked: "${textToClick}"`,
+                    timestamp: Date.now(),
+                  } as CrosshairTarget);
+                }
+              } catch {}
+            }
+            result = { success: clicked, clickedText: textToClick };
+            break;
+          }
+
+          case 'press_key': {
+            const rawKey = call.args.key || 'Enter';
+            const ok = await this.nativeInput.sendHotkey(rawKey);
+            result = { success: ok, key: rawKey };
+            break;
+          }
+
           case 'computer_use_type': {
             const text = String(call.args.text || '');
             await this.nativeInput.typeText(text);
@@ -1020,12 +1285,21 @@ export class GeminiLiveService extends EventEmitter {
               this.sendImageFrame(shot.data);
             }
 
+            this.emit('conversation-message', {
+              id: `shot_${Date.now()}`,
+              kind: 'assistant',
+              title: '📸 Screenshot',
+              text: `Desktop Screenshot captured (${shot.width}x${shot.height}):`,
+              imageUrl: `data:image/jpeg;base64,${shot.data}`,
+              at: Date.now(),
+            } as ConversationMessage);
+
             result = {
               success: true,
               width: shot.width,
               height: shot.height,
               sourceName: shot.sourceName,
-              message: 'Desktop screenshot captured and fed into vision stream.',
+              message: 'Desktop screenshot captured, displayed in chat, and fed into vision stream.',
             };
             break;
           }
@@ -1051,7 +1325,64 @@ export class GeminiLiveService extends EventEmitter {
               call.args.app ||
               '';
             const ok = await this.appManager.focusWindow(target);
+            if (call.args.maximize === true || target.toLowerCase().includes('max')) {
+              await this.appManager.maximizeWindow(target);
+            }
             result = { success: ok, window: target };
+            break;
+          }
+
+          case 'maximize_window': {
+            const target =
+              call.args.window_title ||
+              call.args.windowTitle ||
+              call.args.title ||
+              call.args.appName ||
+              call.args.app ||
+              'chrome';
+            const ok = await this.appManager.maximizeWindow(target);
+            result = { success: ok, maximized: true, window: target };
+            break;
+          }
+
+          case 'minimize_window': {
+            const target =
+              call.args.window_title ||
+              call.args.windowTitle ||
+              call.args.title ||
+              call.args.appName ||
+              call.args.app ||
+              'active';
+            const ok = await this.appManager.minimizeWindow(target);
+            await this.nativeInput.sendHotkey('Win+Down').catch(() => undefined);
+            result = { success: ok, minimized: true, window: target };
+            break;
+          }
+
+          case 'restore_window': {
+            const target =
+              call.args.window_title ||
+              call.args.windowTitle ||
+              call.args.title ||
+              call.args.appName ||
+              call.args.app ||
+              'chrome';
+            const ok = await this.appManager.restoreWindow(target);
+            await this.nativeInput.sendHotkey('Win+Down').catch(() => undefined);
+            result = { success: ok, restored: true, window: target };
+            break;
+          }
+
+          case 'close_window': {
+            const target =
+              call.args.window_title ||
+              call.args.windowTitle ||
+              call.args.title ||
+              call.args.appName ||
+              call.args.app ||
+              'active';
+            const ok = await this.appManager.closeWindow(target);
+            result = { success: ok, closed: true, window: target };
             break;
           }
 
@@ -1212,12 +1543,49 @@ export class GeminiLiveService extends EventEmitter {
             break;
           }
 
-          case 'scroll_page': {
-            const scrolled = await this.cdpClient.scroll(
-              call.args.direction || 'down',
-              call.args.amount || 450,
-            );
-            result = { success: scrolled };
+          case 'scroll_page':
+          case 'mouse_scroll': {
+            const direction = (call.args.direction || 'down') as 'up' | 'down';
+            const amount = Number(call.args.amount) || 450;
+            const targetApp =
+              call.args.target_app || call.args.app || call.args.window_title || 'chrome';
+            const yDelta = direction === 'down' ? amount : -amount;
+
+            // 1. Locate window bounds to position the mouse cursor over the document/PDF
+            let scrollX = -1;
+            let scrollY = -1;
+            try {
+              const windows = await this.appManager.listRunningWindows();
+              const targetWin = this.appManager.resolveAppWindow(targetApp, windows);
+              if (targetWin) {
+                await this.appManager.focusWindow(targetWin.hwnd);
+                const bounds = await this.appManager.getWindowBounds(targetWin.hwnd);
+                if (bounds.width > 100 && bounds.height > 100) {
+                  scrollX = bounds.x + Math.floor(bounds.width / 2);
+                  scrollY = bounds.y + Math.floor(bounds.height / 2);
+                }
+              }
+            } catch {}
+
+            // Fallback to center of screen if window bounds not found
+            if (scrollX < 0 || scrollY < 0) {
+              const metrics = this.computerVision.getDisplayMetrics();
+              scrollX = Math.floor(metrics.width / 2);
+              scrollY = Math.floor(metrics.height / 2);
+            }
+
+            // 2. Hardware wheel via Win32 OS directly at the window coordinates
+            const nativeOk = await this.nativeInput.mouseScrollAt(scrollX, scrollY, -yDelta);
+
+            // 3. Hardware wheel via CDP if Chrome is listening
+            const cdpOk = await this.cdpClient.scroll(direction, amount).catch(() => false);
+
+            // 4. Keyboard page scroll (PageDown / PageUp) to advance PDFs and readers
+            await this.nativeInput
+              .sendHotkey(direction === 'down' ? 'PageDown' : 'PageUp')
+              .catch(() => undefined);
+
+            result = { success: nativeOk || cdpOk, direction, amount, targetApp };
             break;
           }
 
@@ -1337,6 +1705,7 @@ export class GeminiLiveService extends EventEmitter {
       bridgeUrl: 'http://127.0.0.1:47821',
       soundEffectsEnabled: true,
       soundVolume: 0.5,
+      minimizeToTray: true,
     };
   }
 

@@ -5,6 +5,7 @@ import type { ComputerVisionService } from './computer-vision.js';
 import type { AppManagerService } from './app-manager.js';
 import type { ClipboardService } from './clipboard-manager.js';
 import type { JarvisMemoryStore } from './jarvis-memory.js';
+import { computerOperator } from './computer-operator.js';
 import type {
   AgenticTask,
   BoundingBoxTarget,
@@ -251,6 +252,146 @@ export class AgenticWorkflowEngine extends EventEmitter {
           description: 'Capture terminal display for verification',
           actionType: 'computer_screenshot',
           params: {},
+        },
+      ];
+    }
+
+    // Intelligent application, creative, and AI model routing
+    if (
+      (lower.includes('word') || lower.includes('document')) &&
+      !lower.includes('launch') &&
+      !lower.includes('switch')
+    ) {
+      return [
+        {
+          description: 'Create a Word document via the Office skill',
+          actionType: 'execute_skill',
+          params: {
+            skillId: 'office',
+            action: 'createWordDoc',
+            params: {
+              filePath: 'E:\\Gematron\\temp\\doc.docx',
+              title: 'Gematron Autonomous Doc',
+              content: goal,
+            },
+          },
+        },
+        {
+          description: 'Capture screenshot for document verification',
+          actionType: 'computer_screenshot',
+          params: {},
+        },
+      ];
+    }
+
+    if (lower.includes('excel') || lower.includes('spreadsheet')) {
+      return [
+        {
+          description: 'Create an Excel spreadsheet via the Office skill',
+          actionType: 'execute_skill',
+          params: {
+            skillId: 'office',
+            action: 'createExcelSheet',
+            params: {
+              filePath: 'E:\\Gematron\\temp\\sheet.xlsx',
+              headers: ['ID', 'Task', 'Date'],
+              rows: [[1, goal, new Date().toISOString()]],
+            },
+          },
+        },
+      ];
+    }
+
+    if (
+      lower.includes('presentation') ||
+      lower.includes('powerpoint') ||
+      lower.includes('slides')
+    ) {
+      return [
+        {
+          description: 'Create a PowerPoint presentation via the Office skill',
+          actionType: 'execute_skill',
+          params: {
+            skillId: 'office',
+            action: 'createPowerPoint',
+            params: {
+              filePath: 'E:\\Gematron\\temp\\slides.pptx',
+              slides: [{ title: 'Autonomous Slide', bullets: [goal] }],
+            },
+          },
+        },
+      ];
+    }
+
+    if (lower.includes('blender') || lower.includes('3d render')) {
+      return [
+        {
+          description: 'Render a 3D scene via the Blender skill',
+          actionType: 'execute_skill',
+          params: {
+            skillId: 'blender',
+            action: 'renderScene',
+            params: {
+              blendFile: 'E:\\Gematron\\temp\\scene.blend',
+              outputImg: 'E:\\Gematron\\temp\\scene.png',
+            },
+          },
+        },
+      ];
+    }
+
+    if (
+      lower.includes('photoshop') ||
+      lower.includes('premiere') ||
+      lower.includes('after effects')
+    ) {
+      return [
+        {
+          description: 'Inspect the Adobe creative suite via the Creative skill',
+          actionType: 'execute_skill',
+          params: {
+            skillId: 'creative',
+            action: 'checkCreativeApps',
+            params: {},
+          },
+        },
+      ];
+    }
+
+    if (
+      lower.includes('deepseek') ||
+      lower.includes('backend') ||
+      lower.includes('api logic') ||
+      lower.includes('algorithm')
+    ) {
+      return [
+        {
+          description: 'Dispatch backend logic generation to DeepSeek',
+          actionType: 'ai_dispatch',
+          params: {
+            modelKey: 'deepseek',
+            prompt: goal,
+            title: 'DeepSeek Backend Logic Dispatch',
+          },
+        },
+      ];
+    }
+
+    if (
+      lower.includes('glm') ||
+      lower.includes('frontend') ||
+      lower.includes('ui component') ||
+      lower.includes('svg')
+    ) {
+      return [
+        {
+          description: 'Dispatch frontend architecture generation to GLM',
+          actionType: 'ai_dispatch',
+          params: {
+            modelKey: 'glm',
+            prompt: goal,
+            title: 'GLM Frontend Architecture Dispatch',
+          },
         },
       ];
     }
@@ -687,6 +828,38 @@ export class AgenticWorkflowEngine extends EventEmitter {
           this.clipboardService.writeText(text);
         }
         return { success: true, length: text.length };
+      }
+
+      case 'execute_skill': {
+        const { skillId, action, params } = p;
+        const res = await computerOperator.executeSkillAction(skillId, action, params || {});
+        if (!res.success) {
+          throw new Error(res.error || `Failed to execute skill "${skillId}:${action}"`);
+        }
+        return res;
+      }
+
+      case 'operator_goal': {
+        const goalStr = String(p.goal || step.description || '');
+        const res = await computerOperator.executeGoal(goalStr, p.context || {});
+        if (!res.success) {
+          throw new Error(res.error || `Failed to execute goal "${goalStr}"`);
+        }
+        return res;
+      }
+
+      case 'ai_dispatch': {
+        const modelKey = (p.modelKey as 'deepseek' | 'glm') || 'deepseek';
+        const prompt = String(p.prompt || '');
+        const res = await computerOperator.executeSkillAction('opencode', 'dispatchTask', {
+          modelKey,
+          prompt,
+          title: p.title || `Workflow AI Step: ${step.description}`,
+        });
+        if (!res.success) {
+          throw new Error(res.error || `AI Model dispatch (${modelKey}) failed`);
+        }
+        return res;
       }
 
       default:

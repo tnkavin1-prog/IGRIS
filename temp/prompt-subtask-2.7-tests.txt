@@ -1,0 +1,142 @@
+Write the Vitest unit test file directly to E:\Gematron\tests\unit\desktop\computer-operator.test.ts using fs.writeFileSync. Do not call any glob or exploration tools.
+
+Here is the exact code to write to E:\Gematron\tests\unit\desktop\computer-operator.test.ts:
+
+```typescript
+import { describe, it, expect, beforeEach } from 'vitest';
+import { UniversalComputerOperator } from '../../../apps/desktop-hud/src/main/computer-operator.js';
+
+describe('UniversalComputerOperator & Skills', () => {
+  let operator: UniversalComputerOperator;
+
+  beforeEach(() => {
+    operator = new UniversalComputerOperator({ mockMode: true });
+  });
+
+  it('initializes and registers all 5 core application skills', async () => {
+    await operator.initialize();
+    const skills = operator.registry.listSkills();
+    const skillIds = skills.map((s) => s.id);
+
+    expect(skillIds).toContain('windows');
+    expect(skillIds).toContain('office');
+    expect(skillIds).toContain('blender');
+    expect(skillIds).toContain('creative');
+    expect(skillIds).toContain('opencode');
+  });
+
+  it('exports catalog capabilities for registered skills', async () => {
+    await operator.initialize();
+    const catalog = operator.getCapabilities();
+    expect(catalog.length).toBeGreaterThanOrEqual(5);
+
+    const winEntry = catalog.find((c) => c.id === 'windows');
+    expect(winEntry).toBeDefined();
+    expect(winEntry?.actions.length).toBeGreaterThan(0);
+  });
+
+  it('executes windows skill actions in mock mode', async () => {
+    const telemetry = await operator.executeSkillAction('windows', 'getSystemTelemetry');
+    expect(telemetry.success).toBe(true);
+    expect(telemetry.data).toBeDefined();
+
+    const openRes = await operator.executeSkillAction('windows', 'openApp', { name: 'notepad.exe' });
+    expect(openRes.success).toBe(true);
+
+    const closeRes = await operator.executeSkillAction('windows', 'closeApp', { processName: 'notepad.exe' });
+    expect(closeRes.success).toBe(true);
+
+    const searchRes = await operator.executeSkillAction('windows', 'searchFiles', { query: 'test' });
+    expect(searchRes.success).toBe(true);
+  });
+
+  it('executes office skill actions in mock mode', async () => {
+    const wordRes = await operator.executeSkillAction('office', 'createWordDoc', {
+      filePath: 'E:\\Gematron\\temp\\test.docx',
+      title: 'Test Doc',
+      content: 'Hello World',
+    });
+    expect(wordRes.success).toBe(true);
+
+    const excelRes = await operator.executeSkillAction('office', 'createExcelSheet', {
+      filePath: 'E:\\Gematron\\temp\\test.xlsx',
+      headers: ['A', 'B'],
+      rows: [[1, 2]],
+    });
+    expect(excelRes.success).toBe(true);
+
+    const pptRes = await operator.executeSkillAction('office', 'createPowerPoint', {
+      filePath: 'E:\\Gematron\\temp\\test.pptx',
+      slides: [{ title: 'Slide 1', bullets: ['Bullet 1'] }],
+    });
+    expect(pptRes.success).toBe(true);
+  });
+
+  it('executes blender and creative skill actions in mock mode', async () => {
+    const blenderCheck = await operator.executeSkillAction('blender', 'checkBlender');
+    expect(blenderCheck.success).toBe(true);
+
+    const blenderRender = await operator.executeSkillAction('blender', 'renderScene', {
+      blendFilePath: 'E:\\Gematron\\temp\\scene.blend',
+    });
+    expect(blenderRender.success).toBe(true);
+
+    const creativeCheck = await operator.executeSkillAction('creative', 'checkCreativeApps');
+    expect(creativeCheck.success).toBe(true);
+  });
+
+  it('executes opencode skill actions in mock mode', async () => {
+    const modelsRes = await operator.executeSkillAction('opencode', 'listFreeModels');
+    expect(modelsRes.success).toBe(true);
+    expect(Array.isArray(modelsRes.data)).toBe(true);
+
+    const dispatchRes = await operator.executeSkillAction('opencode', 'dispatchTask', {
+      prompt: 'Write test',
+      modelKey: 'deepseek',
+    });
+    expect(dispatchRes.success).toBe(true);
+  });
+
+  it('routes natural language goals to corresponding skills', async () => {
+    const goal1 = await operator.executeGoal('create word document for project report');
+    expect(goal1.skillId).toBe('office');
+    expect(goal1.action).toBe('createWordDoc');
+    expect(goal1.success).toBe(true);
+
+    const goal2 = await operator.executeGoal('build excel spreadsheet with monthly expenses');
+    expect(goal2.skillId).toBe('office');
+    expect(goal2.action).toBe('createExcelSheet');
+    expect(goal2.success).toBe(true);
+
+    const goal3 = await operator.executeGoal('render 3d scene in blender');
+    expect(goal3.skillId).toBe('blender');
+    expect(goal3.action).toBe('renderScene');
+    expect(goal3.success).toBe(true);
+
+    const goal4 = await operator.executeGoal('open notepad');
+    expect(goal4.skillId).toBe('windows');
+    expect(goal4.action).toBe('openApp');
+    expect(goal4.success).toBe(true);
+
+    const goal5 = await operator.executeGoal('search file project specs');
+    expect(goal5.skillId).toBe('windows');
+    expect(goal5.action).toBe('searchFiles');
+    expect(goal5.success).toBe(true);
+
+    const goal6 = await operator.executeGoal('dispatch code task to deepseek');
+    expect(goal6.skillId).toBe('opencode');
+    expect(goal6.action).toBe('dispatchTask');
+    expect(goal6.success).toBe(true);
+  });
+
+  it('reports system health and skill availability', async () => {
+    const health = await operator.getSystemHealth();
+    expect(health).toHaveProperty('timestamp');
+    expect(health).toHaveProperty('skills');
+    expect(health).toHaveProperty('registeredSkillsCount');
+    expect(health.registeredSkillsCount).toBeGreaterThanOrEqual(5);
+  });
+});
+```
+
+Write this exact file to E:\Gematron\tests\unit\desktop\computer-operator.test.ts using node fs.writeFileSync. Do it now.
