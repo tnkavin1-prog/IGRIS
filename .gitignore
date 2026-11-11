@@ -30,6 +30,16 @@ coverage/
 tests/.artifacts/
 .artifacts/
 
+# Temporary / scratch files
+temp/
+backups/
+
+# Python virtual environments & cache
+venv/
+.venv/
+__pycache__/
+*.pyc
+
 # Editor / OS
 .vscode/
 .idea/
@@ -46,3 +56,6 @@ logs/
 
 # Generated API docs (typedoc)
 docs/api/
+
+# Agent working directories (not part of core project)
+.agents/
