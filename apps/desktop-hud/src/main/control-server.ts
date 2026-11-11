@@ -1,6 +1,8 @@
 import { createServer, type Server } from 'node:http';
+import { join } from 'node:path';
 import type { BrowserWindow } from 'electron';
 import type { CDPClient } from './cdp-client.js';
+import { SCRIPTS_DIR, REPO_ROOT } from './runtime-paths.js';
 
 export interface ControlServerOptions {
   onKimiDispatch?: (payload: {
@@ -246,7 +248,7 @@ export class ControlServer {
             try {
               const { pathToFileURL } = await import('node:url');
               const path = await import('node:path');
-              const scriptPath = path.resolve('E:/Gematron/scripts/kimi-bridge.mjs');
+              const scriptPath = path.resolve(join(SCRIPTS_DIR, 'kimi-bridge.mjs'));
               const bridgeUrl = pathToFileURL(scriptPath).href;
               const bridge = await import(bridgeUrl);
 
@@ -255,7 +257,7 @@ export class ControlServer {
                 files,
                 dryRun,
                 maxChars,
-                projectRoot: 'E:\\Gematron',
+                projectRoot: REPO_ROOT,
               });
 
               res.writeHead(200, { 'Content-Type': 'application/json' });

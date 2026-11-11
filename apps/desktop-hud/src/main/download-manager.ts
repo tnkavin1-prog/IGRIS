@@ -10,8 +10,9 @@
 import { createWriteStream, existsSync, mkdirSync, promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { URL } from 'node:url';
+import { DOWNLOADS_DIR } from './runtime-paths.js';
 
-const DOWNLOAD_ROOT = 'E:\\Gematron\\downloads';
+const DOWNLOAD_ROOT = DOWNLOADS_DIR;
 
 export interface DownloadProgress {
   url: string;

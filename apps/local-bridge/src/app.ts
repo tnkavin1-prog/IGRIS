@@ -7,6 +7,7 @@
  */
 import http from 'node:http';
 import { spawn } from 'node:child_process';
+import { join } from 'node:path';
 import { z } from 'zod';
 import {
   BRIDGE_CONFIG_PATH,
@@ -18,6 +19,7 @@ import {
   type BridgeErrorBody,
   type BridgeHealth,
 } from '@gbl/shared';
+import { SCRIPTS_DIR } from '../../desktop-hud/src/main/runtime-paths.js';
 import {
   isAllowedHostHeader,
   isAllowedOrigin,
@@ -241,7 +243,7 @@ export function createBridgeApp(config: BridgeConfig, deps: BridgeDeps): BridgeA
           const safeTitle = targetTitle.replace(/[^a-zA-Z0-9 _-]/g, '');
           if (process.platform === 'win32') {
             const methodToCall = shouldPin ? 'PinTopMost' : 'UnpinTopMost';
-            const cmd = `if (Test-Path 'E:\\Gematron\\scripts\\Win32Pin.dll') { Add-Type -Path 'E:\\Gematron\\scripts\\Win32Pin.dll' } else { Add-Type -Path 'E:\\Gematron\\scripts\\Win32Pin.cs' }; [Gemetron.WindowPin]::${methodToCall}('${safeTitle}')`;
+            const cmd = `if (Test-Path '${join(SCRIPTS_DIR, 'Win32Pin.dll')}') { Add-Type -Path '${join(SCRIPTS_DIR, 'Win32Pin.dll')}' } else { Add-Type -Path '${join(SCRIPTS_DIR, 'Win32Pin.cs')}' }; [Gemetron.WindowPin]::${methodToCall}('${safeTitle}')`;
             spawn('powershell.exe', ['-NoProfile', '-Command', cmd], {
               stdio: 'ignore',
               windowsHide: true,

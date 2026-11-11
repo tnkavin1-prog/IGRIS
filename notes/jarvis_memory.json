@@ -1,6 +1,6 @@
 {
   "version": "2.0.0",
-  "updatedAt": 1794397298248,
+  "updatedAt": 1794401841523,
   "preferences": {
     "theme": "dark",
     "voice": "Kore",
@@ -26,8 +26,8 @@
     "notepad": {
       "alias": "notepad",
       "targetApp": "notepad.exe",
-      "lastUsed": 1794397298248,
-      "useCount": 261
+      "lastUsed": 1794401841523,
+      "useCount": 270
     },
     "editor": {
       "alias": "editor",
@@ -38,8 +38,8 @@
     "calc": {
       "alias": "calc",
       "targetApp": "calc.exe",
-      "lastUsed": 1794397298023,
-      "useCount": 95
+      "lastUsed": 1794401841220,
+      "useCount": 98
     },
     "calculator": {
       "alias": "calculator",
@@ -183,6 +183,36 @@
     }
   ],
   "recentContext": [
+    {
+      "id": "ctx_1794401841496_50sq",
+      "timestamp": 1794401841496,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794401841488",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794401740136_tbqf",
+      "timestamp": 1794401740136,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794401740129",
+        "steps": 4
+      }
+    },
+    {
+      "id": "ctx_1794401715486_5udo",
+      "timestamp": 1794401715486,
+      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
+      "category": "workflow",
+      "metadata": {
+        "taskId": "task_1794401715473",
+        "steps": 4
+      }
+    },
     {
       "id": "ctx_1794397298229_omwh",
       "timestamp": 1794397298229,
@@ -650,36 +680,6 @@
       "category": "workflow",
       "metadata": {
         "taskId": "task_1794022499428",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1794021815879_05k4",
-      "timestamp": 1794021815879,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1794021815871",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1794021645232_5q6m",
-      "timestamp": 1794021645232,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1794021645224",
-        "steps": 4
-      }
-    },
-    {
-      "id": "ctx_1794021561161_8f27",
-      "timestamp": 1794021561161,
-      "summary": "Completed autonomous workflow: \"Open Notepad and type test summary\"",
-      "category": "workflow",
-      "metadata": {
-        "taskId": "task_1794021561147",
         "steps": 4
       }
     }

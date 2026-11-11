@@ -9,7 +9,7 @@ echo   Gemini 3.8 Flash + OpenCode + DeepSeek + GLM
 echo ========================================================
 echo(
 
-cd /d "E:\Gematron"
+cd /d "%~dp0.."
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "E:\Gematron\scripts\launch-all.ps1"
 
 if errorlevel 1 goto :failed

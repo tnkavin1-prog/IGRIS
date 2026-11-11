@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import type { CursorPosition, DisplayMetrics, SingleDisplayInfo } from './types.js';
+import { SCRIPTS_DIR } from './runtime-paths.js';
 
 export interface NativeInputOptions {
   mockMode?: boolean;
@@ -37,7 +38,7 @@ export class NativeInputService extends EventEmitter {
   constructor(options: NativeInputOptions = {}) {
     super();
     this.mockMode = options.mockMode ?? process.platform !== 'win32';
-    this.scriptsDir = options.scriptsDir || 'E:\\Gematron\\scripts';
+    this.scriptsDir = options.scriptsDir || SCRIPTS_DIR;
     this.displayMetrics = options.displayMetrics;
   }
 

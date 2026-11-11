@@ -2,23 +2,24 @@ import { app, ipcMain, globalShortcut, shell } from 'electron';
 import { join } from 'node:path';
 import { appendFileSync } from 'node:fs';
 import { CDPClient } from './cdp-client.js';
+import { LOGS_DIR, NOTES_DIR } from './runtime-paths.js';
+
+function logLine(file: 'hud-startup' | 'electron-error', msg: string): void {
+  try {
+    appendFileSync(join(LOGS_DIR, `${file}.log`), `[${new Date().toISOString()}] ${msg}\n`);
+  } catch {}
+}
 
 process.on('uncaughtException', (err) => {
   console.error('[UncaughtException]', err);
   try {
-    appendFileSync(
-      'E:\\Gematron\\logs\\electron-error.log',
-      `[${new Date().toISOString()}] UncaughtException: ${err?.stack || err}\n`,
-    );
+    logLine('electron-error', `UncaughtException: ${err?.stack || err}`);
   } catch {}
 });
 process.on('unhandledRejection', (reason) => {
   console.error('[UnhandledRejection]', reason);
   try {
-    appendFileSync(
-      'E:\\Gematron\\logs\\electron-error.log',
-      `[${new Date().toISOString()}] UnhandledRejection: ${(reason as Error)?.stack || reason}\n`,
-    );
+    logLine('electron-error', `UnhandledRejection: ${(reason as Error)?.stack || reason}`);
   } catch {}
 });
 import { ChromeLauncher } from './chrome-launcher.js';
@@ -57,10 +58,7 @@ for (const protocol of ['gematron', 'gemetron']) {
 
 // Strictly Singleton: ensure only ONE instance exists across the OS
 const gotLock = app.requestSingleInstanceLock();
-appendFileSync(
-  'E:\\Gematron\\logs\\hud-startup.log',
-  `[${new Date().toISOString()}] gotLock: ${gotLock}\n`,
-);
+logLine('hud-startup', `gotLock: ${gotLock}`);
 if (!gotLock) {
   console.log('[Singleton] Another instance of Gemini Desktop HUD is already running. Exiting.');
   app.quit();
@@ -80,26 +78,17 @@ if (!gotLock) {
   let trayManager: TrayManager | null = null;
 
   app.on('before-quit', () => {
-    appendFileSync(
-      'E:\\Gematron\\logs\\hud-startup.log',
-      `[${new Date().toISOString()}] app before-quit fired (isQuitting: ${isQuitting})\n`,
-    );
+    logLine('hud-startup', `app before-quit fired (isQuitting: ${isQuitting})`);
     isQuitting = true;
     trayManager?.destroy();
   });
 
   app.on('will-quit', () => {
-    appendFileSync(
-      'E:\\Gematron\\logs\\hud-startup.log',
-      `[${new Date().toISOString()}] app will-quit fired\n`,
-    );
+    logLine('hud-startup', 'app will-quit fired');
   });
 
   app.on('quit', (_, exitCode) => {
-    appendFileSync(
-      'E:\\Gematron\\logs\\hud-startup.log',
-      `[${new Date().toISOString()}] app quit fired (exitCode: ${exitCode})\n`,
-    );
+    logLine('hud-startup', `app quit fired (exitCode: ${exitCode})`);
   });
 
   const cdpClient = new CDPClient(9222, '127.0.0.1');
@@ -108,29 +97,17 @@ if (!gotLock) {
 
   app.whenReady().then(async () => {
     try {
-      appendFileSync(
-        'E:\\Gematron\\logs\\hud-startup.log',
-        `[${new Date().toISOString()}] app.whenReady started\n`,
-      );
+      logLine('hud-startup', 'app.whenReady started');
       liveService = new GeminiLiveService(cdpClient);
-      appendFileSync(
-        'E:\\Gematron\\logs\\hud-startup.log',
-        `[${new Date().toISOString()}] GeminiLiveService created\n`,
-      );
+      logLine('hud-startup', 'GeminiLiveService created');
       controlServer = new ControlServer(9228, '127.0.0.1');
-      appendFileSync(
-        'E:\\Gematron\\logs\\hud-startup.log',
-        `[${new Date().toISOString()}] ControlServer created\n`,
-      );
+      logLine('hud-startup', 'ControlServer created');
 
       const preloadPath = join(__dirname, 'preload.cjs');
       const htmlPath = join(__dirname, 'index.html');
 
       const win = createMainWindow(preloadPath, htmlPath);
-      appendFileSync(
-        'E:\\Gematron\\logs\\hud-startup.log',
-        `[${new Date().toISOString()}] MainWindow created\n`,
-      );
+      logLine('hud-startup', 'MainWindow created');
       try {
         liveService.input.setDisplayMetrics(liveService.vision.getDisplayMetrics());
       } catch {
@@ -196,7 +173,7 @@ if (!gotLock) {
           },
           onOpenNotes: () => {
             try {
-              void shell.openPath('E:\\Gematron\\notes');
+              void shell.openPath(NOTES_DIR);
             } catch {}
           },
           onExit: () => {
@@ -244,10 +221,7 @@ if (!gotLock) {
 
       // Start in-Chrome loopback summon server (http://127.0.0.1:9228/summon)
       await controlServer.start(() => getMainWindow(), cdpClient);
-      appendFileSync(
-        'E:\\Gematron\\logs\\hud-startup.log',
-        `[${new Date().toISOString()}] ControlServer started on port 9228\n`,
-      );
+      logLine('hud-startup', 'ControlServer started on port 9228');
 
       // Do not open Chrome when the HUD starts: only the Gematron HUD should appear.
       // Chrome can be launched explicitly from the HUD ("Open Chrome").
@@ -365,15 +339,9 @@ if (!gotLock) {
       } catch (err) {
         console.warn('[GlobalShortcut] Failed to register Ctrl+Alt+K:', err);
       }
-      appendFileSync(
-        'E:\\Gematron\\logs\\hud-startup.log',
-        `[${new Date().toISOString()}] app.whenReady completed successfully\n`,
-      );
+      logLine('hud-startup', 'app.whenReady completed successfully');
     } catch (startupErr) {
-      appendFileSync(
-        'E:\\Gematron\\logs\\hud-startup.log',
-        `[${new Date().toISOString()}] Startup ERROR: ${(startupErr as Error)?.stack || startupErr}\n`,
-      );
+      logLine('hud-startup', `Startup ERROR: ${(startupErr as Error)?.stack || startupErr}`);
     }
   });
 
@@ -689,9 +657,9 @@ if (!gotLock) {
   ipcMain.handle('clipboard:clear', () => liveService.clipboardService.clear());
 
   app.on('window-all-closed', () => {
-    appendFileSync(
-      'E:\\Gematron\\logs\\hud-startup.log',
-      `[${new Date().toISOString()}] app window-all-closed fired (minimizeToTray: ${liveService?.currentSettings?.minimizeToTray})\n`,
+    logLine(
+      'hud-startup',
+      `app window-all-closed fired (minimizeToTray: ${liveService?.currentSettings?.minimizeToTray})`,
     );
     if (!isQuitting && liveService?.currentSettings?.minimizeToTray) {
       return;

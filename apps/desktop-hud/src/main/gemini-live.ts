@@ -12,6 +12,7 @@ import { computerOperator } from './computer-operator.js';
 import { autonomousAgent } from './autonomous-agent.js';
 import { screenGrounding } from './screen-grounding.js';
 import { downloadManager } from './download-manager.js';
+import { BRIDGE_ENV_PATH } from './runtime-paths.js';
 import { HardwareMonitorService } from './hardware-monitor.js';
 import type {
   BoundingBoxTarget,
@@ -401,10 +402,11 @@ export class GeminiLiveService extends EventEmitter {
                 '- When asked to explain or derive concepts in math/physics: invoke teach_visual_blackboard.',
                 '- When asked to do ANY complex multi-step autonomous task (e.g. "Open Blender, download a scene, add shaders, render", "Open Chrome, search, download a file, open it", "Do a 10-minute Blender project"): IMMEDIATELY call autonomous_goal({ goal: "..." }). This runs the full Observe → Think → Act → Verify loop without asking you or the user for permission at each step.',
                 '- When asked to OPEN BLENDER: call open_blender({ blendFile: "..." }). This launches the actual Blender GUI window on Windows, not headless scripts.',
-                '- When asked to DOWNLOAD a file/scene from the web: call download_scene({ url: "..." }). It saves to E:\\Gematron\\downloads\\.',
+                '- When asked to DOWNLOAD a file/scene from the web: call download_scene({ url: "..." }). It saves to the project downloads folder.',
                 '- When asked to CLICK a UI element by description in any app (Blender, Chrome, Notepad): call click_element_on_screen({ description: "..." }).',
                 '- When asked to WAIT for something to appear on screen: call wait_for_element_on_screen({ description: "..." }).',
                 '- When asked to READ what is on screen: call read_screen_text({ query: "..." }).',
+                'HONESTY RULE: If a tool returns ok:false or success:false, the action FAILED. Say so briefly and try one alternative approach. Never claim an action succeeded without a successful tool result.',
                 'SCREEN & APPLICATION VISIBILITY GROUNDING (CRITICAL):',
                 '- You receive real-time streaming video frames of the user live desktop screen.',
                 '- Always observe the actual visual screen before asserting whether an application is open or visible. If the desktop wallpaper is showing and no application window is visible on screen, it is NOT open.',
@@ -1599,7 +1601,6 @@ export class GeminiLiveService extends EventEmitter {
               call.args.app ||
               'active';
             const ok = await this.appManager.minimizeWindow(target);
-            await this.nativeInput.sendHotkey('Win+Down').catch(() => undefined);
             result = { success: ok, minimized: true, window: target };
             break;
           }
@@ -1613,7 +1614,6 @@ export class GeminiLiveService extends EventEmitter {
               call.args.app ||
               'chrome';
             const ok = await this.appManager.restoreWindow(target);
-            await this.nativeInput.sendHotkey('Win+Down').catch(() => undefined);
             result = { success: ok, restored: true, window: target };
             break;
           }
@@ -1863,41 +1863,26 @@ export class GeminiLiveService extends EventEmitter {
               call.args.target_app || call.args.app || call.args.window_title || 'chrome';
             const yDelta = direction === 'down' ? amount : -amount;
 
-            // 1. Locate window bounds to position the mouse cursor over the document/PDF
-            let scrollX = -1;
-            let scrollY = -1;
-            try {
-              const windows = await this.appManager.listRunningWindows();
-              const targetWin = this.appManager.resolveAppWindow(targetApp, windows);
-              if (targetWin) {
-                await this.appManager.focusWindow(targetWin.hwnd);
-                const bounds = await this.appManager.getWindowBounds(targetWin.hwnd);
-                if (bounds.width > 100 && bounds.height > 100) {
-                  scrollX = bounds.x + Math.floor(bounds.width / 2);
-                  scrollY = bounds.y + Math.floor(bounds.height / 2);
-                }
-              }
-            } catch {}
-
-            // Fallback to center of screen if window bounds not found
-            if (scrollX < 0 || scrollY < 0) {
-              const metrics = this.computerVision.getDisplayMetrics();
-              scrollX = Math.floor(metrics.width / 2);
-              scrollY = Math.floor(metrics.height / 2);
+            // One scroll strategy only: CDP for Chrome, hardware wheel for everything else.
+            const isChromeTarget = /chrome|browser|web|page|youtube/i.test(targetApp);
+            let cdpOk = false;
+            if (isChromeTarget) {
+              cdpOk = await this.cdpClient.scroll(direction, amount).catch(() => false);
             }
-
-            // 2. Hardware wheel via Win32 OS directly at the window coordinates
-            const nativeOk = await this.nativeInput.mouseScrollAt(scrollX, scrollY, -yDelta);
-
-            // 3. Hardware wheel via CDP if Chrome is listening
-            const cdpOk = await this.cdpClient.scroll(direction, amount).catch(() => false);
-
-            // 4. Keyboard page scroll (PageDown / PageUp) to advance PDFs and readers
-            await this.nativeInput
-              .sendHotkey(direction === 'down' ? 'PageDown' : 'PageUp')
-              .catch(() => undefined);
-
-            result = { success: nativeOk || cdpOk, direction, amount, targetApp };
+            let nativeOk = false;
+            if (!cdpOk) {
+              const metrics = this.computerVision.getDisplayMetrics();
+              const scrollX = Math.floor(metrics.width / 2);
+              const scrollY = Math.floor(metrics.height / 2);
+              nativeOk = await this.nativeInput.mouseScrollAt(scrollX, scrollY, -yDelta);
+            }
+            result = {
+              success: cdpOk || nativeOk,
+              direction,
+              amount,
+              targetApp,
+              via: cdpOk ? 'cdp' : 'native',
+            };
             break;
           }
 
@@ -2158,7 +2143,7 @@ export class GeminiLiveService extends EventEmitter {
     let key = process.env.GEMINI_API_KEY || '';
 
     // Attempt to load from apps/local-bridge/.env
-    const bridgeEnvPath = 'E:\\Gematron\\apps\\local-bridge\\.env';
+    const bridgeEnvPath = BRIDGE_ENV_PATH;
     if (!key && existsSync(bridgeEnvPath)) {
       try {
         const text = readFileSync(bridgeEnvPath, 'utf8');

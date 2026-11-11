@@ -11,6 +11,8 @@ import type {
   WindowTilingLayout,
 } from './types.js';
 import type { JarvisMemoryStore } from './jarvis-memory.js';
+import { ChromeLauncher } from './chrome-launcher.js';
+import { SCRIPTS_DIR } from './runtime-paths.js';
 
 export interface AppManagerOptions {
   mockMode?: boolean;
@@ -187,7 +189,7 @@ export class AppManagerService {
 
   constructor(options: AppManagerOptions = {}) {
     this.mockMode = options.mockMode ?? process.platform !== 'win32';
-    this.scriptsDir = options.scriptsDir || 'E:\\Gematron\\scripts';
+    this.scriptsDir = options.scriptsDir || SCRIPTS_DIR;
     this.memoryStore = options.memoryStore;
   }
 
@@ -231,7 +233,7 @@ export class AppManagerService {
       console.warn('[AppManager] Failed to list windows via Win32:', err);
     }
 
-    return [...this.simulatedWindows];
+    return []; // Never fake real desktop state. An empty list is honest; fake windows make the agent lie.
   }
 
   /**
@@ -240,9 +242,22 @@ export class AppManagerService {
   public async launchApplication(appName: string, args: string[] = []): Promise<LaunchResult> {
     const raw = appName.trim().toLowerCase();
     const memAlias = this.memoryStore?.getAlias(raw);
-    let executable = appName;
-    let finalArgs = args;
 
+    // Chrome family goes through the ONE canonical launcher with a verified debug port.
+    if (!memAlias && (raw.includes('chrome') || raw === 'browser' || raw === 'google')) {
+      const url = args.find((a) => /^https?:\/\//i.test(a));
+      const res = await ChromeLauncher.launch(url ?? 'about:blank');
+      if (res.ok) await this.focusWindow('chrome').catch(() => undefined);
+      return {
+        ok: res.ok,
+        appName,
+        windowTitle: res.ok ? 'Google Chrome' : undefined,
+        error: res.ok ? undefined : res.message,
+      };
+    }
+
+    let executable: string;
+    let finalArgs: string[];
     if (memAlias) {
       executable = memAlias.targetApp;
       finalArgs = memAlias.arguments ? [...memAlias.arguments, ...args] : args;
@@ -272,62 +287,128 @@ export class AppManagerService {
       return { ok: true, appName, pid: mockPid };
     }
 
-    return new Promise((resolve) => {
-      let settled = false;
-      try {
-        const useShell = !executable.includes('\\');
-        const child = spawn(executable, finalArgs, {
-          detached: true,
-          stdio: 'ignore',
-          shell: useShell,
-        });
+    // Real launch: no shell for .exe (shell swallows "not found" errors).
+    const useShell = /\.(cmd|bat)$/i.test(executable);
+    let spawnError: string | null = null;
+    let exitCode: number | null = null;
+    let child: ChildProcess | null = null;
+    try {
+      child = spawn(executable, finalArgs, {
+        detached: true,
+        stdio: 'ignore',
+        shell: useShell,
+        windowsHide: false,
+      });
+      child.on('error', (err) => {
+        spawnError = err.message;
+      });
+      child.on('exit', (code) => {
+        exitCode = code;
+      });
+      child.unref();
+    } catch (err) {
+      spawnError = (err as Error).message;
+    }
 
-        child.on('error', (err) => {
-          if (!settled) {
-            settled = true;
-            resolve({
-              ok: false,
-              appName,
-              error: err.message,
-            });
-          }
-        });
-
-        // Allow app window to spawn and verify presence
-        setTimeout(async () => {
-          if (!settled) {
-            settled = true;
-            child.unref();
-
-            let foundTitle: string | undefined;
-            try {
-              const windows = await this.listRunningWindows();
-              const found = this.resolveAppWindow(appName, windows);
-              if (found) {
-                foundTitle = found.title;
-                await this.focusWindow(found.hwnd);
-              }
-            } catch {}
-
-            resolve({
-              ok: true,
-              appName,
-              pid: child.pid,
-              windowTitle: foundTitle,
-            });
-          }
-        }, 500);
-      } catch (err) {
-        if (!settled) {
-          settled = true;
-          resolve({
-            ok: false,
-            appName,
-            error: (err as Error).message,
+    // Fallback: find ANY installed app via the Start Menu index (UWP + Win32).
+    if (spawnError && !memAlias) {
+      const startApp = await this.resolveStartApp(raw);
+      if (startApp) {
+        spawnError = null;
+        exitCode = null;
+        try {
+          const shellChild = spawn('explorer.exe', [`shell:AppsFolder\\${startApp.appId}`], {
+            detached: true,
+            stdio: 'ignore',
           });
+          shellChild.unref();
+        } catch (err) {
+          spawnError = (err as Error).message;
         }
       }
-    });
+    }
+    if (spawnError) {
+      return { ok: false, appName, error: `Could not start "${appName}": ${spawnError}` };
+    }
+
+    // VERIFY a real window appears (up to 10 s), then focus it. No fake success.
+    const exeBase = executable.replace(/\.(exe|cmd|bat)$/i, '').toLowerCase();
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 500));
+      if (exitCode !== null && exitCode !== 0) {
+        return {
+          ok: false,
+          appName,
+          error: `"${executable}" exited with code ${exitCode}; no window verified.`,
+        };
+      }
+      const windows = await this.listRunningWindows().catch(() => [] as WindowItem[]);
+      const found = this.resolveAppWindow(raw, windows) ?? this.resolveAppWindow(exeBase, windows);
+      if (found) {
+        await this.focusWindow(found.hwnd).catch(() => undefined);
+        return { ok: true, appName, pid: child?.pid, windowTitle: found.title };
+      }
+    }
+    return {
+      ok: false,
+      appName,
+      error: `Started "${executable}" but no matching window appeared within 10 seconds.`,
+    };
+  }
+
+  private startAppsCache: { at: number; apps: Array<{ name: string; appId: string }> } | null =
+    null;
+
+  private async resolveStartApp(name: string): Promise<{ name: string; appId: string } | null> {
+    try {
+      if (!this.startAppsCache || Date.now() - this.startAppsCache.at > 60000) {
+        const out = await new Promise<string>((resolve, reject) => {
+          const c = spawn(
+            'powershell.exe',
+            [
+              '-NoProfile',
+              '-NonInteractive',
+              '-Command',
+              'Get-StartApps | ConvertTo-Json -Compress',
+            ],
+            { stdio: ['ignore', 'pipe', 'ignore'] },
+          );
+          let s = '';
+          const timer = setTimeout(() => {
+            c.kill();
+            reject(new Error('Get-StartApps timeout'));
+          }, 8000);
+          c.stdout.on('data', (d) => {
+            s += d.toString();
+          });
+          c.on('close', () => {
+            clearTimeout(timer);
+            resolve(s);
+          });
+          c.on('error', (e) => {
+            clearTimeout(timer);
+            reject(e);
+          });
+        });
+        const parsed = JSON.parse(out);
+        const apps = (Array.isArray(parsed) ? parsed : [parsed]).map((a: any) => ({
+          name: String(a.Name ?? ''),
+          appId: String(a.AppID ?? ''),
+        }));
+        this.startAppsCache = { at: Date.now(), apps };
+      }
+      const q = name.toLowerCase();
+      const apps = this.startAppsCache.apps;
+      return (
+        apps.find((a) => a.name.toLowerCase() === q) ??
+        apps.find((a) => a.name.toLowerCase().startsWith(q)) ??
+        apps.find((a) => a.name.toLowerCase().includes(q)) ??
+        null
+      );
+    } catch {
+      return null;
+    }
   }
 
   /**
