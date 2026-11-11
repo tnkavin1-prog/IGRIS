@@ -744,10 +744,7 @@ describe('Ask Gemini Tool & Context Extraction', () => {
 
   describe('Extension Manifest Commands Quota', () => {
     it('declares at most 4 commands with suggested_key to satisfy Chrome manifest limits', () => {
-      const manifestPath = resolve(
-        __dirname,
-        '../../../apps/chrome-extension/manifest.json',
-      );
+      const manifestPath = resolve(__dirname, '../../../apps/chrome-extension/manifest.json');
       const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 
       expect(manifest.commands).toBeDefined();

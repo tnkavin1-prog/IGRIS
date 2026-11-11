@@ -159,12 +159,31 @@ export class CDPClient extends EventEmitter {
     try {
       const res = await fetch(`${this.baseUrl}/json/new?${encodeURIComponent(url)}`, {
         method: 'PUT',
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) return null;
       const tab = (await res.json()) as ChromeTabInfo;
       this.currentActiveTab = tab;
       this.emit('active-tab-changed', tab);
+
+      // Wait briefly for the tab to finish loading so subsequent CDP commands work
+      if (tab.webSocketDebuggerUrl) {
+        for (let i = 0; i < 10; i += 1) {
+          await new Promise((r) => setTimeout(r, 500));
+          try {
+            const test = await this.executeCDPCommand<{ result: { value: unknown } }>(
+              tab.webSocketDebuggerUrl,
+              'Runtime.evaluate',
+              { expression: '1', returnByValue: true },
+              1000,
+            );
+            if (test?.result?.value === 1) break;
+          } catch {
+            /* tab still initializing */
+          }
+        }
+      }
+
       return tab;
     } catch {
       return null;
@@ -276,17 +295,13 @@ export class CDPClient extends EventEmitter {
       if (!tab || !tab.webSocketDebuggerUrl) {
         return false;
       }
-      await this.executeCDPCommand(
-        tab.webSocketDebuggerUrl,
-        'Input.dispatchMouseEvent',
-        {
-          type: 'mouseWheel',
-          x,
-          y,
-          deltaX: 0,
-          deltaY,
-        },
-      );
+      await this.executeCDPCommand(tab.webSocketDebuggerUrl, 'Input.dispatchMouseEvent', {
+        type: 'mouseWheel',
+        x,
+        y,
+        deltaX: 0,
+        deltaY,
+      });
       return true;
     } catch {
       return false;
@@ -310,16 +325,12 @@ export class CDPClient extends EventEmitter {
       if (!tab || !tab.webSocketDebuggerUrl) {
         return false;
       }
-      await this.executeCDPCommand(
-        tab.webSocketDebuggerUrl,
-        'Input.dispatchKeyEvent',
-        {
-          type,
-          key,
-          code,
-          windowsVirtualKeyCode,
-        },
-      );
+      await this.executeCDPCommand(tab.webSocketDebuggerUrl, 'Input.dispatchKeyEvent', {
+        type,
+        key,
+        code,
+        windowsVirtualKeyCode,
+      });
       return true;
     } catch {
       return false;

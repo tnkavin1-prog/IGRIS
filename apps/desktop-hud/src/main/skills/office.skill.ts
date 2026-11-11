@@ -2,11 +2,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync, promises as fs } from 'node:fs';
 import os from 'node:os';
-import type {
-  ApplicationSkill,
-  SkillActionDefinition,
-  SkillResult,
-} from '../skill-framework.js';
+import type { ApplicationSkill, SkillActionDefinition, SkillResult } from '../skill-framework.js';
 
 const execAsync = promisify(exec);
 
@@ -35,9 +31,15 @@ export class OfficeSkill implements ApplicationSkill {
     return [
       {
         name: 'createWordDoc',
-        description: 'Creates a Microsoft Word document (.docx) with specified headings and text content.',
+        description:
+          'Creates a Microsoft Word document (.docx) with specified headings and text content.',
         parameters: [
-          { name: 'filePath', type: 'string', description: 'Destination .docx file path', required: true },
+          {
+            name: 'filePath',
+            type: 'string',
+            description: 'Destination .docx file path',
+            required: true,
+          },
           { name: 'title', type: 'string', description: 'Document title heading', required: true },
           { name: 'content', type: 'string', description: 'Body text content', required: true },
         ],
@@ -46,16 +48,37 @@ export class OfficeSkill implements ApplicationSkill {
         name: 'readWordDoc',
         description: 'Reads text content from an existing Word document.',
         parameters: [
-          { name: 'filePath', type: 'string', description: 'Source .docx file path', required: true },
+          {
+            name: 'filePath',
+            type: 'string',
+            description: 'Source .docx file path',
+            required: true,
+          },
         ],
       },
       {
         name: 'createExcelSheet',
         description: 'Generates an Excel workbook (.xlsx) with headers and tabular data.',
         parameters: [
-          { name: 'filePath', type: 'string', description: 'Destination .xlsx file path', required: true },
-          { name: 'sheetName', type: 'string', description: 'Worksheet name', required: false, default: 'Data' },
-          { name: 'headers', type: 'array', description: 'Array of column headers', required: true },
+          {
+            name: 'filePath',
+            type: 'string',
+            description: 'Destination .xlsx file path',
+            required: true,
+          },
+          {
+            name: 'sheetName',
+            type: 'string',
+            description: 'Worksheet name',
+            required: false,
+            default: 'Data',
+          },
+          {
+            name: 'headers',
+            type: 'array',
+            description: 'Array of column headers',
+            required: true,
+          },
           { name: 'rows', type: 'array', description: '2D array of row data', required: true },
         ],
       },
@@ -63,15 +86,30 @@ export class OfficeSkill implements ApplicationSkill {
         name: 'readExcelSheet',
         description: 'Reads data rows from an Excel workbook or CSV fallback.',
         parameters: [
-          { name: 'filePath', type: 'string', description: 'Source .xlsx or .csv path', required: true },
+          {
+            name: 'filePath',
+            type: 'string',
+            description: 'Source .xlsx or .csv path',
+            required: true,
+          },
         ],
       },
       {
         name: 'createPowerPoint',
         description: 'Creates a PowerPoint presentation (.pptx) with structured slides.',
         parameters: [
-          { name: 'filePath', type: 'string', description: 'Destination .pptx file path', required: true },
-          { name: 'slides', type: 'array', description: 'Array of slide objects { title, bullets }', required: true },
+          {
+            name: 'filePath',
+            type: 'string',
+            description: 'Destination .pptx file path',
+            required: true,
+          },
+          {
+            name: 'slides',
+            type: 'array',
+            description: 'Array of slide objects { title, bullets }',
+            required: true,
+          },
         ],
       },
     ];
@@ -115,8 +153,15 @@ export class OfficeSkill implements ApplicationSkill {
           return { success: true, data: { created: true, filePath, title } };
         } catch {
           // Fallback to text/markdown if Word COM is unavailable on host
-          await fs.writeFile(filePath.replace(/\.docx?$/i, '.txt'), `# ${title}\n\n${content}`, 'utf8');
-          return { success: true, data: { created: true, filePath, note: 'Saved via plain text fallback' } };
+          await fs.writeFile(
+            filePath.replace(/\.docx?$/i, '.txt'),
+            `# ${title}\n\n${content}`,
+            'utf8',
+          );
+          return {
+            success: true,
+            data: { created: true, filePath, note: 'Saved via plain text fallback' },
+          };
         }
       }
 
@@ -164,7 +209,10 @@ export class OfficeSkill implements ApplicationSkill {
           }
           const csvPath = filePath.replace(/\.xlsx?$/i, '.csv');
           await fs.writeFile(csvPath, lines.join('\n'), 'utf8');
-          return { success: true, data: { created: true, filePath: csvPath, rowsCount: rows.length } };
+          return {
+            success: true,
+            data: { created: true, filePath: csvPath, rowsCount: rows.length },
+          };
         } catch (err) {
           return { success: false, error: (err as Error).message };
         }
@@ -228,7 +276,10 @@ export class OfficeSkill implements ApplicationSkill {
         return Boolean((result.data as { created?: boolean })?.created);
       case 'readWordDoc':
       case 'readExcelSheet':
-        return Boolean((result.data as { content?: string; rows?: unknown[] })?.content || (result.data as { rows?: unknown[] })?.rows);
+        return Boolean(
+          (result.data as { content?: string; rows?: unknown[] })?.content ||
+          (result.data as { rows?: unknown[] })?.rows,
+        );
       default:
         return true;
     }

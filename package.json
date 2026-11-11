@@ -32,6 +32,10 @@
     "check:ci": "node scripts/check-ci.mjs",
     "bridge": "node apps/local-bridge/dist/server.mjs",
     "dev:bridge": "node --watch apps/local-bridge/src/server.ts",
+    "kimi:bridge": "node scripts/kimi-bridge.mjs",
+    "kimi:agent": "node scripts/kimi-live-agent.mjs",
+    "kimi:prime": "node scripts/kimi-live-agent.mjs --prime",
+    "kimi:chrome": "powershell -ExecutionPolicy Bypass -File scripts/launch-arena-chrome.ps1",
     "release": "node scripts/release.mjs",
     "docs:api": "typedoc",
     "smoke:live": "node scripts/smoke-live.mjs"

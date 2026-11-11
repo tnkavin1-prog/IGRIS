@@ -48,7 +48,7 @@ export class CloudSupervisorRelay extends EventEmitter {
 
   public async dispatchEvent(
     type: WebhookEventPayload['type'],
-    data: Record<string, unknown> = {}
+    data: Record<string, unknown> = {},
   ): Promise<{ success: boolean; eventId: string; buffered: boolean }> {
     const eventId = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const unsigned: Omit<WebhookEventPayload, 'signature'> = {

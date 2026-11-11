@@ -2,11 +2,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync, promises as fs } from 'node:fs';
 import { join } from 'node:path';
-import type {
-  ApplicationSkill,
-  SkillActionDefinition,
-  SkillResult,
-} from '../skill-framework.js';
+import type { ApplicationSkill, SkillActionDefinition, SkillResult } from '../skill-framework.js';
 
 const execAsync = promisify(exec);
 
@@ -37,22 +33,45 @@ export class CreativeSkill implements ApplicationSkill {
     return [
       {
         name: 'checkCreativeApps',
-        description: 'Scans the host system for installed Adobe Photoshop, Premiere Pro, and After Effects editions.',
+        description:
+          'Scans the host system for installed Adobe Photoshop, Premiere Pro, and After Effects editions.',
       },
       {
         name: 'executeExtendScript',
-        description: 'Executes an ExtendScript (.jsx) file or script string in target Adobe application.',
+        description:
+          'Executes an ExtendScript (.jsx) file or script string in target Adobe application.',
         parameters: [
-          { name: 'app', type: 'string', description: 'photoshop | premiere | aftereffects', required: true },
-          { name: 'scriptContent', type: 'string', description: 'JavaScript / ExtendScript code', required: true },
+          {
+            name: 'app',
+            type: 'string',
+            description: 'photoshop | premiere | aftereffects',
+            required: true,
+          },
+          {
+            name: 'scriptContent',
+            type: 'string',
+            description: 'JavaScript / ExtendScript code',
+            required: true,
+          },
         ],
       },
       {
         name: 'renderPhotoshopBatch',
         description: 'Performs headless or scripted export of PSD assets into PNG/JPEG formats.',
         parameters: [
-          { name: 'psdFile', type: 'string', description: 'Path to source .psd file', required: true },
-          { name: 'format', type: 'string', description: 'png | jpg | webp', required: false, default: 'png' },
+          {
+            name: 'psdFile',
+            type: 'string',
+            description: 'Path to source .psd file',
+            required: true,
+          },
+          {
+            name: 'format',
+            type: 'string',
+            description: 'png | jpg | webp',
+            required: false,
+            default: 'png',
+          },
           { name: 'outputDir', type: 'string', description: 'Destination folder', required: true },
         ],
       },
@@ -95,12 +114,17 @@ export class CreativeSkill implements ApplicationSkill {
       }
 
       case 'executeExtendScript': {
-        const targetApp = String(params.app || '').toLowerCase().trim();
+        const targetApp = String(params.app || '')
+          .toLowerCase()
+          .trim();
         const scriptContent = String(params.scriptContent || '').trim();
         if (!scriptContent) return { success: false, error: 'scriptContent is required.' };
 
         if (this.mockMode) {
-          return { success: true, data: { executed: true, targetApp, output: 'ExtendScript executed in mock mode' } };
+          return {
+            success: true,
+            data: { executed: true, targetApp, output: 'ExtendScript executed in mock mode' },
+          };
         }
 
         const tempScript = join('E:\\Gematron\\temp', `adobe_${Date.now()}.jsx`);
@@ -153,7 +177,10 @@ export class CreativeSkill implements ApplicationSkill {
         return typeof result.data === 'object' && result.data !== null;
       case 'executeExtendScript':
       case 'renderPhotoshopBatch':
-        return Boolean((result.data as { executed?: boolean; exported?: boolean })?.executed || (result.data as { exported?: boolean })?.exported);
+        return Boolean(
+          (result.data as { executed?: boolean; exported?: boolean })?.executed ||
+          (result.data as { exported?: boolean })?.exported,
+        );
       default:
         return true;
     }

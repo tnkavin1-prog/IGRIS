@@ -8,7 +8,7 @@ import {
 import type { SessionExportPayload } from '../../../apps/desktop-hud/src/main/types.js';
 
 describe('Audit Exporter', () => {
-  const testDir = 'E:\\Gemetron\\notes\\test_audit';
+  const testDir = 'E:\\Gematron\\notes\\test_audit';
 
   const mockPayload: SessionExportPayload = {
     conversation: [

@@ -4,10 +4,10 @@ import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 
 describe('Desktop Shortcut Generator Script', () => {
-  const repoRoot = 'E:\\Gemetron';
+  const repoRoot = 'E:\\Gematron';
   const scriptPath = join(repoRoot, 'scripts', 'create-desktop-shortcut.ps1');
 
-  it('exists on E:\\Gemetron\\scripts', () => {
+  it('exists on E:\\Gematron\\scripts', () => {
     expect(existsSync(scriptPath)).toBe(true);
   });
 

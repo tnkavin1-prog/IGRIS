@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { VisualBlackboardLesson } from '../main/types.js';
+import { HudIcon } from './HudIcon.js';
 
 export interface VisualBlackboardProps {
   lesson: VisualBlackboardLesson | null;
@@ -143,101 +144,214 @@ export function VisualBlackboard({
 }: VisualBlackboardProps) {
   const current: VisualBlackboardLesson = lesson || SAMPLE_LESSONS[0]!;
   const [activeStep, setActiveStep] = useState(0);
+  const [tool, setTool] = useState<'pen' | 'eraser'>('pen');
+  const [ink, setInk] = useState('#ffffff');
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const flashNotice = (message: string) => {
+    setNotice(message);
+    window.setTimeout(() => setNotice(null), 2400);
+  };
+
+  const copyLatex = async () => {
+    try {
+      await navigator.clipboard.writeText(current.latexFormula || '');
+      flashNotice('LaTeX copied to the clipboard.');
+    } catch {
+      flashNotice('Clipboard unavailable in this window.');
+    }
+  };
+
+  const selectLesson = (id: string) => {
+    const selected = SAMPLE_LESSONS.find((item) => item.id === id);
+    if (!selected) return;
+    setActiveStep(0);
+    onSelectSampleLesson(selected);
+  };
 
   return (
-    <div className="blackboard-container">
-      {/* Blackboard Top Bar */}
-      <div className="blackboard-top">
-        <div className="blackboard-title-group">
-          <span className="blackboard-badge">{current.topic || 'Visual Lesson'}</span>
-          <h3 className="blackboard-title">{current.title}</h3>
+    <div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+          marginBottom: 8,
+        }}
+      >
+        <div className="h3" style={{ margin: 0 }}>
+          {current.topic || 'Visual Blackboard'}
         </div>
-
-        <div className="sample-lessons-select">
-          <select
-            className="blackboard-select"
-            value={current.id}
-            onChange={(e) => {
-              const selected = SAMPLE_LESSONS.find((s) => s.id === e.target.value);
-              if (selected) {
-                setActiveStep(0);
-                onSelectSampleLesson(selected);
-              }
-            }}
-          >
-            {SAMPLE_LESSONS.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.title}
-              </option>
-            ))}
-          </select>
-        </div>
+        <select
+          className="board-select"
+          value={current.id}
+          onChange={(event) => selectLesson(event.target.value)}
+          aria-label="Choose a sample lesson"
+        >
+          {SAMPLE_LESSONS.map((sample) => (
+            <option key={sample.id} value={sample.id}>
+              {sample.title}
+            </option>
+          ))}
+        </select>
       </div>
 
-      {/* Mathematical Formula Banner */}
-      {current.latexFormula ? (
-        <div className="blackboard-formula-card">
-          <div className="formula-label">Governing Formula</div>
-          <div className="formula-math">$$ {current.latexFormula} $$</div>
-        </div>
-      ) : null}
+      <div className="tools">
+        <button
+          className={`ib ${tool === 'pen' ? 'on' : ''}`}
+          onClick={() => setTool('pen')}
+          title="Pen"
+        >
+          <HudIcon name="pen" size={15} />
+        </button>
+        <button
+          className={`ib ${tool === 'eraser' ? 'on' : ''}`}
+          onClick={() => setTool('eraser')}
+          title="Eraser"
+        >
+          <HudIcon name="eraser" size={15} />
+        </button>
+        <span style={{ display: 'flex', gap: 6, margin: '0 6px' }}>
+          {['#ffffff', '#fbbf24', '#22d3ee', '#f472b6', '#34d399'].map((color) => (
+            <button
+              key={color}
+              className={`sw-c ${ink === color ? 'on' : ''}`}
+              style={{ background: color }}
+              aria-label={`Use ${color} ink`}
+              onClick={() => setInk(color)}
+            />
+          ))}
+        </span>
+        <div className="sp" />
+        <button
+          className="btn sm ghost"
+          onClick={() =>
+            onTriggerPrompt(`Redraw the diagram for ${current.title} with clearer labels.`)
+          }
+        >
+          Redraw diagram
+        </button>
+        <button
+          className="btn sm ghost"
+          onClick={() => {
+            setActiveStep(0);
+            onTriggerPrompt(`Clear and rebuild the blackboard for ${current.title}.`);
+          }}
+        >
+          Clear
+        </button>
+      </div>
 
-      {/* Chalkboard SVG Visual Canvas */}
       {current.svgMarkup ? (
-        <div
-          className="chalkboard-canvas-frame"
-          dangerouslySetInnerHTML={{ __html: current.svgMarkup }}
-        />
-      ) : null}
+        <div className="boardwrap" dangerouslySetInnerHTML={{ __html: current.svgMarkup }} />
+      ) : (
+        <div className="card" style={{ textAlign: 'center', color: 'var(--mu)' }}>
+          No diagram yet. Ask Gematron to draw it on the blackboard.
+        </div>
+      )}
 
-      {/* Proof / Derivation Steps */}
-      {current.steps && current.steps.length > 0 ? (
-        <div className="derivation-steps-section">
-          <div className="steps-header">
-            <span>Step-by-Step Proof</span>
-            <span className="steps-count">
-              {current.steps.length} {current.steps.length === 1 ? 'Step' : 'Steps'}
-            </span>
-          </div>
-
-          <div className="steps-list">
-            {current.steps.map((step, idx) => (
-              <div
-                key={idx}
-                className={`step-item ${activeStep === idx ? 'is-active-step' : ''}`}
-                onClick={() => setActiveStep(idx)}
+      {current.latexFormula && (
+        <>
+          <div className="h3">Rendered LaTeX</div>
+          <div className="card">
+            <div className="eq" style={{ fontFamily: 'Consolas, monospace', fontSize: 13 }}>
+              {current.latexFormula}
+            </div>
+            <div className="mb">
+              <button
+                className="btn sm ghost"
+                onClick={() =>
+                  onTriggerPrompt(
+                    `Explain the formula ${current.latexFormula} for ${current.title} step by step.`,
+                  )
+                }
               >
-                <div className="step-num">{idx + 1}</div>
-                <div className="step-content">{step}</div>
+                Explain with Gematron
+              </button>
+              <button className="btn sm ghost" onClick={() => void copyLatex()}>
+                Copy LaTeX
+              </button>
+              <button
+                className="btn sm ghost"
+                onClick={() => onTriggerPrompt(`Turn ${current.title} into a presentation slide.`)}
+              >
+                → Slide
+              </button>
+            </div>
+            {notice && (
+              <div className="cons">
+                <HudIcon name="check" size={13} />
+                <span>{notice}</span>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {current.steps && current.steps.length > 0 && (
+        <>
+          <div className="h3">Step-by-step proof</div>
+          <ul className="wfl">
+            {current.steps.map((step, index) => (
+              <li
+                key={index}
+                className={activeStep === index ? 'ok' : ''}
+                role="button"
+                tabIndex={0}
+                onClick={() => setActiveStep(index)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setActiveStep(index);
+                  }
+                }}
+              >
+                <span
+                  className="tile"
+                  style={{ background: 'linear-gradient(135deg,#7c5cff,#22d3ee)' }}
+                >
+                  {index + 1}
+                </span>
+                <div className="at">
+                  <b>{step}</b>
+                  <span>
+                    Step {index + 1} of {current.steps.length}
+                  </span>
+                </div>
                 <button
                   type="button"
-                  className="step-explain-btn"
-                  title="Ask Gemini Live to explain this step"
-                  onClick={(e) => {
-                    e.stopPropagation();
+                  className="btn sm ghost"
+                  onClick={(event) => {
+                    event.stopPropagation();
                     onTriggerPrompt(
-                      `Please explain step ${idx + 1} of the ${current.title} derivation in detail: "${step}"`,
+                      `Explain step ${index + 1} of the ${current.title} derivation in detail: "${step}"`,
                     );
                   }}
                 >
                   Explain
                 </button>
-              </div>
+                <i className="st" />
+              </li>
             ))}
-          </div>
-        </div>
-      ) : null}
+          </ul>
+        </>
+      )}
 
-      {/* Teacher Intuition / Commentary */}
-      {current.teachingNarration ? (
-        <div className="teacher-narration-card">
-          <div className="narration-header">
-            <span className="teacher-spark">✦</span>
-            <span>Teacher Intuition</span>
+      {current.teachingNarration && (
+        <>
+          <div className="h3">Teacher intuition</div>
+          <div className="card">
+            <div className="mh">
+              <HudIcon name="sparkle" size={13} />
+              Teacher intuition
+            </div>
+            <p style={{ fontSize: 12.5, lineHeight: 1.5, color: 'rgba(255,255,255,.88)' }}>
+              {current.teachingNarration}
+            </p>
           </div>
-          <p className="narration-text">{current.teachingNarration}</p>
-        </div>
-      ) : null}
+        </>
+      )}
     </div>
   );
 }

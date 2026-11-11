@@ -289,55 +289,55 @@ export class ComputerVisionService {
       const primary = screen.getPrimaryDisplay();
       const displays = screen.getAllDisplays();
 
-    let minX = 0;
-    let minY = 0;
-    let maxX = primary.bounds.width;
-    let maxY = primary.bounds.height;
+      let minX = 0;
+      let minY = 0;
+      let maxX = primary.bounds.width;
+      let maxY = primary.bounds.height;
 
-    const allDisplays: SingleDisplayInfo[] = displays.map((d) => {
-      minX = Math.min(minX, d.bounds.x);
-      minY = Math.min(minY, d.bounds.y);
-      maxX = Math.max(maxX, d.bounds.x + d.bounds.width);
-      maxY = Math.max(maxY, d.bounds.y + d.bounds.height);
+      const allDisplays: SingleDisplayInfo[] = displays.map((d) => {
+        minX = Math.min(minX, d.bounds.x);
+        minY = Math.min(minY, d.bounds.y);
+        maxX = Math.max(maxX, d.bounds.x + d.bounds.width);
+        maxY = Math.max(maxY, d.bounds.y + d.bounds.height);
+
+        return {
+          id: d.id,
+          bounds: { ...d.bounds },
+          scaleFactor: d.scaleFactor,
+          isPrimary: d.id === primary.id,
+        };
+      });
 
       return {
-        id: d.id,
-        bounds: { ...d.bounds },
-        scaleFactor: d.scaleFactor,
-        isPrimary: d.id === primary.id,
-      };
-    });
-
-    return {
-      width: primary.size.width,
-      height: primary.size.height,
-      scaleFactor: primary.scaleFactor,
-      bounds: { ...primary.bounds },
-      allDisplays,
-      virtualBounds: {
-        x: minX,
-        y: minY,
-        width: maxX - minX,
-        height: maxY - minY,
-      },
-    };
-  } catch {
-    return {
-      width: 1920,
-      height: 1080,
-      scaleFactor: 1.0,
-      bounds: { x: 0, y: 0, width: 1920, height: 1080 },
-      allDisplays: [
-        {
-          id: 1,
-          bounds: { x: 0, y: 0, width: 1920, height: 1080 },
-          scaleFactor: 1.0,
-          isPrimary: true,
+        width: primary.size.width,
+        height: primary.size.height,
+        scaleFactor: primary.scaleFactor,
+        bounds: { ...primary.bounds },
+        allDisplays,
+        virtualBounds: {
+          x: minX,
+          y: minY,
+          width: maxX - minX,
+          height: maxY - minY,
         },
-      ],
-      virtualBounds: { x: 0, y: 0, width: 1920, height: 1080 },
-    };
-  }
+      };
+    } catch {
+      return {
+        width: 1920,
+        height: 1080,
+        scaleFactor: 1.0,
+        bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+        allDisplays: [
+          {
+            id: 1,
+            bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+            scaleFactor: 1.0,
+            isPrimary: true,
+          },
+        ],
+        virtualBounds: { x: 0, y: 0, width: 1920, height: 1080 },
+      };
+    }
   }
 
   /**

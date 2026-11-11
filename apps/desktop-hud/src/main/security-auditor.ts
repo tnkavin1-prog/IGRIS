@@ -47,7 +47,8 @@ export class SecurityAuditor extends EventEmitter {
     if (normalized.startsWith('c:') && !normalized.includes('windows\\temp')) {
       return {
         allowed: false,
-        reason: 'CRITICAL SECURITY VIOLATION: Absolute E: Drive Storage Restriction prohibits writing project data to C: Drive.',
+        reason:
+          'CRITICAL SECURITY VIOLATION: Absolute E: Drive Storage Restriction prohibits writing project data to C: Drive.',
       };
     }
     return { allowed: true };
@@ -56,7 +57,10 @@ export class SecurityAuditor extends EventEmitter {
   /**
    * Enforces Role-Based Access Control.
    */
-  public checkPermission(role: UserRole, operation: 'read' | 'execute' | 'admin_override'): SecurityCheckResult {
+  public checkPermission(
+    role: UserRole,
+    operation: 'read' | 'execute' | 'admin_override',
+  ): SecurityCheckResult {
     if (operation === 'read') return { allowed: true };
     if (operation === 'execute') {
       if (role === 'operator' || role === 'admin') return { allowed: true };
@@ -72,7 +76,11 @@ export class SecurityAuditor extends EventEmitter {
   /**
    * Records an immutable, cryptographically chained audit log entry.
    */
-  public logAudit(action: string, role: UserRole, details: Record<string, unknown> = {}): AuditEntry {
+  public logAudit(
+    action: string,
+    role: UserRole,
+    details: Record<string, unknown> = {},
+  ): AuditEntry {
     this.sequence += 1;
     const timestamp = Date.now();
     const prevHash = this.lastHash;
@@ -116,7 +124,9 @@ export class SecurityAuditor extends EventEmitter {
       const entry = this.memoryLogs[i];
       if (!entry) continue;
       const prevEntry = i > 0 ? this.memoryLogs[i - 1] : undefined;
-      const prevHash = prevEntry ? prevEntry.hash : '0000000000000000000000000000000000000000000000000000000000000000';
+      const prevHash = prevEntry
+        ? prevEntry.hash
+        : '0000000000000000000000000000000000000000000000000000000000000000';
       if (entry.prevHash !== prevHash) return false;
 
       const payload = `${entry.sequence}|${entry.timestamp}|${entry.action}|${entry.role}|${JSON.stringify(entry.details)}|${prevHash}`;

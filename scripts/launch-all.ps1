@@ -18,12 +18,16 @@ Write-Host ""
 
 # 1. OpenCode Daemon Server (Port 4096)
 Write-Host "[1/3] Checking OpenCode Daemon Server (Port 4096)..." -ForegroundColor Yellow
-$openCodeConn = Get-NetTCPConnection -LocalPort 4096 -ErrorAction SilentlyContinue | Select-Object -First 1
+$openCodeConn = Get-NetTCPConnection -LocalPort 4096 -ErrorAction SilentlyContinue | Where-Object { $_.OwningProcess -gt 0 -and $_.State -ne 'Closed' } | Select-Object -First 1
 if ($openCodeConn -and $openCodeConn.OwningProcess -ne 0) {
     Write-Host "      [OK] OpenCode Server is ACTIVE (Port 4096, PID: $($openCodeConn.OwningProcess))" -ForegroundColor Green
 } else {
     Write-Host "      [..] Starting OpenCode server daemon..." -ForegroundColor Yellow
     & "$repoRoot\scripts\start-opencode-server.ps1"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "      [ERROR] OpenCode server failed to start. See messages above." -ForegroundColor Red
+        exit 1
+    }
 }
 
 # 2. Local Bridge Server (Port 47821)

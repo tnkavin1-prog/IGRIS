@@ -45,6 +45,8 @@ export interface ConversationMessage {
 export type LiveHUDStatus =
   'idle' | 'connecting' | 'listening' | 'thinking' | 'speaking' | 'error' | 'closed';
 
+export type HudDisplayMode = 'orb' | 'bar' | 'full' | 'console';
+
 export interface HUDSettings {
   apiKey: string;
   modelId: string;

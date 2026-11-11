@@ -5,11 +5,7 @@ import { join } from 'node:path';
 export class ChromeLauncher {
   private static readonly DEBUG_PORT = 9222;
   private static readonly PROFILE_DIR = 'E:\\Gematron\\.chrome-debug-profile';
-  private static readonly DEFAULT_MOCK_URL = existsSync(
-    'C:\\Users\\tnkav\\OneDrive\\Desktop\\Compiled 2020-25 pyq .pdf',
-  )
-    ? 'file:///C:/Users/tnkav/OneDrive/Desktop/Compiled%202020-25%20pyq%20.pdf'
-    : 'file:///E:/Gematron/SSC_CGL_Mock_Exam.html';
+  private static readonly DEFAULT_MOCK_URL = 'about:blank';
 
   public static findChromeExecutable(): string | null {
     const rawCandidates: Array<string | undefined> = [

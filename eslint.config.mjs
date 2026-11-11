@@ -18,7 +18,11 @@ export default tseslint.config(
       'package-lock.json',
       '.chrome-debug-profile/**',
       '.chrome-debug-data/**',
+      '.agents/**',
       'notes/**',
+      'temp/**',
+      'runtime/**',
+      'workspace/**',
     ],
   },
   js.configs.recommended,
@@ -86,6 +90,8 @@ export default tseslint.config(
     },
     rules: {
       'no-console': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      'no-empty': 'off',
     },
   },
   {

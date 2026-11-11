@@ -220,7 +220,7 @@ export class SkillRegistry {
    */
   public exportCatalog(): SkillCatalogEntry[] {
     return this.listSkills().map((skill) => {
-      let actions: SkillActionDefinition[] = [];
+      let actions: SkillActionDefinition[];
       try {
         const declared = skill.getActions();
         actions = Array.isArray(declared) ? declared : [];

@@ -10,7 +10,14 @@ import { SkillRegistry } from '../../../apps/desktop-hud/src/main/skill-framewor
  * branch, so no real process is spawned, no network request is made and no
  * host file is read or written.
  */
-const PRIMARY_SKILL_IDS = ['windows', 'office', 'blender', 'creative', 'opencode'] as const;
+const PRIMARY_SKILL_IDS = [
+  'windows',
+  'office',
+  'blender',
+  'blender-gui',
+  'creative',
+  'opencode',
+] as const;
 
 const PRIMARY_ACTIONS: Record<string, string[]> = {
   windows: [
@@ -29,6 +36,21 @@ const PRIMARY_ACTIONS: Record<string, string[]> = {
     'readExcelSheet',
   ],
   blender: ['checkBlender', 'renderScene', 'runPython'],
+  'blender-gui': [
+    'checkBlender',
+    'openBlender',
+    'downloadScene',
+    'openFileInBlender',
+    'importScene',
+    'addMesh',
+    'addMaterial',
+    'addShader',
+    'positionCamera',
+    'renderScene',
+    'saveBlend',
+    'takeScreenshot',
+    'closeBlender',
+  ],
   creative: ['checkCreativeApps', 'renderPhotoshopBatch', 'executeExtendScript'],
   opencode: ['listFreeModels', 'dispatchTask', 'checkService', 'getSessionStatus'],
 };
@@ -54,12 +76,12 @@ describe('UniversalComputerOperator', () => {
       expect(operator.registry).toBeInstanceOf(SkillRegistry);
     });
 
-    it('registers exactly the five primary skills', async () => {
+    it('registers exactly the six primary skills', async () => {
       // Registered ids are unique, so re-initializing stays idempotent.
       await operator.initialize();
 
       const skills = operator.registry.listSkills();
-      expect(skills).toHaveLength(5);
+      expect(skills).toHaveLength(6);
       expect(skills.map((skill) => skill.id).sort()).toEqual([...PRIMARY_SKILL_IDS].sort());
 
       for (const id of PRIMARY_SKILL_IDS) {
@@ -91,7 +113,7 @@ describe('UniversalComputerOperator', () => {
     it('exports one catalog entry per registered skill', () => {
       const catalog = operator.getCapabilities();
 
-      expect(catalog).toHaveLength(5);
+      expect(catalog).toHaveLength(6);
       expect(catalog.map((entry) => entry.id).sort()).toEqual([...PRIMARY_SKILL_IDS].sort());
     });
 
@@ -512,7 +534,7 @@ describe('UniversalComputerOperator', () => {
         expect(skills[id]).toBe(true);
       }
 
-      expect(health.registeredSkillsCount).toBe(5);
+      expect(health.registeredSkillsCount).toBe(6);
     });
 
     it('marks a skill unavailable when its availability probe throws', async () => {

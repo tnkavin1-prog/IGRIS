@@ -1,216 +1,162 @@
-import React, { useState } from 'react';
+import { useState, type FormEvent } from 'react';
+import { HudIcon } from './HudIcon.js';
 
 export interface ModelSwitchboardProps {
-  onDispatchTest?: (modelKey: 'deepseek' | 'glm', prompt: string) => void;
+  onDispatchTest?: (modelKey: 'deepseek' | 'glm' | 'kimi', prompt: string) => void;
 }
 
+type DispatchModel = 'deepseek' | 'glm' | 'kimi';
+
+interface SwitchboardModel {
+  key: string;
+  name: string;
+  provider: string;
+  tags: string[];
+  latency: string;
+  dispatch?: DispatchModel;
+}
+
+const MODELS: SwitchboardModel[] = [
+  {
+    key: 'gemini',
+    name: 'Gemini 3.8 Flash',
+    provider: 'Google · master brain',
+    tags: ['Vision', 'Voice', '1M ctx'],
+    latency: '420ms',
+  },
+  {
+    key: 'deepseek',
+    name: 'DeepSeek V4.1 Flash',
+    provider: 'DeepSeek · backend architecture',
+    tags: ['Reasoning', 'Math', 'Free'],
+    latency: '680ms',
+    dispatch: 'deepseek',
+  },
+  {
+    key: 'glm',
+    name: 'GLM 5.3 Flash',
+    provider: 'Zhipu AI · frontend and UI',
+    tags: ['Agentic', 'Tools', 'Free'],
+    latency: '540ms',
+    dispatch: 'glm',
+  },
+  {
+    key: 'kimi',
+    name: 'Kimi K3',
+    provider: 'Arena bridge · full-stack',
+    tags: ['Computer use', 'Code'],
+    latency: '510ms',
+    dispatch: 'kimi',
+  },
+  {
+    key: 'llama',
+    name: 'Llama 3 · Local',
+    provider: 'On-device (Ollama)',
+    tags: ['Offline', 'Private'],
+    latency: '90ms',
+  },
+];
+
+const DISPATCH_LABELS: Record<DispatchModel, string> = {
+  deepseek: 'DeepSeek V4.1',
+  glm: 'GLM 5.3',
+  kimi: 'Kimi K3',
+};
+
 export function ModelSwitchboard({ onDispatchTest }: ModelSwitchboardProps) {
-  const [activeModel, setActiveModel] = useState<'deepseek' | 'glm'>('deepseek');
+  const [autoRoute, setAutoRoute] = useState(true);
+  const [selectedModel, setSelectedModel] = useState('gemini');
+  const [dispatchModel, setDispatchModel] = useState<DispatchModel>('deepseek');
   const [testPrompt, setTestPrompt] = useState('');
   const [statusText, setStatusText] = useState<string | null>(null);
 
-  const models = [
-    {
-      key: 'gemini' as const,
-      name: 'Gemini 3.8 Flash',
-      role: 'Master Brain & Chief Architect',
-      status: 'Active Supervisor',
-      cost: 'Antigravity Native',
-      color: '#4285f4',
-      badge: 'Master Intelligence'
-    },
-    {
-      key: 'deepseek' as const,
-      name: 'DeepSeek V4.1 Flash Free',
-      role: 'Backend Architecture, Logic & Code',
-      status: 'Verified Zero-Cost',
-      cost: 'Free Tier (OpenCode)',
-      color: '#00f0ff',
-      badge: 'Primary Dev Agent'
-    },
-    {
-      key: 'glm' as const,
-      name: 'GLM 5.3 Flash Free',
-      role: 'Frontend UI/UX, React, SVG & Animations',
-      status: 'Verified Zero-Cost',
-      cost: 'Free Tier (OpenCode)',
-      color: '#a855f7',
-      badge: 'Secondary Dev Agent'
-    }
-  ];
-
-  const handleTest = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!testPrompt.trim()) return;
-    setStatusText(`Dispatched test to ${activeModel.toUpperCase()}...`);
-    onDispatchTest?.(activeModel, testPrompt.trim());
+  const handleTest = (event: FormEvent) => {
+    event.preventDefault();
+    const prompt = testPrompt.trim();
+    if (!prompt) return;
+    setStatusText(`Dispatched test to ${DISPATCH_LABELS[dispatchModel]}`);
+    onDispatchTest?.(dispatchModel, prompt);
     setTestPrompt('');
-    setTimeout(() => setStatusText(null), 4000);
+    window.setTimeout(() => setStatusText(null), 4000);
   };
 
   return (
-    <div className="model-switchboard" style={{
-      padding: '16px',
-      background: 'rgba(10, 15, 25, 0.85)',
-      backdropFilter: 'blur(20px)',
-      borderRadius: '16px',
-      border: '1px solid rgba(168, 85, 247, 0.3)',
-      color: '#e6f1ff',
-      fontFamily: 'system-ui, -apple-system, sans-serif'
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '20px' }}>🧠</span>
-          <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#a855f7', letterSpacing: '0.5px' }}>
-            TRI-MODEL ORCHESTRATION SWITCHBOARD
-          </h3>
+    <div>
+      <div className="row" style={{ paddingTop: 2 }}>
+        <div>
+          Auto-route by task
+          <small>Vision → Gemini · Reasoning → DeepSeek · Offline → Local</small>
         </div>
-        <span style={{
-          fontSize: '11px',
-          padding: '2px 8px',
-          borderRadius: '12px',
-          background: 'rgba(168, 85, 247, 0.15)',
-          color: '#a855f7',
-          border: '1px solid rgba(168, 85, 247, 0.3)'
-        }}>
-          100% Free Tier Verified
-        </span>
+        <button
+          className={`sw ${autoRoute ? 'on' : ''}`}
+          onClick={() => setAutoRoute((enabled) => !enabled)}
+          aria-label="Toggle auto-route by task"
+        />
       </div>
+      <div style={{ height: 8 }} />
 
-      {statusText && (
-        <div style={{
-          padding: '8px 12px',
-          marginBottom: '12px',
-          borderRadius: '8px',
-          background: 'rgba(0, 255, 136, 0.15)',
-          border: '1px solid rgba(0, 255, 136, 0.4)',
-          color: '#00ff88',
-          fontSize: '12px'
-        }}>
-          ⚡ {statusText}
-        </div>
-      )}
-
-      {/* Tri-Model Hierarchy Grid */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-        {models.map(m => (
-          <div
-            key={m.key}
-            style={{
-              padding: '12px',
-              borderRadius: '10px',
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: `1px solid ${m.color}33`,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}
-          >
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: m.color, boxShadow: `0 0 8px ${m.color}` }} />
-                <span style={{ fontWeight: 600, fontSize: '13px', color: '#ffffff' }}>{m.name}</span>
-                <span style={{
-                  fontSize: '9px',
-                  padding: '1px 6px',
-                  borderRadius: '4px',
-                  background: `${m.color}22`,
-                  color: m.color,
-                  border: `1px solid ${m.color}44`
-                }}>
-                  {m.badge}
+      {MODELS.map((model) => (
+        <button
+          key={model.key}
+          className={`mc ${selectedModel === model.key ? 'on' : ''}`}
+          onClick={() => {
+            setSelectedModel(model.key);
+            if (model.dispatch) setDispatchModel(model.dispatch);
+          }}
+        >
+          <i className="rd" />
+          <div className="at">
+            <b>{model.name}</b>
+            <span>{model.provider}</span>
+            <div className="tags">
+              {model.tags.map((tag) => (
+                <span key={tag} className="tag">
+                  {tag}
                 </span>
-              </div>
-              <div style={{ fontSize: '11px', color: '#8892b0' }}>{m.role}</div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '11px', color: '#00ff88', fontWeight: 500 }}>{m.status}</div>
-              <div style={{ fontSize: '10px', color: '#8892b0' }}>{m.cost}</div>
+              ))}
             </div>
           </div>
-        ))}
-      </div>
+          <span className="lat">{model.latency}</span>
+        </button>
+      ))}
 
-      {/* Model Selection and Direct Dispatch */}
-      <div style={{
-        padding: '12px',
-        borderRadius: '10px',
-        background: 'rgba(0, 0, 0, 0.3)',
-        border: '1px solid rgba(255, 255, 255, 0.08)'
-      }}>
-        <div style={{ fontSize: '12px', color: '#8892b0', marginBottom: '8px' }}>
-          Direct AI Model Dispatcher (Zero Cost OpenCode Session):
+      <div className="h3">Direct dispatch</div>
+      <div className="card">
+        <div className="seg" role="group" aria-label="Dispatch model">
+          {(['kimi', 'deepseek', 'glm'] as DispatchModel[]).map((key) => (
+            <button
+              key={key}
+              type="button"
+              className={dispatchModel === key ? 'on' : ''}
+              aria-pressed={dispatchModel === key}
+              onClick={() => setDispatchModel(key)}
+            >
+              {DISPATCH_LABELS[key]}
+            </button>
+          ))}
         </div>
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-          <button
-            type="button"
-            onClick={() => setActiveModel('deepseek')}
-            style={{
-              flex: 1,
-              padding: '6px',
-              borderRadius: '6px',
-              border: activeModel === 'deepseek' ? '1px solid #00f0ff' : '1px solid rgba(255, 255, 255, 0.1)',
-              background: activeModel === 'deepseek' ? 'rgba(0, 240, 255, 0.2)' : 'rgba(255, 255, 255, 0.03)',
-              color: activeModel === 'deepseek' ? '#00f0ff' : '#8892b0',
-              cursor: 'pointer',
-              fontSize: '11px',
-              fontWeight: 500
-            }}
-          >
-            DeepSeek V4.1 (Backend)
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveModel('glm')}
-            style={{
-              flex: 1,
-              padding: '6px',
-              borderRadius: '6px',
-              border: activeModel === 'glm' ? '1px solid #a855f7' : '1px solid rgba(255, 255, 255, 0.1)',
-              background: activeModel === 'glm' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(255, 255, 255, 0.03)',
-              color: activeModel === 'glm' ? '#a855f7' : '#8892b0',
-              cursor: 'pointer',
-              fontSize: '11px',
-              fontWeight: 500
-            }}
-          >
-            GLM 5.3 (Frontend)
-          </button>
-        </div>
-
-        <form onSubmit={handleTest} style={{ display: 'flex', gap: '8px' }}>
+        <form className="goal" style={{ marginTop: 10, marginBottom: 0 }} onSubmit={handleTest}>
           <input
-            type="text"
             value={testPrompt}
-            onChange={(e) => setTestPrompt(e.target.value)}
-            placeholder={`Prompt ${activeModel === 'deepseek' ? 'DeepSeek (Logic)' : 'GLM (UI)'}...`}
-            style={{
-              flex: 1,
-              padding: '6px 10px',
-              borderRadius: '6px',
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              color: '#ffffff',
-              fontSize: '11px',
-              outline: 'none'
-            }}
+            onChange={(event) => setTestPrompt(event.target.value)}
+            placeholder={`Prompt ${DISPATCH_LABELS[dispatchModel]}…`}
+            aria-label="Test prompt"
           />
-          <button
-            type="submit"
-            style={{
-              padding: '6px 12px',
-              borderRadius: '6px',
-              background: activeModel === 'deepseek' ? '#00f0ff' : '#a855f7',
-              border: 'none',
-              color: '#000000',
-              fontWeight: 600,
-              fontSize: '11px',
-              cursor: 'pointer'
-            }}
-          >
+          <button className="btn" type="submit" disabled={!testPrompt.trim()}>
             Execute
           </button>
         </form>
+        {statusText ? (
+          <div className="cons" style={{ marginTop: 8 }}>
+            <HudIcon name="check" size={13} />
+            <span>{statusText}</span>
+          </div>
+        ) : (
+          <div className="cons" style={{ marginTop: 8 }}>
+            <HudIcon name="zap" size={13} />
+            <span>Zero-cost session · routed through OpenCode.</span>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -6,13 +6,19 @@ import { CDPClient } from './cdp-client.js';
 process.on('uncaughtException', (err) => {
   console.error('[UncaughtException]', err);
   try {
-    appendFileSync('E:\\Gematron\\logs\\electron-error.log', `[${new Date().toISOString()}] UncaughtException: ${err?.stack || err}\n`);
+    appendFileSync(
+      'E:\\Gematron\\logs\\electron-error.log',
+      `[${new Date().toISOString()}] UncaughtException: ${err?.stack || err}\n`,
+    );
   } catch {}
 });
 process.on('unhandledRejection', (reason) => {
   console.error('[UnhandledRejection]', reason);
   try {
-    appendFileSync('E:\\Gematron\\logs\\electron-error.log', `[${new Date().toISOString()}] UnhandledRejection: ${(reason as Error)?.stack || reason}\n`);
+    appendFileSync(
+      'E:\\Gematron\\logs\\electron-error.log',
+      `[${new Date().toISOString()}] UnhandledRejection: ${(reason as Error)?.stack || reason}\n`,
+    );
   } catch {}
 });
 import { ChromeLauncher } from './chrome-launcher.js';
@@ -27,6 +33,8 @@ import {
   toggleMaximize,
   closeWindow,
   toggleAlwaysOnTop,
+  setDisplayMode,
+  getDisplayMode,
 } from './window.js';
 import type {
   FindTextOptions,
@@ -34,6 +42,7 @@ import type {
   TileWindowsOptions,
   WindowTilingLayout,
 } from './types.js';
+import { screenGrounding } from './screen-grounding.js';
 
 // Register custom Windows URI protocol (e.g. gematron://summon)
 for (const protocol of ['gematron', 'gemetron']) {
@@ -48,7 +57,10 @@ for (const protocol of ['gematron', 'gemetron']) {
 
 // Strictly Singleton: ensure only ONE instance exists across the OS
 const gotLock = app.requestSingleInstanceLock();
-appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] gotLock: ${gotLock}\n`);
+appendFileSync(
+  'E:\\Gematron\\logs\\hud-startup.log',
+  `[${new Date().toISOString()}] gotLock: ${gotLock}\n`,
+);
 if (!gotLock) {
   console.log('[Singleton] Another instance of Gemini Desktop HUD is already running. Exiting.');
   app.quit();
@@ -68,17 +80,26 @@ if (!gotLock) {
   let trayManager: TrayManager | null = null;
 
   app.on('before-quit', () => {
-    appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] app before-quit fired (isQuitting: ${isQuitting})\n`);
+    appendFileSync(
+      'E:\\Gematron\\logs\\hud-startup.log',
+      `[${new Date().toISOString()}] app before-quit fired (isQuitting: ${isQuitting})\n`,
+    );
     isQuitting = true;
     trayManager?.destroy();
   });
 
   app.on('will-quit', () => {
-    appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] app will-quit fired\n`);
+    appendFileSync(
+      'E:\\Gematron\\logs\\hud-startup.log',
+      `[${new Date().toISOString()}] app will-quit fired\n`,
+    );
   });
 
   app.on('quit', (_, exitCode) => {
-    appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] app quit fired (exitCode: ${exitCode})\n`);
+    appendFileSync(
+      'E:\\Gematron\\logs\\hud-startup.log',
+      `[${new Date().toISOString()}] app quit fired (exitCode: ${exitCode})\n`,
+    );
   });
 
   const cdpClient = new CDPClient(9222, '127.0.0.1');
@@ -87,235 +108,273 @@ if (!gotLock) {
 
   app.whenReady().then(async () => {
     try {
-      appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] app.whenReady started\n`);
+      appendFileSync(
+        'E:\\Gematron\\logs\\hud-startup.log',
+        `[${new Date().toISOString()}] app.whenReady started\n`,
+      );
       liveService = new GeminiLiveService(cdpClient);
-      appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] GeminiLiveService created\n`);
+      appendFileSync(
+        'E:\\Gematron\\logs\\hud-startup.log',
+        `[${new Date().toISOString()}] GeminiLiveService created\n`,
+      );
       controlServer = new ControlServer(9228, '127.0.0.1');
-      appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] ControlServer created\n`);
+      appendFileSync(
+        'E:\\Gematron\\logs\\hud-startup.log',
+        `[${new Date().toISOString()}] ControlServer created\n`,
+      );
 
       const preloadPath = join(__dirname, 'preload.cjs');
       const htmlPath = join(__dirname, 'index.html');
 
       const win = createMainWindow(preloadPath, htmlPath);
-      appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] MainWindow created\n`);
-    try {
-      liveService.input.setDisplayMetrics(liveService.vision.getDisplayMetrics());
-    } catch {
-      /* ignore */
-    }
-
-    const summonHUD = () => {
-      const w = getMainWindow();
-      if (w) {
-        if (w.isMinimized()) w.restore();
-        w.show();
-        w.focus();
-        w.setAlwaysOnTop(true);
-        w.moveTop();
-      }
-    };
-
-    const toggleHUD = () => {
-      const w = getMainWindow();
-      if (w) {
-        if (w.isVisible() && w.isFocused()) {
-          if (liveService.currentSettings.minimizeToTray) {
-            w.hide();
-          } else {
-            w.minimize();
-          }
-        } else {
-          summonHUD();
-        }
-      }
-    };
-
-    // Initialize System Tray & Background Daemon
-    trayManager = new TrayManager({
-      iconPath: join(__dirname, '../../../../assets/icons/jarvis.ico'),
-      callbacks: {
-        onSummon: () => summonHUD(),
-        onKillswitch: () => {
-          void liveService.emergencyStop('Emergency killswitch triggered from System Tray');
-          safeSend('workflow:emergency-stop', {
-            reason: 'Emergency killswitch triggered from System Tray',
-          });
-          trayManager?.setStatus(trayManager.getStatusLabel());
-        },
-        onDesktopRadar: () => {
-          summonHUD();
-          safeSend('tray:open-radar');
-        },
-        onVisualBlackboard: () => {
-          summonHUD();
-          safeSend('tray:open-blackboard');
-        },
-        onToggleSoundMute: () => {
-          safeSend('tray:toggle-sound-mute');
-        },
-        onOpenNotes: () => {
-          try {
-            void shell.openPath('E:\\Gematron\\notes');
-          } catch {}
-        },
-        onExit: () => {
-          isQuitting = true;
-          app.quit();
-        },
-        getStatus: () => {
-          const curTask = liveService.workflow.getCurrentTask();
-          if (curTask) {
-            if (curTask.status === 'running') return 'Running Task';
-            if (curTask.status === 'paused') return 'Paused';
-            if (curTask.status === 'waiting_approval') return 'Waiting Approval';
-          }
-          const liveStatus = liveService.currentStatus;
-          if (liveStatus === 'listening') return 'Listening';
-          if (liveStatus === 'thinking') return 'Thinking';
-          if (liveStatus === 'speaking') return 'Speaking';
-          return 'Idle';
-        },
-      },
-    });
-    trayManager.init();
-
-    // Minimize-to-tray window event hooks
-    win.on('close', (e) => {
-      if (!isQuitting && liveService.currentSettings.minimizeToTray) {
-        e.preventDefault();
-        win.hide();
-      }
-    });
-
-    win.on('minimize', () => {
-      if (liveService.currentSettings.minimizeToTray) {
-        win.hide();
-      }
-    });
-
-    // Start background tracking of Chrome tabs
-    cdpClient.startTracking(1500);
-
-    // Start in-Chrome loopback summon server (http://127.0.0.1:9228/summon)
-    await controlServer.start(() => getMainWindow(), cdpClient);
-    appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] ControlServer started on port 9228\n`);
-
-    // Auto-launch Chrome with remote debugging if port 9222 is not yet active
-    const isChromeActive = await ChromeLauncher.isPortAvailable();
-    if (!isChromeActive) {
-      console.log(
-        '[ChromeLauncher] Chrome remote debugging port 9222 not detected. Spawning Chrome...',
+      appendFileSync(
+        'E:\\Gematron\\logs\\hud-startup.log',
+        `[${new Date().toISOString()}] MainWindow created\n`,
       );
-      void ChromeLauncher.launch();
-    }
+      try {
+        liveService.input.setDisplayMetrics(liveService.vision.getDisplayMetrics());
+      } catch {
+        /* ignore */
+      }
 
-    const safeSend = (channel: string, ...args: any[]) => {
-      if (win && !win.isDestroyed()) {
-        try {
-          win.webContents.send(channel, ...args);
-        } catch {
-          /* ignore */
+      // Wire up screen grounding with live services for visual element detection
+      screenGrounding.setAppManager(liveService.apps);
+      screenGrounding.setCDPClient(cdpClient);
+      screenGrounding.setComputerVision(liveService.vision);
+
+      // Expose live service for autonomous agent vision frame streaming
+      (globalThis as any).__geminiLiveService = liveService;
+
+      const summonHUD = () => {
+        const w = getMainWindow();
+        if (w) {
+          if (w.isMinimized()) w.restore();
+          w.show();
+          w.focus();
+          w.setAlwaysOnTop(true);
+          w.moveTop();
+        }
+      };
+
+      const toggleHUD = () => {
+        const w = getMainWindow();
+        if (w) {
+          if (w.isVisible() && w.isFocused()) {
+            if (liveService.currentSettings.minimizeToTray) {
+              w.hide();
+            } else {
+              w.minimize();
+            }
+          } else {
+            summonHUD();
+          }
+        }
+      };
+
+      // Initialize System Tray & Background Daemon
+      trayManager = new TrayManager({
+        iconPath: join(__dirname, '../../../../assets/icons/jarvis.ico'),
+        callbacks: {
+          onSummon: () => summonHUD(),
+          onKillswitch: () => {
+            void liveService.emergencyStop('Emergency killswitch triggered from System Tray');
+            safeSend('workflow:emergency-stop', {
+              reason: 'Emergency killswitch triggered from System Tray',
+            });
+            trayManager?.setStatus(trayManager.getStatusLabel());
+          },
+          onDesktopRadar: () => {
+            summonHUD();
+            safeSend('tray:open-radar');
+          },
+          onVisualBlackboard: () => {
+            summonHUD();
+            safeSend('tray:open-blackboard');
+          },
+          onToggleSoundMute: () => {
+            safeSend('tray:toggle-sound-mute');
+          },
+          onOpenNotes: () => {
+            try {
+              void shell.openPath('E:\\Gematron\\notes');
+            } catch {}
+          },
+          onExit: () => {
+            isQuitting = true;
+            app.quit();
+          },
+          getStatus: () => {
+            const curTask = liveService.workflow.getCurrentTask();
+            if (curTask) {
+              if (curTask.status === 'running') return 'Running Task';
+              if (curTask.status === 'paused') return 'Paused';
+              if (curTask.status === 'waiting_approval') return 'Waiting Approval';
+            }
+            const liveStatus = liveService.currentStatus;
+            if (liveStatus === 'listening') return 'Listening';
+            if (liveStatus === 'thinking') return 'Thinking';
+            if (liveStatus === 'speaking') return 'Speaking';
+            return 'Idle';
+          },
+        },
+      });
+      trayManager.init();
+
+      // Minimize-to-tray window event hooks
+      win.on('close', (e) => {
+        if (!isQuitting && liveService.currentSettings.minimizeToTray) {
+          // End the Gemini Live session before hiding: a hidden HUD must not
+          // keep listening to the microphone or speaking replies from the tray.
+          try {
+            liveService.disconnect();
+          } catch {}
+          e.preventDefault();
+          win.hide();
+        }
+      });
+
+      win.on('minimize', () => {
+        if (liveService.currentSettings.minimizeToTray) {
+          win.hide();
+        }
+      });
+
+      // Start background tracking of Chrome tabs
+      cdpClient.startTracking(1500);
+
+      // Start in-Chrome loopback summon server (http://127.0.0.1:9228/summon)
+      await controlServer.start(() => getMainWindow(), cdpClient);
+      appendFileSync(
+        'E:\\Gematron\\logs\\hud-startup.log',
+        `[${new Date().toISOString()}] ControlServer started on port 9228\n`,
+      );
+
+      // Do not open Chrome when the HUD starts: only the Gematron HUD should appear.
+      // Chrome can be launched explicitly from the HUD ("Open Chrome").
+      // Set GEMATRON_AUTOLAUNCH_CHROME=1 to opt back into the old auto-launch behaviour.
+      if (process.env.GEMATRON_AUTOLAUNCH_CHROME === '1') {
+        const isChromeActive = await ChromeLauncher.isPortAvailable();
+        if (!isChromeActive) {
+          console.log(
+            '[ChromeLauncher] Chrome remote debugging port 9222 not detected. Spawning Chrome...',
+          );
+          void ChromeLauncher.launch();
         }
       }
-    };
 
-    // Forward CDP events to Renderer
-    cdpClient.on('active-tab-changed', (tab) => {
-      safeSend('cdp:active-tab-changed', tab);
-    });
+      const safeSend = (channel: string, ...args: any[]) => {
+        if (win && !win.isDestroyed()) {
+          try {
+            win.webContents.send(channel, ...args);
+          } catch {
+            /* ignore */
+          }
+        }
+      };
 
-    cdpClient.on('connection-changed', (connected) => {
-      safeSend('cdp:connection-changed', connected);
-    });
-
-    // Forward Gemini Live events to Renderer
-    liveService.on('status-changed', (status) => {
-      safeSend('gemini:status-changed', status);
-      trayManager?.setStatus(trayManager.getStatusLabel());
-    });
-
-    liveService.on('conversation-message', (msg) => {
-      safeSend('gemini:conversation-message', msg);
-    });
-
-    liveService.on('blackboard-lesson', (lesson) => {
-      safeSend('gemini:blackboard-lesson', lesson);
-    });
-
-    liveService.on('audio-chunk', (chunk) => {
-      safeSend('gemini:audio-chunk', chunk);
-    });
-
-    liveService.on('interrupted', () => {
-      safeSend('gemini:interrupted');
-    });
-
-    liveService.on('turn-complete', () => {
-      safeSend('gemini:turn-complete');
-    });
-
-    // Forward window maximize events to Renderer
-    win.on('maximize', () => {
-      safeSend('window:maximized-changed', true);
-    });
-    win.on('unmaximize', () => {
-      safeSend('window:maximized-changed', false);
-    });
-
-    liveService.on('error', (err) => {
-      safeSend('gemini:error', err);
-    });
-
-    liveService.on('workflow:task-updated', (task) => {
-      safeSend('workflow:task-updated', task);
-      trayManager?.setStatus(trayManager.getStatusLabel());
-    });
-
-    liveService.on('workflow:needs-approval', (data) => {
-      safeSend('workflow:needs-approval', data);
-    });
-
-    liveService.on('crosshair-target', (target) => {
-      safeSend('telemetry:crosshair-target', target);
-    });
-
-    liveService.on('bounding-box-target', (target) => {
-      safeSend('telemetry:bounding-box-target', target);
-    });
-
-    liveService.on('workflow:emergency-stop', (data) => {
-      safeSend('workflow:emergency-stop', data);
-    });
-
-    liveService.on('telemetry-updated', (telem) => {
-      safeSend('telemetry:updated', telem);
-    });
-
-    // Register global summon shortcut (Ctrl+Alt+Space)
-    try {
-      globalShortcut.register('CommandOrControl+Alt+Space', () => {
-        toggleHUD();
+      // Forward CDP events to Renderer
+      cdpClient.on('active-tab-changed', (tab) => {
+        safeSend('cdp:active-tab-changed', tab);
       });
-    } catch (err) {
-      console.warn('[GlobalShortcut] Failed to register Ctrl+Alt+Space:', err);
-    }
 
-    // Register global emergency stop shortcut (Ctrl+Alt+K)
-    try {
-      globalShortcut.register('CommandOrControl+Alt+K', () => {
-        void liveService.emergencyStop('Emergency global shortcut Ctrl+Alt+K triggered');
-        safeSend('workflow:emergency-stop', {
-          reason: 'Emergency global shortcut Ctrl+Alt+K triggered',
-        });
+      cdpClient.on('connection-changed', (connected) => {
+        safeSend('cdp:connection-changed', connected);
+      });
+
+      // Forward Gemini Live events to Renderer
+      liveService.on('status-changed', (status) => {
+        safeSend('gemini:status-changed', status);
         trayManager?.setStatus(trayManager.getStatusLabel());
       });
-    } catch (err) {
-      console.warn('[GlobalShortcut] Failed to register Ctrl+Alt+K:', err);
+
+      liveService.on('conversation-message', (msg) => {
+        safeSend('gemini:conversation-message', msg);
+      });
+
+      liveService.on('blackboard-lesson', (lesson) => {
+        safeSend('gemini:blackboard-lesson', lesson);
+      });
+
+      liveService.on('audio-chunk', (chunk) => {
+        safeSend('gemini:audio-chunk', chunk);
+      });
+
+      liveService.on('interrupted', () => {
+        safeSend('gemini:interrupted');
+      });
+
+      liveService.on('turn-complete', () => {
+        safeSend('gemini:turn-complete');
+      });
+
+      // Forward window maximize events to Renderer
+      win.on('maximize', () => {
+        safeSend('window:maximized-changed', true);
+      });
+      win.on('unmaximize', () => {
+        safeSend('window:maximized-changed', false);
+      });
+
+      liveService.on('error', (err) => {
+        safeSend('gemini:error', err);
+      });
+
+      liveService.on('workflow:task-updated', (task) => {
+        safeSend('workflow:task-updated', task);
+        trayManager?.setStatus(trayManager.getStatusLabel());
+      });
+
+      liveService.on('workflow:needs-approval', (data) => {
+        safeSend('workflow:needs-approval', data);
+      });
+
+      liveService.on('crosshair-target', (target) => {
+        safeSend('telemetry:crosshair-target', target);
+      });
+
+      liveService.on('bounding-box-target', (target) => {
+        safeSend('telemetry:bounding-box-target', target);
+      });
+
+      liveService.on('workflow:emergency-stop', (data) => {
+        safeSend('workflow:emergency-stop', data);
+      });
+
+      liveService.on('telemetry-updated', (telem) => {
+        safeSend('telemetry:updated', telem);
+      });
+
+      // Register global summon shortcut (Ctrl+Alt+Space)
+      try {
+        globalShortcut.register('CommandOrControl+Alt+Space', () => {
+          toggleHUD();
+        });
+      } catch (err) {
+        console.warn('[GlobalShortcut] Failed to register Ctrl+Alt+Space:', err);
+      }
+
+      // Register global emergency stop shortcut (Ctrl+Alt+K)
+      try {
+        globalShortcut.register('CommandOrControl+Alt+K', () => {
+          void liveService.emergencyStop('Emergency global shortcut Ctrl+Alt+K triggered');
+          safeSend('workflow:emergency-stop', {
+            reason: 'Emergency global shortcut Ctrl+Alt+K triggered',
+          });
+          trayManager?.setStatus(trayManager.getStatusLabel());
+        });
+      } catch (err) {
+        console.warn('[GlobalShortcut] Failed to register Ctrl+Alt+K:', err);
+      }
+      appendFileSync(
+        'E:\\Gematron\\logs\\hud-startup.log',
+        `[${new Date().toISOString()}] app.whenReady completed successfully\n`,
+      );
+    } catch (startupErr) {
+      appendFileSync(
+        'E:\\Gematron\\logs\\hud-startup.log',
+        `[${new Date().toISOString()}] Startup ERROR: ${(startupErr as Error)?.stack || startupErr}\n`,
+      );
     }
-    appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] app.whenReady completed successfully\n`);
-  } catch (startupErr) {
-    appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] Startup ERROR: ${(startupErr as Error)?.stack || startupErr}\n`);
-  }
   });
 
   // Setup IPC Handlers
@@ -325,52 +384,138 @@ if (!gotLock) {
   ipcMain.handle('window:close', () => closeWindow());
   ipcMain.handle('window:toggle-pin', () => toggleAlwaysOnTop());
   ipcMain.handle('window:is-pinned', () => getMainWindow()?.isAlwaysOnTop() ?? true);
+  ipcMain.handle('window:set-display-mode', (_, mode: string) =>
+    setDisplayMode(mode as 'orb' | 'bar' | 'full' | 'console'),
+  );
+  ipcMain.handle('window:get-display-mode', () => getDisplayMode());
 
   // CDP IPC Handlers (Retain HUD focus on browser operations)
-  ipcMain.handle('cdp:get-status', async () => await cdpClient.getStatus());
-  ipcMain.handle('cdp:list-tabs', async () => await cdpClient.listTabs());
-  ipcMain.handle('cdp:get-active-tab', async () => await cdpClient.getActiveTab());
+  /**
+   * Ensures Chrome is running with remote debugging before executing a CDP action.
+   * If Chrome is not available, launches it automatically and waits for the port.
+   */
+  async function ensureChrome(url?: string): Promise<{ ok: boolean; message?: string }> {
+    const isActive = await ChromeLauncher.isPortAvailable();
+    if (isActive) return { ok: true };
+
+    const launched = await ChromeLauncher.launch(url);
+    if (!launched.ok) {
+      return { ok: false, message: launched.message || 'Failed to launch Chrome.' };
+    }
+
+    // Wait up to 8 seconds for Chrome's remote debugging port to respond
+    for (let i = 0; i < 16; i += 1) {
+      await new Promise((r) => setTimeout(r, 500));
+      if (await ChromeLauncher.isPortAvailable()) {
+        return { ok: true };
+      }
+    }
+    return { ok: false, message: 'Chrome launched but remote debugging port did not respond.' };
+  }
+
+  ipcMain.handle('cdp:get-status', async () => {
+    const status = await cdpClient.getStatus();
+    if (!status.connected) {
+      const launched = await ensureChrome();
+      if (launched.ok) {
+        return await cdpClient.getStatus();
+      }
+      return {
+        connected: false,
+        port: 9222,
+        activeTab: null,
+        tabs: [],
+        error: launched.message || 'Chrome remote debugging is not available.',
+      };
+    }
+    return status;
+  });
+  ipcMain.handle('cdp:list-tabs', async () => {
+    const tabs = await cdpClient.listTabs();
+    if (tabs.length === 0) {
+      const launched = await ensureChrome();
+      if (launched.ok) {
+        return await cdpClient.listTabs();
+      }
+    }
+    return tabs;
+  });
+  ipcMain.handle('cdp:get-active-tab', async () => {
+    const tab = await cdpClient.getActiveTab();
+    if (!tab) {
+      const launched = await ensureChrome();
+      if (launched.ok) {
+        return await cdpClient.getActiveTab();
+      }
+    }
+    return tab;
+  });
   ipcMain.handle('cdp:switch-tab', async (_, tabId: string) => {
+    const launched = await ensureChrome();
+    if (!launched.ok) return false;
     const ok = await cdpClient.switchTab(tabId);
     getMainWindow()?.focus();
     return ok;
   });
   ipcMain.handle('cdp:create-tab', async (_, url: string) => {
+    const launched = await ensureChrome(url);
+    if (!launched.ok) return null;
     const tab = await cdpClient.createTab(url);
     getMainWindow()?.focus();
     return tab;
   });
-  ipcMain.handle('cdp:close-tab', async (_, tabId: string) => await cdpClient.closeTab(tabId));
-  ipcMain.handle(
-    'cdp:capture-screenshot',
-    async (_, tabId?: string) => await cdpClient.captureScreenshot(tabId),
-  );
+  ipcMain.handle('cdp:close-tab', async (_, tabId: string) => {
+    const launched = await ensureChrome();
+    if (!launched.ok) return false;
+    return await cdpClient.closeTab(tabId);
+  });
+  ipcMain.handle('cdp:capture-screenshot', async (_, tabId?: string) => {
+    const launched = await ensureChrome();
+    if (!launched.ok) throw new Error(launched.message || 'Chrome is not available.');
+    return await cdpClient.captureScreenshot(tabId);
+  });
   ipcMain.handle('cdp:navigate', async (_, url: string, tabId?: string) => {
+    const launched = await ensureChrome();
+    if (!launched.ok) throw new Error(launched.message || 'Chrome is not available.');
     const res = await cdpClient.navigate(url, tabId);
     getMainWindow()?.focus();
     return res;
   });
   ipcMain.handle('cdp:open-youtube', async (_, query?: string) => {
+    const launched = await ensureChrome();
+    if (!launched.ok) return null;
     const tab = await cdpClient.openYouTube(query);
     getMainWindow()?.focus();
     return tab;
   });
   ipcMain.handle('cdp:launch-chrome', async (_, url?: string) => await ChromeLauncher.launch(url));
   ipcMain.handle('cdp:duplicate-tab', async (_, tabId?: string) => {
+    const launched = await ensureChrome();
+    if (!launched.ok) return null;
     const tab = await cdpClient.duplicateTab(tabId);
     getMainWindow()?.focus();
     return tab;
   });
   ipcMain.handle('cdp:reload-tab', async (_, tabId?: string, ignoreCache?: boolean) => {
+    const launched = await ensureChrome();
+    if (!launched.ok) return false;
     return await cdpClient.reloadTab(tabId, ignoreCache);
   });
   ipcMain.handle(
     'cdp:search-tab-content',
     async (_, query: string, options?: { caseSensitive?: boolean }) => {
+      const launched = await ensureChrome();
+      if (!launched.ok) {
+        return { query, totalTabs: 0, matchedTabs: [] };
+      }
       return await cdpClient.searchTabContent(query, options);
     },
   );
   ipcMain.handle('cdp:close-duplicate-tabs', async () => {
+    const launched = await ensureChrome();
+    if (!launched.ok) {
+      return { closedCount: 0, closedTabs: [], remainingCount: 0 };
+    }
     return await cdpClient.closeDuplicateTabs();
   });
 
@@ -543,10 +688,12 @@ if (!gotLock) {
   );
   ipcMain.handle('clipboard:clear', () => liveService.clipboardService.clear());
 
-  app.on('window-all-closed', (e: any) => {
-    appendFileSync('E:\\Gematron\\logs\\hud-startup.log', `[${new Date().toISOString()}] app window-all-closed fired (minimizeToTray: ${liveService?.currentSettings?.minimizeToTray})\n`);
+  app.on('window-all-closed', () => {
+    appendFileSync(
+      'E:\\Gematron\\logs\\hud-startup.log',
+      `[${new Date().toISOString()}] app window-all-closed fired (minimizeToTray: ${liveService?.currentSettings?.minimizeToTray})\n`,
+    );
     if (!isQuitting && liveService?.currentSettings?.minimizeToTray) {
-      e?.preventDefault?.();
       return;
     }
     try {

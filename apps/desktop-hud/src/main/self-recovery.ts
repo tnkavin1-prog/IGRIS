@@ -1,11 +1,7 @@
 import { EventEmitter } from 'node:events';
 
 export type FailureCategory =
-  | 'network_disconnect'
-  | 'process_crash'
-  | 'permission_denied'
-  | 'runtime_syntax_error'
-  | 'unknown';
+  'network_disconnect' | 'process_crash' | 'permission_denied' | 'runtime_syntax_error' | 'unknown';
 
 export interface IncidentReport {
   id: string;
@@ -93,15 +89,15 @@ export class AutonomousSelfRecoveryEngine extends EventEmitter {
 
   public async handleIncident(
     error: Error | string,
-    context: Record<string, unknown> = {}
+    context: Record<string, unknown> = {},
   ): Promise<IncidentReport> {
     const category = this.classifyError(error);
     const errText = typeof error === 'string' ? error : error.message;
     const stack = typeof error !== 'string' ? error.stack : undefined;
     const incidentId = `inc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
-    let remediation = 'Logged and isolated';
-    let recovered = false;
+    let remediation: string;
+    let recovered: boolean;
 
     switch (category) {
       case 'network_disconnect':

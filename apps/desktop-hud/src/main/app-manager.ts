@@ -187,7 +187,7 @@ export class AppManagerService {
 
   constructor(options: AppManagerOptions = {}) {
     this.mockMode = options.mockMode ?? process.platform !== 'win32';
-    this.scriptsDir = options.scriptsDir || 'E:\\Gemetron\\scripts';
+    this.scriptsDir = options.scriptsDir || 'E:\\Gematron\\scripts';
     this.memoryStore = options.memoryStore;
   }
 
@@ -802,10 +802,7 @@ export class AppManagerService {
     }
   }
 
-  public async findTextOnScreen(
-    query: string,
-    windowScope?: string,
-  ) {
+  public async findTextOnScreen(query: string, windowScope?: string) {
     return this.findText(query, windowScope);
   }
 

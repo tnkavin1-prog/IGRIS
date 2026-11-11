@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * E:\Gematron\scripts\opencode-bridge.mjs
- * 
+ *
  * Official Master Integration Bridge between Gemini (Master Brain) and OpenCode (Execution Engine).
  * Strictly enforces:
  *  - E: Drive project storage (E:\Gematron)
@@ -15,37 +15,36 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = 'E:\\Gematron';
 const PASSWORD_FILE = path.join(PROJECT_ROOT, 'logs', 'opencode-server-password.txt');
 const SERVER_URL = process.env.OPENCODE_SERVER_URL || 'http://127.0.0.1:4096';
 
 // Allowed verified free models
 export const APPROVED_FREE_MODELS = {
-  'deepseek': {
+  deepseek: {
     id: 'deepseek-v4.1-flash-free',
     providerID: 'opencode',
     name: 'DeepSeek V4.1 Flash Free',
-    role: 'Backend Architecture, Logic, API, Database, Core Algorithms'
+    role: 'Backend Architecture, Logic, API, Database, Core Algorithms',
   },
-  'glm': {
+  glm: {
     id: 'glm-5.3-flash-free',
     providerID: 'opencode',
     name: 'GLM-5.3-Flash Free',
-    role: 'Frontend UI/UX, Component Architecture, React, SVG, Animations'
+    role: 'Frontend UI/UX, Component Architecture, React, SVG, Animations',
   },
-  'nemotron': {
+  nemotron: {
     id: 'nemotron-3.5-lightning-free',
     providerID: 'opencode',
     name: 'Nemotron 3.5 Lightning Free',
-    role: 'Fast Backend Logic, Systems Engineering, Test Generation'
+    role: 'Fast Backend Logic, Systems Engineering, Test Generation',
   },
-  'mimo': {
+  mimo: {
     id: 'mimo-v2.6-flash-free',
     providerID: 'opencode',
     name: 'MiMo V2.6 Flash Free',
-    role: 'Fast Architecture, Refactoring, Documentation'
-  }
+    role: 'Fast Architecture, Refactoring, Documentation',
+  },
 };
 
 function getAuthHeader() {
@@ -63,14 +62,14 @@ function getAuthHeader() {
 async function request(endpoint, options = {}) {
   const url = `${SERVER_URL}${endpoint}`;
   const headers = {
-    'Authorization': getAuthHeader(),
+    Authorization: getAuthHeader(),
     'Content-Type': 'application/json',
-    ...(options.headers || {})
+    ...(options.headers || {}),
   };
 
   const res = await fetch(url, {
     ...options,
-    headers
+    headers,
   });
 
   if (!res.ok) {
@@ -98,13 +97,13 @@ export async function getInfo() {
 export async function getVerifiedModels() {
   const raw = await request('/api/model');
   const allModels = raw.data || [];
-  
+
   // Filter for approved free models only
-  const freeModels = allModels.filter(m => {
+  const freeModels = allModels.filter((m) => {
     // Strictly filter out OpenCode Go and paid providers
     if (m.providerID === 'opencode-go') return false;
     if (m.cost && Array.isArray(m.cost)) {
-      const isFree = m.cost.every(c => (c.input === 0 && c.output === 0));
+      const isFree = m.cost.every((c) => c.input === 0 && c.output === 0);
       if (!isFree) return false;
     }
     return m.id.endsWith('-free') || m.id.includes('free');
@@ -124,14 +123,14 @@ export async function executeTask(options) {
     agent = 'build',
     directory = PROJECT_ROOT,
     maxWaitSeconds = 600,
-    fallbackAttempt = 0
-  } = (typeof options === 'string' ? { prompt: options } : options);
-  const modelConfig = APPROVED_FREE_MODELS[modelKey.toLowerCase()] || 
-    Object.values(APPROVED_FREE_MODELS).find(m => m.id === modelKey);
+  } = typeof options === 'string' ? { prompt: options } : options;
+  const modelConfig =
+    APPROVED_FREE_MODELS[modelKey.toLowerCase()] ||
+    Object.values(APPROVED_FREE_MODELS).find((m) => m.id === modelKey);
 
   if (!modelConfig) {
     throw new Error(
-      `Model '${modelKey}' is not an authorized free model! Allowed: ${Object.keys(APPROVED_FREE_MODELS).join(', ')}`
+      `Model '${modelKey}' is not an authorized free model! Allowed: ${Object.keys(APPROVED_FREE_MODELS).join(', ')}`,
     );
   }
 
@@ -146,12 +145,12 @@ export async function executeTask(options) {
       agent,
       model: {
         id: modelConfig.id,
-        providerID: modelConfig.providerID
+        providerID: modelConfig.providerID,
       },
       location: {
-        directory
-      }
-    })
+        directory,
+      },
+    }),
   });
 
   const sessionID = sessionRes.data?.id;
@@ -164,8 +163,8 @@ export async function executeTask(options) {
   const promptRes = await request(`/api/session/${sessionID}/prompt`, {
     method: 'POST',
     body: JSON.stringify({
-      text: prompt
-    })
+      text: prompt,
+    }),
   });
   console.log(`[OpenCode Bridge] Prompt queued (${promptRes.data?.id})`);
 
@@ -174,24 +173,32 @@ export async function executeTask(options) {
   let completed = false;
   let finalOutcome = 'unknown';
 
-  while (!completed && (Date.now() - startTime) < (maxWaitSeconds * 1000)) {
-    await new Promise(r => setTimeout(r, 2000));
+  while (!completed && Date.now() - startTime < maxWaitSeconds * 1000) {
+    await new Promise((r) => setTimeout(r, 2000));
     try {
       const messagesRes = await request(`/api/session/${sessionID}/message`);
       const msgs = messagesRes.data || [];
-      const idleMsg = msgs.find(m => m.type === 'idle');
-      const errorMsg = msgs.find(m => m.finish === 'error');
+      const idleMsg = msgs.find((m) => m.type === 'idle');
+      const errorMsg = msgs.find((m) => m.finish === 'error');
 
-      if (errorMsg && errorMsg.error?.type === 'provider.free-limit' && (!options.fallbackAttempt || options.fallbackAttempt < 3)) {
-        console.warn(`[OpenCode Bridge] Model ${modelConfig.id} reached free quota limit. Initiating zero-cost resilient fallback...`);
-        const fallbackKeys = Object.keys(APPROVED_FREE_MODELS).filter(k => k !== modelKey);
+      if (
+        errorMsg &&
+        errorMsg.error?.type === 'provider.free-limit' &&
+        (!options.fallbackAttempt || options.fallbackAttempt < 3)
+      ) {
+        console.warn(
+          `[OpenCode Bridge] Model ${modelConfig.id} reached free quota limit. Initiating zero-cost resilient fallback...`,
+        );
+        const fallbackKeys = Object.keys(APPROVED_FREE_MODELS).filter((k) => k !== modelKey);
         if (fallbackKeys.length > 0) {
           const nextKey = fallbackKeys[(options.fallbackAttempt || 0) % fallbackKeys.length];
-          console.log(`[OpenCode Bridge] Seamlessly switching to verified free model: ${nextKey} (${APPROVED_FREE_MODELS[nextKey].id})`);
+          console.log(
+            `[OpenCode Bridge] Seamlessly switching to verified free model: ${nextKey} (${APPROVED_FREE_MODELS[nextKey].id})`,
+          );
           return await executeTask({
             ...options,
             modelKey: nextKey,
-            fallbackAttempt: (options.fallbackAttempt || 0) + 1
+            fallbackAttempt: (options.fallbackAttempt || 0) + 1,
           });
         }
       }
@@ -202,13 +209,15 @@ export async function executeTask(options) {
         console.log(`[OpenCode Bridge] Execution completed with outcome: ${finalOutcome}`);
         break;
       }
-    } catch (err) {
+    } catch {
       // transient read error during active turn, retry
     }
   }
 
   if (!completed) {
-    throw new Error(`OpenCode task timed out after ${maxWaitSeconds} seconds in session ${sessionID}`);
+    throw new Error(
+      `OpenCode task timed out after ${maxWaitSeconds} seconds in session ${sessionID}`,
+    );
   }
 
   // 4. Retrieve complete session transcript and diff
@@ -216,7 +225,7 @@ export async function executeTask(options) {
   let diff = null;
   try {
     diff = await request(`/api/session/${sessionID}/diff`);
-  } catch (e) {
+  } catch {
     // diff may be empty if no files changed
   }
 
@@ -228,7 +237,7 @@ export async function executeTask(options) {
     durationMs: Date.now() - startTime,
     messagesCount: allMessages.data?.length || 0,
     diff: diff?.data || null,
-    cost: 0
+    cost: 0,
   };
 }
 
@@ -236,9 +245,10 @@ export async function executeTask(options) {
 let isDirectRun = false;
 try {
   if (process.argv[1]) {
-    isDirectRun = fs.realpathSync(process.argv[1]).toLowerCase() === fs.realpathSync(__filename).toLowerCase();
+    isDirectRun =
+      fs.realpathSync(process.argv[1]).toLowerCase() === fs.realpathSync(__filename).toLowerCase();
   }
-} catch (e) {
+} catch {
   isDirectRun = Boolean(process.argv[1] && process.argv[1].includes('opencode-bridge'));
 }
 
@@ -254,14 +264,15 @@ if (isDirectRun) {
       } else if (command === 'models') {
         const models = await getVerifiedModels();
         console.log(`Verified Free Models (${models.length}):`);
-        models.forEach(m => console.log(` - ${m.providerID}/${m.id} (${m.name})`));
+        models.forEach((m) => console.log(` - ${m.providerID}/${m.id} (${m.name})`));
       } else if (command === 'run') {
         const modelArg = args[1] || 'deepseek';
-        const promptArg = args.slice(2).join(' ') || 'Write status report to E:\\Gematron\\temp\\bridge-test.txt';
+        const promptArg =
+          args.slice(2).join(' ') || 'Write status report to E:\\Gematron\\temp\\bridge-test.txt';
         const result = await executeTask({
           modelKey: modelArg,
           prompt: promptArg,
-          title: `CLI Execution ${modelArg}`
+          title: `CLI Execution ${modelArg}`,
         });
         console.log('Execution Result:', JSON.stringify(result, null, 2));
       } else {

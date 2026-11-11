@@ -181,7 +181,9 @@ export async function openDesktopPopup(prompt?: string): Promise<boolean> {
         await chrome.windows.update(existing.id, updateInfo);
         desktopWindowId = existing.id;
         if (prompt) {
-          void chrome.runtime.sendMessage({ type: 'GBL_SET_PROMPT', prompt }).catch(() => undefined);
+          void chrome.runtime
+            .sendMessage({ type: 'GBL_SET_PROMPT', prompt })
+            .catch(() => undefined);
         }
         return true;
       } catch {

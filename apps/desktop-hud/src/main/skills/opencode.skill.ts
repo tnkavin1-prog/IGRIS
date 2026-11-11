@@ -1,10 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type {
-  ApplicationSkill,
-  SkillActionDefinition,
-  SkillResult,
-} from '../skill-framework.js';
+import type { ApplicationSkill, SkillActionDefinition, SkillResult } from '../skill-framework.js';
 
 export interface OpenCodeSkillOptions {
   mockMode?: boolean;
@@ -25,7 +21,8 @@ export class OpenCodeSkill implements ApplicationSkill {
 
   constructor(options: OpenCodeSkillOptions = {}) {
     this.mockMode = Boolean(options.mockMode);
-    this.serverUrl = options.serverUrl || process.env.OPENCODE_SERVER_URL || 'http://127.0.0.1:4096';
+    this.serverUrl =
+      options.serverUrl || process.env.OPENCODE_SERVER_URL || 'http://127.0.0.1:4096';
     this.passwordFile =
       options.passwordFile || join('E:\\Gematron', 'logs', 'opencode-server-password.txt');
   }
@@ -67,8 +64,18 @@ export class OpenCodeSkill implements ApplicationSkill {
         name: 'dispatchTask',
         description: 'Dispatches an autonomous software task to a verified free OpenCode model.',
         parameters: [
-          { name: 'model', type: 'string', description: 'deepseek-v4.1-flash-free | glm-5.3-flash-free', required: true },
-          { name: 'prompt', type: 'string', description: 'Actionable engineering prompt', required: true },
+          {
+            name: 'model',
+            type: 'string',
+            description: 'deepseek-v4.1-flash-free | glm-5.3-flash-free',
+            required: true,
+          },
+          {
+            name: 'prompt',
+            type: 'string',
+            description: 'Actionable engineering prompt',
+            required: true,
+          },
           { name: 'title', type: 'string', description: 'Session title', required: false },
         ],
       },
@@ -76,7 +83,12 @@ export class OpenCodeSkill implements ApplicationSkill {
         name: 'getSessionStatus',
         description: 'Checks the current execution status and idle outcome of an active session.',
         parameters: [
-          { name: 'sessionId', type: 'string', description: 'Session ID returned by dispatchTask', required: true },
+          {
+            name: 'sessionId',
+            type: 'string',
+            description: 'Session ID returned by dispatchTask',
+            required: true,
+          },
         ],
       },
     ];
@@ -86,7 +98,10 @@ export class OpenCodeSkill implements ApplicationSkill {
     switch (action) {
       case 'checkService': {
         if (this.mockMode) {
-          return { success: true, data: { status: 'running', version: '2.2.5 (mock)', url: this.serverUrl } };
+          return {
+            success: true,
+            data: { status: 'running', version: '2.2.5 (mock)', url: this.serverUrl },
+          };
         }
         try {
           const res = await fetch(`${this.serverUrl}/api/info`, {
@@ -96,7 +111,10 @@ export class OpenCodeSkill implements ApplicationSkill {
           const info = await res.json();
           return { success: true, data: info };
         } catch (err) {
-          return { success: false, error: `OpenCode service unreachable: ${(err as Error).message}` };
+          return {
+            success: false,
+            error: `OpenCode service unreachable: ${(err as Error).message}`,
+          };
         }
       }
 
@@ -116,9 +134,11 @@ export class OpenCodeSkill implements ApplicationSkill {
           });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const json = await res.json();
-          const allModels: Array<{ id: string; providerID: string; name: string }> = json.data || [];
+          const allModels: Array<{ id: string; providerID: string; name: string }> =
+            json.data || [];
           const freeModels = allModels.filter(
-            (m) => m.providerID !== 'opencode-go' && (m.id.endsWith('-free') || m.id.includes('free')),
+            (m) =>
+              m.providerID !== 'opencode-go' && (m.id.endsWith('-free') || m.id.includes('free')),
           );
           return { success: true, data: freeModels };
         } catch (err) {

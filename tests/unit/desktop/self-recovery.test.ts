@@ -32,7 +32,9 @@ describe('AutonomousSelfRecoveryEngine', () => {
     const spy = vi.fn();
     engine.on('incident:resolved', spy);
 
-    const report = await engine.handleIncident(new Error('fetch failed: timeout'), { component: 'CDPClient' });
+    const report = await engine.handleIncident(new Error('fetch failed: timeout'), {
+      component: 'CDPClient',
+    });
     expect(report.id).toBeDefined();
     expect(report.category).toBe('network_disconnect');
     expect(report.recovered).toBe(true);

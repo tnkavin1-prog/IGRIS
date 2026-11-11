@@ -181,7 +181,7 @@ export class JarvisMemoryStore {
   private filePath: string;
   private memoryData: JarvisMemoryData;
 
-  constructor(filePath = 'E:\\Gemetron\\notes\\jarvis_memory.json') {
+  constructor(filePath = 'E:\\Gematron\\notes\\jarvis_memory.json') {
     this.filePath = filePath;
     this.memoryData = this.load();
   }

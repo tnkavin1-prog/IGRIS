@@ -34,7 +34,7 @@ export function generateAuditMarkdown(payload: SessionExportPayload): string {
     task?.startedAt && task?.completedAt ? task.completedAt - task.startedAt : undefined;
 
   let md = `# 🛡️ JARVIS Autonomous Workflow Audit Dossier\n\n`;
-  md += `> **System:** Gemetron JARVIS OS Autonomous Agent v3.8  \n`;
+  md += `> **System:** Gematron JARVIS OS Autonomous Agent v3.8  \n`;
   md += `> **Timestamp:** ${new Date().toLocaleString()}  \n`;
   md += `> **Context Window:** \`${payload.activeTabTitle || 'Desktop Workspace'}\`  \n\n`;
 
@@ -482,7 +482,7 @@ export function generateAuditHtml(payload: SessionExportPayload): string {
  */
 export function exportAuditSession(
   payload: SessionExportPayload,
-  notesDir = 'E:\\Gemetron\\notes',
+  notesDir = 'E:\\Gematron\\notes',
 ): { ok: boolean; mdPath?: string; htmlPath?: string; filename?: string; error?: string } {
   try {
     if (!existsSync(notesDir)) {

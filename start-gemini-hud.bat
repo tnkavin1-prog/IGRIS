@@ -14,7 +14,7 @@ set "APP_DIR=%ROOT_DIR%apps\desktop-hud"
 if not exist "!ELECTRON_EXE!" (
     echo [ERROR] Electron executable was not found at:
     echo   !ELECTRON_EXE!
-    echo Please run 'npm install' in E:\Gemetron first.
+    echo Please run 'npm install' in E:\Gematron first.
     pause
     exit /b 1
 )

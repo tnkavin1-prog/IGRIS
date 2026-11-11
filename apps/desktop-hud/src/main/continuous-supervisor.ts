@@ -58,9 +58,24 @@ export class ContinuousSupervisor extends EventEmitter {
       lastHeartbeat: Date.now(),
       uptimeSeconds: 0,
       subsystems: {
-        opencode: { name: 'OpenCode Daemon', healthy: true, endpoint: 'http://127.0.0.1:4096', lastChecked: Date.now() },
-        chrome_cdp: { name: 'Chrome CDP', healthy: true, endpoint: 'http://127.0.0.1:9222', lastChecked: Date.now() },
-        control_server: { name: 'Control Server', healthy: true, endpoint: 'http://127.0.0.1:9228', lastChecked: Date.now() },
+        opencode: {
+          name: 'OpenCode Daemon',
+          healthy: true,
+          endpoint: 'http://127.0.0.1:4096',
+          lastChecked: Date.now(),
+        },
+        chrome_cdp: {
+          name: 'Chrome CDP',
+          healthy: true,
+          endpoint: 'http://127.0.0.1:9222',
+          lastChecked: Date.now(),
+        },
+        control_server: {
+          name: 'Control Server',
+          healthy: true,
+          endpoint: 'http://127.0.0.1:9228',
+          lastChecked: Date.now(),
+        },
       },
       storage: {
         targetDrive: 'E:',

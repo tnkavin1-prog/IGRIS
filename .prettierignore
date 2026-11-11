@@ -15,5 +15,9 @@ docs/api/
 # Unrelated local scratch files
 SSC_CGL_Mock_Exam.html
 notes/
+temp/
+.agents/
+runtime/
+workspace/
 .chrome-debug-profile/
 .chrome-debug-data/

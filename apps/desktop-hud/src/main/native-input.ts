@@ -37,7 +37,7 @@ export class NativeInputService extends EventEmitter {
   constructor(options: NativeInputOptions = {}) {
     super();
     this.mockMode = options.mockMode ?? process.platform !== 'win32';
-    this.scriptsDir = options.scriptsDir || 'E:\\Gemetron\\scripts';
+    this.scriptsDir = options.scriptsDir || 'E:\\Gematron\\scripts';
     this.displayMetrics = options.displayMetrics;
   }
 
@@ -318,7 +318,11 @@ export class NativeInputService extends EventEmitter {
 
     try {
       if (x >= 0 && y >= 0) {
-        const res = await this.runCli('scroll-at', [String(Math.round(x)), String(Math.round(y)), String(Math.round(deltaY))]);
+        const res = await this.runCli('scroll-at', [
+          String(Math.round(x)),
+          String(Math.round(y)),
+          String(Math.round(deltaY)),
+        ]);
         return res.toLowerCase().includes('true');
       } else {
         const res = await this.runCli('scroll', [String(Math.round(deltaY))]);
@@ -326,7 +330,9 @@ export class NativeInputService extends EventEmitter {
       }
     } catch {
       if (x >= 0 && y >= 0) {
-        return this.invokeWin32(`[Gemetron.Win32Input]::ScrollAt(${Math.round(x)}, ${Math.round(y)}, ${Math.round(deltaY)})`);
+        return this.invokeWin32(
+          `[Gemetron.Win32Input]::ScrollAt(${Math.round(x)}, ${Math.round(y)}, ${Math.round(deltaY)})`,
+        );
       } else {
         return this.invokeWin32(`[Gemetron.Win32Input]::Scroll(${Math.round(deltaY)})`);
       }

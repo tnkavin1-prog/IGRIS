@@ -3,11 +3,7 @@ import { promisify } from 'node:util';
 import { existsSync, promises as fs } from 'node:fs';
 import { join, extname } from 'node:path';
 import os from 'node:os';
-import type {
-  ApplicationSkill,
-  SkillActionDefinition,
-  SkillResult,
-} from '../skill-framework.js';
+import type { ApplicationSkill, SkillActionDefinition, SkillResult } from '../skill-framework.js';
 
 const execAsync = promisify(exec);
 
@@ -46,7 +42,12 @@ export class WindowsSkill implements ApplicationSkill {
         name: 'closeApp',
         description: 'Terminates an application by process name.',
         parameters: [
-          { name: 'processName', type: 'string', description: 'Process name (e.g. notepad.exe)', required: true },
+          {
+            name: 'processName',
+            type: 'string',
+            description: 'Process name (e.g. notepad.exe)',
+            required: true,
+          },
         ],
         dangerous: true,
       },
@@ -73,14 +74,24 @@ export class WindowsSkill implements ApplicationSkill {
         description: 'Searches for files matching a pattern in a directory.',
         parameters: [
           { name: 'directory', type: 'string', description: 'Search root path', required: true },
-          { name: 'query', type: 'string', description: 'Name pattern or extension', required: true },
+          {
+            name: 'query',
+            type: 'string',
+            description: 'Name pattern or extension',
+            required: true,
+          },
         ],
       },
       {
         name: 'organizeFiles',
         description: 'Organizes files in a directory into folders by extension.',
         parameters: [
-          { name: 'sourceDir', type: 'string', description: 'Directory to organize', required: true },
+          {
+            name: 'sourceDir',
+            type: 'string',
+            description: 'Directory to organize',
+            required: true,
+          },
         ],
       },
       {
@@ -112,7 +123,10 @@ export class WindowsSkill implements ApplicationSkill {
           await execAsync(`taskkill /F /IM "${procName}"`);
           return { success: true, data: { terminated: true, process: procName } };
         } catch (err) {
-          return { success: false, error: `Failed to terminate ${procName}: ${(err as Error).message}` };
+          return {
+            success: false,
+            error: `Failed to terminate ${procName}: ${(err as Error).message}`,
+          };
         }
       }
 
@@ -127,7 +141,8 @@ export class WindowsSkill implements ApplicationSkill {
           };
         }
         try {
-          const script = 'Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object ProcessName, MainWindowTitle | ConvertTo-Json';
+          const script =
+            'Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object ProcessName, MainWindowTitle | ConvertTo-Json';
           const { stdout } = await execAsync(`powershell -NoProfile -Command "${script}"`);
           const windows = stdout.trim() ? JSON.parse(stdout) : [];
           return { success: true, data: Array.isArray(windows) ? windows : [windows] };
@@ -178,7 +193,9 @@ export class WindowsSkill implements ApplicationSkill {
           return { success: true, data: { matches: ['mock_file.txt'], count: 1 } };
         }
         const searchDir = String(params.directory || '').trim();
-        const query = String(params.query || '').trim().toLowerCase();
+        const query = String(params.query || '')
+          .trim()
+          .toLowerCase();
         if (!searchDir || !existsSync(searchDir)) {
           return { success: false, error: `Directory does not exist: ${searchDir}` };
         }

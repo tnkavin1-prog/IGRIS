@@ -241,7 +241,7 @@ export function createBridgeApp(config: BridgeConfig, deps: BridgeDeps): BridgeA
           const safeTitle = targetTitle.replace(/[^a-zA-Z0-9 _-]/g, '');
           if (process.platform === 'win32') {
             const methodToCall = shouldPin ? 'PinTopMost' : 'UnpinTopMost';
-            const cmd = `if (Test-Path 'E:\\Gemetron\\scripts\\Win32Pin.dll') { Add-Type -Path 'E:\\Gemetron\\scripts\\Win32Pin.dll' } else { Add-Type -Path 'E:\\Gemetron\\scripts\\Win32Pin.cs' }; [Gemetron.WindowPin]::${methodToCall}('${safeTitle}')`;
+            const cmd = `if (Test-Path 'E:\\Gematron\\scripts\\Win32Pin.dll') { Add-Type -Path 'E:\\Gematron\\scripts\\Win32Pin.dll' } else { Add-Type -Path 'E:\\Gematron\\scripts\\Win32Pin.cs' }; [Gemetron.WindowPin]::${methodToCall}('${safeTitle}')`;
             spawn('powershell.exe', ['-NoProfile', '-Command', cmd], {
               stdio: 'ignore',
               windowsHide: true,

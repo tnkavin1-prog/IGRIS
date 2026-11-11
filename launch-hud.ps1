@@ -30,7 +30,7 @@ $targetProfile = "Profile 2"
 try {
     Get-ChildItem -Path "$env:LOCALAPPDATA\Google\Chrome\User Data" -Filter "Secure Preferences" -Recurse -Depth 2 -ErrorAction SilentlyContinue | ForEach-Object {
         $text = Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue
-        if ($text -like "*E:\Gemetron\release\chrome-extension*" -or $text -like "*hhbdkheccnmpbdadhhppbemcjkaimlob*") {
+        if ($text -like "*E:\Gematron\release\chrome-extension*" -or $text -like "*hhbdkheccnmpbdadhhppbemcjkaimlob*") {
             $targetProfile = $_.Directory.Name
         }
     }

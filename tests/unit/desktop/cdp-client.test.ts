@@ -33,7 +33,7 @@ describe('CDPClient', () => {
         id: 'page1',
         type: 'page',
         title: 'SSC CGL Mock Exam',
-        url: 'file:///E:/Gemetron/SSC_CGL_Mock_Exam.html',
+        url: 'file:///E:/Gematron/SSC_CGL_Mock_Exam.html',
         webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/page/page1',
       },
       {

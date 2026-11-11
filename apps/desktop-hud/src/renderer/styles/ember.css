@@ -1,0 +1,770 @@
+/* ==========================================================================
+   EMBER — voice HUD
+   Ported from the Kimi/Ember reference (kimi.html). Warm charcoal, champagne
+   and terracotta, Inter + Newsreader, canvas ember orb, film grain.
+   Every rule is scoped to .ember-root or .ember-ambient so the legacy console
+   styles cannot leak in.
+   ========================================================================== */
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("./fonts/inter-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Newsreader";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/newsreader-italic-latin.woff2") format("woff2");
+}
+
+/* --------------------------------------------------------------------------
+   Tokens
+   -------------------------------------------------------------------------- */
+.ember-root,
+.ember-ambient {
+  --em-bg: #100e0d;
+  --em-surface: #1a1715;
+  --em-champagne: #f5e0c4;
+  --em-amber: #e8b98a;
+  --em-terra: #c96f4a;
+  --em-text: #ede6dc;
+  --em-dim: #8a8178;
+  --em-line: rgba(255, 244, 230, 0.08);
+  --em-line-strong: rgba(255, 244, 230, 0.16);
+}
+
+/* --------------------------------------------------------------------------
+   Full window
+   -------------------------------------------------------------------------- */
+.ember-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  font-family:
+    "Inter",
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  color: var(--em-text);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+.ember-root *,
+.ember-ambient * {
+  box-sizing: border-box;
+}
+
+.ember-root .window {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 28px;
+  background: linear-gradient(180deg, #141110 0%, #0e0c0b 100%);
+  box-shadow:
+    0 0 0 1px rgba(255, 244, 230, 0.06) inset,
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 0 90px -34px rgba(201, 111, 74, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  -webkit-app-region: drag;
+}
+
+/* cinematic vignette inside the window */
+.ember-root .window::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: radial-gradient(120% 90% at 50% 45%, transparent 60%, rgba(0, 0, 0, 0.35) 100%);
+  pointer-events: none;
+}
+
+/* ---- hover-only window controls ---- */
+.ember-root .win-controls,
+.ember-root .em-util {
+  position: absolute;
+  top: 14px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition:
+    opacity 0.35s,
+    transform 0.35s;
+  z-index: 10;
+  -webkit-app-region: no-drag;
+}
+
+.ember-root .win-controls {
+  right: 14px;
+}
+
+.ember-root .em-util {
+  left: 14px;
+}
+
+.ember-root .window:hover .win-controls,
+.ember-root .window:hover .em-util {
+  opacity: 1;
+  transform: none;
+}
+
+.ember-root .wc,
+.ember-root .uc {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(237, 230, 220, 0.4);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition:
+    background 0.2s,
+    color 0.2s;
+  -webkit-app-region: no-drag;
+}
+
+.ember-root .wc:hover,
+.ember-root .uc:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--em-text);
+}
+
+.ember-root .wc.close:hover {
+  background: rgba(201, 111, 74, 0.25);
+  color: var(--em-champagne);
+}
+
+/* keyboard focus stays inside the Ember palette (no UA yellow ring) */
+.ember-root button:focus {
+  outline: none;
+}
+
+.ember-root button:focus-visible {
+  outline: 1px solid rgba(245, 224, 196, 0.45);
+  outline-offset: 2px;
+}
+
+/* ---- status ---- */
+.ember-root .status {
+  margin-top: 58px;
+  height: 16px;
+  flex: none;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(237, 230, 220, 0.45);
+  opacity: 0;
+  transition: opacity 0.7s ease;
+  z-index: 5;
+}
+
+.ember-root .status.vis {
+  opacity: 1;
+}
+
+/* ---- orb ---- */
+.ember-root .orb-wrap {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  z-index: 2;
+  -webkit-app-region: no-drag;
+  outline: none;
+}
+
+.ember-root .orb-wrap:focus-visible {
+  box-shadow: inset 0 0 0 1px rgba(245, 224, 196, 0.22);
+  border-radius: 24px;
+}
+
+.ember-root canvas {
+  display: block;
+}
+
+/* ---- transcript ---- */
+.ember-root .transcript {
+  height: 58px;
+  max-width: 300px;
+  flex: none;
+  text-align: center;
+  font-family: "Newsreader", Georgia, serif;
+  font-style: italic;
+  font-size: 16px;
+  line-height: 1.5;
+  color: rgba(237, 230, 220, 0.85);
+  overflow: hidden;
+  z-index: 5;
+}
+
+.ember-root .transcript span {
+  display: inline-block;
+  opacity: 0;
+  filter: blur(6px);
+  transform: translateY(4px);
+  transition:
+    opacity 0.5s cubic-bezier(0.2, 0.7, 0.2, 1),
+    filter 0.5s cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.ember-root .transcript.show span {
+  opacity: 1;
+  filter: blur(0);
+  transform: none;
+}
+
+/* ---- dock ---- */
+.ember-root .dock {
+  padding-bottom: 26px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  z-index: 10;
+}
+
+.ember-root .hint {
+  font-size: 12px;
+  color: var(--em-dim);
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+.ember-root .states {
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity 0.35s,
+    transform 0.35s;
+}
+
+.ember-root .window:hover .states {
+  opacity: 1;
+  transform: none;
+}
+
+.ember-root .pill {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 244, 230, 0.08);
+  background: transparent;
+  color: var(--em-dim);
+  cursor: pointer;
+  transition: all 0.25s;
+  -webkit-app-region: no-drag;
+}
+
+.ember-root .pill:hover {
+  color: var(--em-text);
+  border-color: rgba(255, 244, 230, 0.2);
+}
+
+.ember-root .pill.active {
+  color: var(--em-champagne);
+  border-color: rgba(245, 224, 196, 0.35);
+  background: rgba(245, 224, 196, 0.05);
+}
+
+/* --------------------------------------------------------------------------
+   Settings sheet — same Ember language, only reachable from the hover gear
+   -------------------------------------------------------------------------- */
+.ember-root .em-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  border-radius: 28px;
+  padding: 18px 22px 20px;
+  overflow-y: auto;
+  background: linear-gradient(180deg, rgba(20, 17, 15, 0.985) 0%, rgba(13, 11, 10, 0.995) 100%);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  box-shadow:
+    0 0 0 1px rgba(255, 244, 230, 0.08) inset,
+    0 30px 80px rgba(0, 0, 0, 0.6);
+  font-family: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font-feature-settings:
+    "cv11" 1,
+    "ss01" 1,
+    "tnum" 1;
+  letter-spacing: 0.004em;
+  -webkit-app-region: no-drag;
+  animation: emberSheetIn 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ember-root .em-sheet::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ember-root .em-sheet::-webkit-scrollbar-thumb {
+  background: rgba(245, 224, 196, 0.16);
+  border-radius: 6px;
+}
+
+.ember-root .em-sheet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.ember-root .em-sheet h2 {
+  margin: 0;
+  font-family: "Segoe UI Variable Display", "Inter", "Segoe UI", system-ui, sans-serif;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--em-champagne);
+}
+
+.ember-root .em-sheet p {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--em-dim);
+}
+
+.ember-root .em-sheet-close {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(237, 230, 220, 0.45);
+  font-family: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ember-root .em-sheet-close:hover {
+  background: rgba(201, 111, 74, 0.22);
+  color: var(--em-champagne);
+}
+
+.ember-root .em-section {
+  margin-top: 12px;
+}
+
+.ember-root .em-section-label {
+  margin: 0 4px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(237, 230, 220, 0.5);
+}
+
+.ember-root .em-card {
+  border: 1px solid var(--em-line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.018);
+  overflow: hidden;
+}
+
+.ember-root .em-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 14px;
+  border-bottom: 1px solid rgba(255, 244, 230, 0.06);
+  font-size: 13px;
+  font-weight: 450;
+  font-variant-numeric: tabular-nums;
+  color: rgba(237, 230, 220, 0.92);
+}
+
+.ember-root .em-row:last-child {
+  border-bottom: 0;
+}
+
+.ember-root .em-row small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--em-dim);
+}
+
+.ember-root .em-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--em-dim);
+}
+
+.ember-root .em-badge i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.ember-root .em-badge.on {
+  color: var(--em-amber);
+}
+
+.ember-root .em-switch {
+  width: 38px;
+  height: 22px;
+  flex: none;
+  padding: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 244, 230, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+  position: relative;
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
+}
+
+.ember-root .em-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #8a8178;
+  transition:
+    left 0.2s,
+    background 0.2s,
+    box-shadow 0.2s;
+}
+
+.ember-root .em-switch.on {
+  background: rgba(201, 111, 74, 0.32);
+  border-color: rgba(232, 185, 138, 0.5);
+}
+
+.ember-root .em-switch.on::after {
+  left: 18px;
+  background: var(--em-champagne);
+  box-shadow: 0 0 10px rgba(232, 185, 138, 0.55);
+}
+
+.ember-root .em-range-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ember-root .em-range-wrap b {
+  width: 34px;
+  text-align: right;
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--em-champagne);
+}
+
+.ember-root .em-row input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 110px;
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(255, 244, 230, 0.14);
+  outline: 0;
+}
+
+.ember-root .em-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--em-champagne);
+  box-shadow: 0 0 0 4px rgba(201, 111, 74, 0.3);
+  cursor: pointer;
+}
+
+.ember-root .em-seg {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid var(--em-line);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ember-root .em-seg button {
+  border: 0;
+  border-radius: 7px;
+  padding: 5px 9px;
+  background: transparent;
+  color: var(--em-dim);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    color 0.2s;
+}
+
+.ember-root .em-seg button:hover {
+  color: var(--em-text);
+}
+
+.ember-root .em-seg button.on {
+  background: rgba(245, 224, 196, 0.1);
+  color: var(--em-champagne);
+}
+
+.ember-root .em-sheet kbd {
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--em-line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--em-dim);
+  font-family: "Inter", sans-serif;
+  font-size: 10px;
+}
+
+.ember-root .em-sheet-btn {
+  width: 100%;
+  margin-top: 14px;
+  padding: 11px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 244, 230, 0.1);
+  background: rgba(245, 224, 196, 0.04);
+  color: var(--em-champagne);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
+}
+
+.ember-root .em-sheet-btn:hover {
+  background: rgba(245, 224, 196, 0.08);
+  border-color: rgba(245, 224, 196, 0.24);
+}
+
+.ember-root .em-sheet-foot {
+  margin-top: 10px;
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: rgba(138, 129, 120, 0.8);
+}
+
+/* ---- film grain ---- */
+.ember-root .grain {
+  position: absolute;
+  inset: -60%;
+  pointer-events: none;
+  z-index: 100;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(%23n)" opacity="0.6"/></svg>');
+  animation: emberGrain 1.1s steps(3) infinite;
+}
+
+@keyframes emberGrain {
+  0% {
+    transform: translate(0, 0);
+  }
+  33% {
+    transform: translate(-2%, 1.5%);
+  }
+  66% {
+    transform: translate(1.5%, -2%);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes emberSheetIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Ambient bar + orb — same Ember palette for the compact modes
+   -------------------------------------------------------------------------- */
+.ember-ambient.agent-shell {
+  font-family:
+    "Inter",
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  color: var(--em-text);
+}
+
+.ember-ambient .orb {
+  box-shadow:
+    0 0 26px rgba(201, 111, 74, 0.5),
+    inset -6px -8px 16px rgba(60, 18, 8, 0.45);
+}
+
+.ember-ambient .orb::before {
+  background: radial-gradient(
+    circle at 34% 28%,
+    #fff6e8 0%,
+    #f5e0c4 18%,
+    #e8b98a 48%,
+    #c96f4a 82%,
+    #7a3a26 100%
+  );
+  animation: none;
+}
+
+.ember-ambient .orb::after {
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.72), transparent 42%),
+    radial-gradient(circle at 64% 74%, rgba(40, 12, 6, 0.6), transparent 62%);
+}
+
+.ember-ambient.agent-shell.voice .orb {
+  box-shadow:
+    0 0 38px rgba(232, 185, 138, 0.7),
+    inset -6px -8px 18px rgba(60, 18, 8, 0.4);
+}
+
+.ember-ambient.agent-shell.voice .orb::before {
+  animation: none;
+}
+
+.ember-ambient[data-mode="orb"] .orbwrap {
+  background: linear-gradient(180deg, #141110 0%, #0e0c0b 100%);
+  border: 1px solid rgba(255, 244, 230, 0.08);
+  box-shadow:
+    0 18px 40px -18px rgba(0, 0, 0, 0.9),
+    0 0 34px -14px rgba(201, 111, 74, 0.55),
+    0 0 0 1px rgba(255, 244, 230, 0.05) inset;
+}
+
+.ember-ambient .odot {
+  background: var(--em-amber);
+  border-color: #141110;
+  box-shadow: 0 0 8px rgba(232, 185, 138, 0.8);
+}
+
+.ember-ambient[data-mode="bar"] .bar {
+  border-radius: 20px;
+  background: linear-gradient(180deg, #141110 0%, #0e0c0b 100%);
+  border: 1px solid rgba(255, 244, 230, 0.07);
+  box-shadow:
+    0 22px 48px -20px rgba(0, 0, 0, 0.92),
+    0 0 44px -18px rgba(201, 111, 74, 0.55),
+    0 0 0 1px rgba(255, 244, 230, 0.04) inset,
+    0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.ember-ambient[data-mode="bar"] .bar .info small {
+  color: var(--em-dim);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.ember-ambient[data-mode="bar"] .bar .info div {
+  color: var(--em-text);
+  font-size: 12px;
+}
+
+.ember-ambient[data-mode="bar"] .bar .wave i {
+  background: linear-gradient(var(--em-champagne), var(--em-terra));
+}
+
+.ember-ambient[data-mode="bar"] .bar .mic {
+  background: radial-gradient(circle at 34% 28%, #fff6e8 0%, #f5e0c4 20%, #e8b98a 52%, #c96f4a 90%);
+  color: #2a130b;
+  box-shadow:
+    0 6px 22px rgba(201, 111, 74, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.ember-ambient[data-mode="bar"] .bar .mic:hover {
+  transform: scale(1.06);
+}
+
+.ember-ambient.agent-shell.voice[data-mode="bar"] .bar .mic {
+  background: radial-gradient(
+    circle at 34% 28%,
+    #fff1df 0%,
+    #f5e0c4 24%,
+    #e8b98a 58%,
+    #c96f4a 100%
+  );
+  animation: emberRing 1.6s ease-out infinite;
+}
+
+.ember-ambient[data-mode="bar"] .bar .ib {
+  color: rgba(138, 129, 120, 0.9);
+  border-radius: 9px;
+}
+
+.ember-ambient[data-mode="bar"] .bar .ib:hover {
+  color: var(--em-champagne);
+  background: rgba(245, 224, 196, 0.07);
+}
+
+@keyframes emberRing {
+  0% {
+    box-shadow: 0 0 0 0 rgba(201, 111, 74, 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 16px rgba(201, 111, 74, 0);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Reduced motion
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .ember-root .grain,
+  .ember-ambient.agent-shell.voice[data-mode="bar"] .bar .mic {
+    animation: none;
+  }
+
+  .ember-root .transcript span {
+    transition: opacity 0.3s;
+    filter: none;
+    transform: none;
+  }
+}

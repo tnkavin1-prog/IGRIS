@@ -7,8 +7,8 @@ import {
 } from '../../../apps/desktop-hud/src/main/jarvis-memory.js';
 
 describe('JarvisMemoryStore', () => {
-  // Use E:\Gemetron\notes directory or a test notes subfolder to guarantee work is on E:
-  const testDir = 'E:\\Gemetron\\notes\\test_memory';
+  // Use E:\Gematron\notes directory or a test notes subfolder to guarantee work is on E:
+  const testDir = 'E:\\Gematron\\notes\\test_memory';
   const testFile = join(testDir, `test_jarvis_memory_${Date.now()}.json`);
 
   beforeEach(() => {

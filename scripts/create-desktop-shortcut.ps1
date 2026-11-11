@@ -3,27 +3,27 @@
   Automated Windows Desktop Shortcut Generator for JARVIS AI Assistant.
 
 .DESCRIPTION
-  Creates a high-resolution Windows shortcut (.lnk) pointing to E:\Gemetron\start-gemini-hud.bat
+  Creates a high-resolution Windows shortcut (.lnk) pointing to E:\Gematron\start-gemini-hud.bat
   configured with global summon hotkey Ctrl+Alt+J and custom brand iconography.
 
 .PARAMETER Destination
-  Target file path or directory for the shortcut. Defaults to E:\Gemetron\JARVIS AI Assistant.lnk,
+  Target file path or directory for the shortcut. Defaults to E:\Gematron\JARVIS AI Assistant.lnk,
   or the user's Desktop if -Desktop switch is supplied.
 
 .PARAMETER Desktop
   If specified, writes the shortcut directly to the current user's Windows Desktop directory.
 
 .PARAMETER TargetPath
-  Executable or batch script to launch. Defaults to E:\Gemetron\start-gemini-hud.bat.
+  Executable or batch script to launch. Defaults to E:\Gematron\start-gemini-hud.bat.
 
 .PARAMETER WorkingDirectory
-  Working directory for the process. Defaults to E:\Gemetron.
+  Working directory for the process. Defaults to E:\Gematron.
 
 .PARAMETER Hotkey
   Keyboard hotkey combination. Defaults to Ctrl+Alt+J.
 
 .PARAMETER IconPath
-  Path to icon file (.ico). Defaults to E:\Gemetron\assets\icons\jarvis.ico.
+  Path to icon file (.ico). Defaults to E:\Gematron\assets\icons\jarvis.ico.
 
 .PARAMETER Description
   Shortcut description/tooltip.

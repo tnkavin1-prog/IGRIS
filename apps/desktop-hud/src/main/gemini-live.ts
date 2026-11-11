@@ -8,6 +8,10 @@ import { AppManagerService } from './app-manager.js';
 import { AgenticWorkflowEngine } from './agentic-workflow.js';
 import { ClipboardService } from './clipboard-manager.js';
 import { JarvisMemoryStore, type UserPreferences } from './jarvis-memory.js';
+import { computerOperator } from './computer-operator.js';
+import { autonomousAgent } from './autonomous-agent.js';
+import { screenGrounding } from './screen-grounding.js';
+import { downloadManager } from './download-manager.js';
 import { HardwareMonitorService } from './hardware-monitor.js';
 import type {
   BoundingBoxTarget,
@@ -389,7 +393,18 @@ export class GeminiLiveService extends EventEmitter {
                 '- When asked to PRESS a key (e.g. "press Enter", "press PageDown", "press Esc"): IMMEDIATELY call press_key({ key: "..." }) or computer_use_hotkey({ keys: ["..."] }).',
                 '- When asked to MINIMIZE, RESTORE, or CLOSE a window: call minimize_window, restore_window, or close_window.',
                 '- When asked to type or navigate: immediately invoke computer_use_type, computer_use_click, navigate_to_url, or launch_application.',
+                '- When asked to OPEN A NEW CHROME TAB: call browser_open_tab({ url: "..." }) — this actually creates a real tab in Chrome via DevTools Protocol.',
+                '- When asked to NAVIGATE to a URL: call navigate_to_url({ url: "..." }) on the active Chrome tab.',
+                '- When asked to READ the current Chrome page: call browser_read({}) — returns page title, URL, text, and headings.',
+                '- When asked to CLICK something IN CHROME: call browser_click({ selector: "..." }) with a CSS selector, or click_element_by_text({ text: "..." }) for text-based clicking.',
+                '- When asked to CLOSE a Chrome tab: call browser_close_tab({ tab_id: "..." }).',
                 '- When asked to explain or derive concepts in math/physics: invoke teach_visual_blackboard.',
+                '- When asked to do ANY complex multi-step autonomous task (e.g. "Open Blender, download a scene, add shaders, render", "Open Chrome, search, download a file, open it", "Do a 10-minute Blender project"): IMMEDIATELY call autonomous_goal({ goal: "..." }). This runs the full Observe → Think → Act → Verify loop without asking you or the user for permission at each step.',
+                '- When asked to OPEN BLENDER: call open_blender({ blendFile: "..." }). This launches the actual Blender GUI window on Windows, not headless scripts.',
+                '- When asked to DOWNLOAD a file/scene from the web: call download_scene({ url: "..." }). It saves to E:\\Gematron\\downloads\\.',
+                '- When asked to CLICK a UI element by description in any app (Blender, Chrome, Notepad): call click_element_on_screen({ description: "..." }).',
+                '- When asked to WAIT for something to appear on screen: call wait_for_element_on_screen({ description: "..." }).',
+                '- When asked to READ what is on screen: call read_screen_text({ query: "..." }).',
                 'SCREEN & APPLICATION VISIBILITY GROUNDING (CRITICAL):',
                 '- You receive real-time streaming video frames of the user live desktop screen.',
                 '- Always observe the actual visual screen before asserting whether an application is open or visible. If the desktop wallpaper is showing and no application window is visible on screen, it is NOT open.',
@@ -552,7 +567,8 @@ export class GeminiLiveService extends EventEmitter {
                   properties: {
                     text: {
                       type: 'STRING',
-                      description: 'Exact text or button label to click (e.g. "CLOUD RESUME DOWNLOAD", "Next", "Submit", "Close")',
+                      description:
+                        'Exact text or button label to click (e.g. "CLOUD RESUME DOWNLOAD", "Next", "Submit", "Close")',
                     },
                   },
                   required: ['text'],
@@ -568,7 +584,8 @@ export class GeminiLiveService extends EventEmitter {
                   properties: {
                     key: {
                       type: 'STRING',
-                      description: 'Key name to press (PageDown, PageUp, Enter, Escape, Tab, Space, Down, Up)',
+                      description:
+                        'Key name to press (PageDown, PageUp, Enter, Escape, Tab, Space, Down, Up)',
                     },
                   },
                   required: ['key'],
@@ -685,7 +702,8 @@ export class GeminiLiveService extends EventEmitter {
                   properties: {
                     window_title: {
                       type: 'STRING',
-                      description: 'Window title or application name to maximize (e.g. "Chrome", "Notepad", or "active")',
+                      description:
+                        'Window title or application name to maximize (e.g. "Chrome", "Notepad", or "active")',
                     },
                   },
                 },
@@ -693,8 +711,7 @@ export class GeminiLiveService extends EventEmitter {
               {
                 name: 'minimize_window',
                 behavior: 'NON_BLOCKING',
-                description:
-                  'Minimizes a desktop application window to the taskbar.',
+                description: 'Minimizes a desktop application window to the taskbar.',
                 parameters: {
                   type: 'OBJECT',
                   properties: {
@@ -723,8 +740,7 @@ export class GeminiLiveService extends EventEmitter {
               {
                 name: 'close_window',
                 behavior: 'NON_BLOCKING',
-                description:
-                  'Closes a specified application window.',
+                description: 'Closes a specified application window.',
                 parameters: {
                   type: 'OBJECT',
                   properties: {
@@ -972,6 +988,63 @@ export class GeminiLiveService extends EventEmitter {
                 },
               },
               {
+                name: 'browser_open_tab',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Opens a new tab in Chrome and navigates to the given URL. Returns the new tab id and url.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    url: {
+                      type: 'STRING',
+                      description: 'URL to open in the new tab (e.g. https://www.google.com)',
+                    },
+                  },
+                  required: ['url'],
+                },
+              },
+              {
+                name: 'browser_read',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Reads the text content, title, URL, and headings from the active Chrome tab.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {},
+                },
+              },
+              {
+                name: 'browser_click',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Clicks an element in the active Chrome tab by CSS selector (e.g. "button#submit", "a.download-link", "input[type=text]").',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    selector: {
+                      type: 'STRING',
+                      description: 'CSS selector of the element to click',
+                    },
+                  },
+                  required: ['selector'],
+                },
+              },
+              {
+                name: 'browser_close_tab',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Closes a Chrome tab by its tab id. If no id is given, closes the active tab.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    tab_id: {
+                      type: 'STRING',
+                      description: 'The Chrome tab id to close (optional, defaults to active tab)',
+                    },
+                  },
+                },
+              },
+              {
                 name: 'scroll_page',
                 behavior: 'NON_BLOCKING',
                 description:
@@ -997,6 +1070,177 @@ export class GeminiLiveService extends EventEmitter {
                 parameters: {
                   type: 'OBJECT',
                   properties: {},
+                },
+              },
+              {
+                name: 'autonomous_goal',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Runs a fully autonomous computer-use session (Observe → Think → Act → Verify loop) to achieve a high-level goal without user intervention. Use this for complex multi-step tasks like "Open Blender, download a scene, add shaders, and render" or "Open Chrome, search for X, download the file, and open it."',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    goal: {
+                      type: 'STRING',
+                      description:
+                        'High-level objective to achieve autonomously (e.g. "Open Blender, download a 3D scene from the web, add materials and shaders, position the camera, and render the scene")',
+                    },
+                    maxIterations: {
+                      type: 'INTEGER',
+                      description:
+                        'Maximum number of reasoning iterations before stopping (default: 200)',
+                    },
+                  },
+                  required: ['goal'],
+                },
+              },
+              {
+                name: 'open_blender',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Launches the actual Blender 3D GUI application window on Windows (not headless). Waits for Blender to fully load, then focuses the window so the agent can drive it with mouse and keyboard.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    blendFile: {
+                      type: 'STRING',
+                      description:
+                        'Optional path to a .blend file to open immediately after launch',
+                    },
+                  },
+                },
+              },
+              {
+                name: 'download_scene',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Downloads a 3D scene, asset, or file from a URL into E:\\Gematron\\downloads\\. Used by the autonomous agent to fetch Blender scenes, reference images, and models from the web.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    url: {
+                      type: 'STRING',
+                      description:
+                        'HTTP/HTTPS URL of the file to download (.blend, .obj, .fbx, .zip, .png, etc.)',
+                    },
+                    filename: {
+                      type: 'STRING',
+                      description: 'Optional local filename for the downloaded file',
+                    },
+                  },
+                  required: ['url'],
+                },
+              },
+              {
+                name: 'add_blender_shader',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Adds a shader/material node in Blender GUI via the Shader Editor. Supports principled, emission, diffuse, glossy, and transparent shaders.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    shaderType: {
+                      type: 'STRING',
+                      enum: ['principled', 'emission', 'diffuse', 'glossy', 'transparent'],
+                      description: 'Type of shader to add',
+                    },
+                    color: {
+                      type: 'STRING',
+                      description: 'Base color as hex (e.g. #FF5733)',
+                    },
+                    strength: {
+                      type: 'NUMBER',
+                      description: 'Emission strength (for emission shaders)',
+                    },
+                  },
+                  required: ['shaderType'],
+                },
+              },
+              {
+                name: 'render_blender_scene',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Renders the current Blender scene using F12 and saves the output image to disk.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    outputPath: {
+                      type: 'STRING',
+                      description: 'Path to save the rendered image',
+                    },
+                    format: {
+                      type: 'STRING',
+                      enum: ['png', 'jpeg', 'bmp'],
+                      description: 'Output image format',
+                    },
+                  },
+                },
+              },
+              {
+                name: 'click_element_on_screen',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Visually locates a UI element (button, menu, icon, text label) on the desktop by description and clicks it like a human. Works in any application including Blender, Chrome, Notepad, etc.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    description: {
+                      type: 'STRING',
+                      description:
+                        'Description of the element to click (e.g. "File menu", "Render button", "Add shader", "Import", "OK", "Close")',
+                    },
+                    containerTitle: {
+                      type: 'STRING',
+                      description:
+                        'Optional window title to scope the search (e.g. "Blender", "Chrome")',
+                    },
+                    button: {
+                      type: 'STRING',
+                      enum: ['left', 'right', 'middle'],
+                      description: 'Mouse button to use',
+                    },
+                    double: {
+                      type: 'BOOLEAN',
+                      description: 'Perform double click if true',
+                    },
+                  },
+                  required: ['description'],
+                },
+              },
+              {
+                name: 'wait_for_element_on_screen',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Waits for a UI element to appear on screen (e.g. Blender finish loading, a download dialog, a render result). Polls until the element is found or timeout.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    description: {
+                      type: 'STRING',
+                      description: 'Description of the element to wait for',
+                    },
+                    timeoutMs: {
+                      type: 'INTEGER',
+                      description: 'Maximum wait time in milliseconds (default: 30000)',
+                    },
+                  },
+                  required: ['description'],
+                },
+              },
+              {
+                name: 'read_screen_text',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Reads on-screen text from the current desktop. Returns all visible text matches with coordinates, useful for verifying what is displayed.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    query: {
+                      type: 'STRING',
+                      description:
+                        'Optional text to search for on screen (leave empty to read all visible text)',
+                    },
+                  },
                 },
               },
             ],
@@ -1299,7 +1543,8 @@ export class GeminiLiveService extends EventEmitter {
               width: shot.width,
               height: shot.height,
               sourceName: shot.sourceName,
-              message: 'Desktop screenshot captured, displayed in chat, and fed into vision stream.',
+              message:
+                'Desktop screenshot captured, displayed in chat, and fed into vision stream.',
             };
             break;
           }
@@ -1538,8 +1783,75 @@ export class GeminiLiveService extends EventEmitter {
           }
 
           case 'navigate_to_url': {
-            await this.cdpClient.navigate(call.args.url);
-            result = { success: true, url: call.args.url };
+            try {
+              await this.cdpClient.navigate(call.args.url);
+              result = { success: true, url: call.args.url };
+            } catch (err) {
+              result = { success: false, error: err instanceof Error ? err.message : String(err) };
+            }
+            break;
+          }
+
+          case 'browser_open_tab': {
+            const url = String(call.args.url || 'https://www.google.com');
+            const tab = await this.cdpClient.createTab(url);
+            if (!tab) {
+              result = { success: false, error: 'Failed to create Chrome tab.' };
+            } else {
+              result = { success: true, tabId: tab.id, url: tab.url, title: tab.title };
+            }
+            break;
+          }
+
+          case 'browser_read': {
+            try {
+              const pageData = await this.cdpClient.readPage();
+              result = { success: true, ...pageData };
+            } catch (err) {
+              result = { success: false, error: err instanceof Error ? err.message : String(err) };
+            }
+            break;
+          }
+
+          case 'browser_click': {
+            const selector = String(call.args.selector || '');
+            if (!selector) {
+              result = { success: false, error: 'selector is required.' };
+            } else {
+              try {
+                const ok = await this.cdpClient.click(selector);
+                result = { success: ok, selector };
+                if (!ok) {
+                  result.error = `No element matching selector "${selector}" found.`;
+                }
+              } catch (err) {
+                result = {
+                  success: false,
+                  error: err instanceof Error ? err.message : String(err),
+                };
+              }
+            }
+            break;
+          }
+
+          case 'browser_close_tab': {
+            const tabId = String(call.args.tab_id || '');
+            try {
+              if (tabId) {
+                const ok = await this.cdpClient.closeTab(tabId);
+                result = { success: ok, tabId };
+              } else {
+                const active = await this.cdpClient.getActiveTab();
+                if (!active) {
+                  result = { success: false, error: 'No active Chrome tab to close.' };
+                } else {
+                  const ok = await this.cdpClient.closeTab(active.id);
+                  result = { success: ok, tabId: active.id };
+                }
+              }
+            } catch (err) {
+              result = { success: false, error: err instanceof Error ? err.message : String(err) };
+            }
             break;
           }
 
@@ -1592,6 +1904,167 @@ export class GeminiLiveService extends EventEmitter {
           case 'read_page': {
             const pageData = await this.cdpClient.readPage();
             result = { success: true, ...pageData };
+            break;
+          }
+
+          case 'autonomous_goal': {
+            const goal = String(call.args.goal || '');
+            const maxIterations =
+              typeof call.args.maxIterations === 'number' ? call.args.maxIterations : undefined;
+            const session = await autonomousAgent.startSession(goal, {
+              maxIterations,
+              autoApprove: true,
+              voiceEnabled: true,
+              onObservation: (obs) => {
+                this.emit('conversation-message', {
+                  id: `obs_${Date.now()}`,
+                  kind: 'assistant',
+                  title: '👁️ Agent Observation',
+                  text: `Desktop state: ${obs.windows.length} windows active, cursor at (${obs.cursor.x}, ${obs.cursor.y})`,
+                  at: Date.now(),
+                } as any);
+              },
+              onStepStart: (step) => {
+                this.emit('conversation-message', {
+                  id: `step_start_${Date.now()}`,
+                  kind: 'tool',
+                  name: step.action,
+                  title: `▶️ ${step.description}`,
+                  at: Date.now(),
+                } as any);
+              },
+              onStepComplete: (step, res) => {
+                this.emit('conversation-message', {
+                  id: `step_done_${Date.now()}`,
+                  kind: 'tool',
+                  name: step.action,
+                  title: `✅ ${step.description}`,
+                  detail: JSON.stringify(res).slice(0, 300),
+                  at: Date.now(),
+                } as any);
+              },
+              onStepFail: (step, error) => {
+                this.emit('conversation-message', {
+                  id: `step_fail_${Date.now()}`,
+                  kind: 'tool',
+                  name: step.action,
+                  title: `❌ ${step.description}`,
+                  detail: error,
+                  at: Date.now(),
+                } as any);
+              },
+              onGoalComplete: (session) => {
+                this.emit('conversation-message', {
+                  id: `goal_done_${Date.now()}`,
+                  kind: 'assistant',
+                  title: '🎯 Autonomous Goal Complete',
+                  text: `Goal "${session.goal}" achieved in ${session.iterations} iterations and ${session.steps.length} steps.`,
+                  at: Date.now(),
+                } as any);
+              },
+              onGoalFail: (session, error) => {
+                this.emit('conversation-message', {
+                  id: `goal_fail_${Date.now()}`,
+                  kind: 'assistant',
+                  title: '⚠️ Autonomous Goal Failed',
+                  text: `Goal "${session.goal}" could not be completed: ${error}`,
+                  at: Date.now(),
+                } as any);
+              },
+            });
+            result = {
+              success: session.status === 'completed',
+              sessionId: session.id,
+              goal: session.goal,
+              status: session.status,
+              iterations: session.iterations,
+              steps: session.steps.length,
+              error: session.error,
+            };
+            break;
+          }
+
+          case 'open_blender': {
+            const blendFile = String(call.args.blendFile || '');
+            const res = await computerOperator.executeSkillAction('blender-gui', 'openBlender', {
+              ...(blendFile ? { blendFile } : {}),
+            });
+            result = res;
+            break;
+          }
+
+          case 'download_scene': {
+            const url = String(call.args.url || '');
+            const filename = String(call.args.filename || '');
+            const res = await downloadManager.downloadFile(url, {
+              ...(filename ? { filename } : {}),
+            });
+            result = res;
+            break;
+          }
+
+          case 'add_blender_shader': {
+            const res = await computerOperator.executeSkillAction('blender-gui', 'addShader', {
+              shaderType: call.args.shaderType || 'principled',
+              color: call.args.color || undefined,
+              strength: call.args.strength || undefined,
+            });
+            result = res;
+            break;
+          }
+
+          case 'render_blender_scene': {
+            const res = await computerOperator.executeSkillAction('blender-gui', 'renderScene', {
+              outputPath: call.args.outputPath || undefined,
+              format: call.args.format || 'png',
+            });
+            result = res;
+            break;
+          }
+
+          case 'click_element_on_screen': {
+            const res = await screenGrounding.clickElement(String(call.args.description || ''), {
+              containerTitle: call.args.containerTitle || undefined,
+              button: call.args.button || 'left',
+              double: call.args.double ?? false,
+            });
+            result = res;
+            break;
+          }
+
+          case 'wait_for_element_on_screen': {
+            const res = await screenGrounding.waitForElement({
+              description: String(call.args.description || ''),
+              timeoutMs: typeof call.args.timeoutMs === 'number' ? call.args.timeoutMs : 30_000,
+            });
+            result = { success: Boolean(res), element: res || null };
+            break;
+          }
+
+          case 'read_screen_text': {
+            const res = await screenGrounding.readScreen(String(call.args.query || ''), {
+              maxResults: 20,
+            });
+            result = {
+              found: res.found,
+              query: res.query,
+              matches: res.matches.map((m) => ({
+                text: m.text,
+                x: m.x,
+                y: m.y,
+                confidence: m.confidence,
+                source: m.source,
+                container: m.containerTitle,
+              })),
+              bestMatch: res.bestMatch
+                ? {
+                    text: res.bestMatch.text,
+                    x: res.bestMatch.x,
+                    y: res.bestMatch.y,
+                    confidence: res.bestMatch.confidence,
+                  }
+                : null,
+            };
             break;
           }
 
@@ -1685,7 +2158,7 @@ export class GeminiLiveService extends EventEmitter {
     let key = process.env.GEMINI_API_KEY || '';
 
     // Attempt to load from apps/local-bridge/.env
-    const bridgeEnvPath = 'E:\\Gemetron\\apps\\local-bridge\\.env';
+    const bridgeEnvPath = 'E:\\Gematron\\apps\\local-bridge\\.env';
     if (!key && existsSync(bridgeEnvPath)) {
       try {
         const text = readFileSync(bridgeEnvPath, 'utf8');

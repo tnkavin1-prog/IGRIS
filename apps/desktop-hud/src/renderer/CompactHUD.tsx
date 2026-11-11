@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, type FormEvent } from 'react';
+﻿import { useState, useRef, useEffect, type FormEvent, type CSSProperties } from 'react';
+import { HudIcon } from './HudIcon.js';
 import type {
   AgenticTask,
   BoundingBoxTarget,
@@ -15,6 +16,7 @@ import type {
 import { VisualBlackboard } from './VisualBlackboard.js';
 import { SkillLauncherPanel } from './SkillLauncherPanel.js';
 import { ModelSwitchboard } from './ModelSwitchboard.js';
+import { HUD_ACCENTS, appearanceStyle, type HudAppearance } from './appearance.js';
 
 export interface CompactHUDProps {
   status: LiveHUDStatus;
@@ -32,6 +34,9 @@ export interface CompactHUDProps {
   telemetry: NeuralTelemetry | null;
   onTogglePin: () => void;
   onToggleMaximize: () => void;
+  onCollapseToBar?: () => void;
+  onCollapseToOrb?: () => void;
+  onOpenEmber?: () => void;
   onMinimize: () => void;
   onClose: () => void;
   onStartSession: () => void;
@@ -57,69 +62,50 @@ export interface CompactHUDProps {
   soundVolume?: number;
   onToggleSoundMute?: () => void;
   onSoundVolumeChange?: (volume: number) => void;
+  appearance: HudAppearance;
+  onAppearanceChange: (appearance: HudAppearance) => void;
+  onAutoApproveChange?: (enabled: boolean) => void;
 }
 
-/**
- * Organic Kinetic Soundwave Cluster
- * Monochromatic porcelain white glowing wave ribbons
- */
-function KineticWaveCluster({
-  state,
-  cpuUsage,
-}: {
-  state: 'idle' | 'listening' | 'speaking' | 'thinking';
-  cpuUsage?: number;
-}) {
-  const currentCpu = typeof cpuUsage === 'number' ? Math.max(0, Math.min(100, cpuUsage)) : 20;
-  const pulseDuration = Math.max(0.6, 2.4 - (currentCpu / 100) * 1.5);
-  const glowRadius = Math.max(2, Math.min(16, Math.round((currentCpu / 100) * 16)));
-  const pulseStyle = {
-    filter: `drop-shadow(0 0 ${glowRadius}px rgba(255, 255, 255, ${currentCpu > 70 ? '0.9' : '0.65'}))`,
-    animationDuration: `${pulseDuration.toFixed(2)}s`,
-  };
+type ViewName = 'chat' | 'blackboard' | 'workflow' | 'skills' | 'models' | 'radar';
 
-  return (
-    <div className={`kinetic-cluster-container ${state}`} style={pulseStyle} aria-hidden="true">
-      <div className="kinetic-bloom" />
-      <svg className="kinetic-svg" viewBox="0 0 180 50" fill="none">
-        <defs>
-          <linearGradient id="kineticGradWhitePrimary" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
-            <stop offset="50%" stopColor="#ffffff" stopOpacity="0.8" />
-            <stop offset="100%" stopColor="#ffffff" stopOpacity="0.6" />
-          </linearGradient>
-          <linearGradient id="kineticGradWhiteSecondary" x1="0%" y1="100%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.75" />
-            <stop offset="50%" stopColor="#ffffff" stopOpacity="0.5" />
-            <stop offset="100%" stopColor="#ffffff" stopOpacity="0.25" />
-          </linearGradient>
-        </defs>
-        <path
-          className="kinetic-ribbon primary"
-          d="M 12 25 C 35 12, 55 38, 90 25 C 125 12, 145 38, 168 25"
-          stroke="url(#kineticGradWhitePrimary)"
-          strokeWidth="3.2"
-          strokeLinecap="round"
-        />
-        <path
-          className="kinetic-ribbon secondary"
-          d="M 12 25 C 38 36, 58 14, 90 25 C 122 36, 142 14, 168 25"
-          stroke="url(#kineticGradWhiteSecondary)"
-          strokeWidth="2.4"
-          strokeLinecap="round"
-          strokeOpacity="0.85"
-        />
-        <path
-          className="kinetic-ribbon tertiary"
-          d="M 24 25 C 46 19, 68 31, 90 25 C 112 19, 134 31, 156 25"
-          stroke="url(#kineticGradWhitePrimary)"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeOpacity="0.45"
-        />
-      </svg>
-    </div>
-  );
+const APPROVAL_MODES = ['Ask first', 'Smart', 'Auto-approve', 'View only'] as const;
+type ApprovalMode = (typeof APPROVAL_MODES)[number];
+
+const RADAR_POSITIONS = [
+  [76, 73],
+  [31, 84],
+  [8, 55],
+  [39, 12],
+  [80, 24],
+  [62, 36],
+] as const;
+
+function formatModelLabel(modelId: string): string {
+  const raw = (modelId || 'gemini-3.8').trim();
+  const lower = raw.toLowerCase();
+  const prefix = lower.includes('gemini')
+    ? 'Gemini'
+    : lower.includes('deepseek')
+      ? 'DeepSeek'
+      : lower.includes('glm')
+        ? 'GLM'
+        : lower.includes('kimi')
+          ? 'Kimi'
+          : lower.includes('claude')
+            ? 'Claude'
+            : lower.includes('llama')
+              ? 'Llama'
+              : '';
+  const stripped = raw
+    .replace(/^(gemini|deepseek|glm|kimi|claude|llama)[-_]?/i, '')
+    .replace(/[-_]live$/i, '')
+    .trim();
+  const words = stripped
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1));
+  return [prefix, ...words].filter(Boolean).join(' ') || 'Gemini 3.8';
 }
 
 export function CompactHUD({
@@ -134,23 +120,20 @@ export function CompactHUD({
   currentTask,
   pendingApproval,
   crosshair,
-  boundingBox,
   telemetry,
   onTogglePin,
-  onToggleMaximize,
-  onMinimize,
+  onCollapseToBar,
+  onCollapseToOrb,
+  onOpenEmber,
   onClose,
   onStartSession,
   onStopSession,
   onSendText,
   onSelectSampleLesson,
   onExportSession,
-  onSwitchTab,
-  onLaunchChrome,
   onApproveStep,
   onRejectStep,
   onScanDesktop,
-  onShowWindows,
   onStartAutonomousTask,
   onEmergencyStop,
   onPauseWorkflow,
@@ -163,111 +146,181 @@ export function CompactHUD({
   soundVolume = 0.5,
   onToggleSoundMute,
   onSoundVolumeChange,
+  appearance,
+  onAppearanceChange,
+  onAutoApproveChange,
 }: CompactHUDProps) {
-  const [activeView, setActiveView] = useState<'chat' | 'blackboard' | 'workflow' | 'skills' | 'models'>('chat');
-  const [showKeyboard, setShowKeyboard] = useState(false);
-  const [showQuickActions, setShowQuickActions] = useState(false);
-  const [showDesktopRadar, setShowDesktopRadar] = useState(false);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [activeView, setActiveView] = useState<ViewName>('chat');
+  const [showSheet, setShowSheet] = useState(false);
   const [draft, setDraft] = useState('');
+  const [goalDraft, setGoalDraft] = useState('');
+  const [approvalMode, setApprovalMode] = useState<ApprovalMode>(
+    settings.autoApprove ? 'Smart' : 'Ask first',
+  );
+  const [radarEnabled, setRadarEnabled] = useState<Record<string, boolean>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
-  const moreMenuRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Close More menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
-        setShowMoreMenu(false);
+  const isLive =
+    status === 'connecting' ||
+    status === 'listening' ||
+    status === 'speaking' ||
+    status === 'thinking';
+
+  const modelLabel = formatModelLabel(settings.modelId);
+
+  const statusText =
+    status === 'connecting'
+      ? 'Connecting…'
+      : status === 'listening'
+        ? 'Listening…'
+        : status === 'speaking'
+          ? 'Speaking…'
+          : status === 'thinking'
+            ? 'Thinking…'
+            : status === 'error'
+              ? 'Offline'
+              : 'Online';
+
+  let tabDisplay = 'Desktop';
+  if (activeTab) {
+    if (activeTab.url?.startsWith('file:')) {
+      const parts = activeTab.url.split('/');
+      tabDisplay = decodeURIComponent(parts[parts.length - 1] || 'Local File').slice(0, 26);
+    } else if (activeTab.title) {
+      tabDisplay = activeTab.title.slice(0, 26);
+    } else if (activeTab.url) {
+      try {
+        tabDisplay = new URL(activeTab.url).hostname.replace(/^www\./, '').slice(0, 26);
+      } catch {
+        tabDisplay = activeTab.url.slice(0, 26);
       }
-    };
-    if (showMoreMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [showMoreMenu]);
+  }
 
-  const isLive = status === 'listening' || status === 'speaking' || status === 'thinking';
+  const activeTool = [...conversation]
+    .reverse()
+    .find((message) => message.kind === 'tool' && message.status === 'running');
 
-  // Automatically switch to Blackboard view when a lesson arrives
+  const totalSteps = currentTask?.steps.length ?? 0;
+  const completedSteps =
+    currentTask?.steps.filter((step) => step.status === 'completed').length ?? 0;
+  const progressPercent = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+
+  const latestUserTranscript = [...conversation]
+    .reverse()
+    .find((message) => message.kind === 'user' && message.text)?.text;
+  const latestAssistantTranscript = [...conversation]
+    .reverse()
+    .find((message) => message.kind === 'assistant' && message.text)?.text;
+  const liveTranscript =
+    status === 'speaking' || status === 'thinking'
+      ? latestAssistantTranscript || latestUserTranscript || null
+      : latestUserTranscript || latestAssistantTranscript || null;
+
+  const approvalLabel = approvalMode === 'Smart' ? 'Smart approve' : approvalMode;
+
   useEffect(() => {
-    if (blackboardLesson) {
-      setActiveView('blackboard');
-    }
+    if (blackboardLesson) setActiveView('blackboard');
   }, [blackboardLesson]);
 
-  // Automatically switch to Workflow view if approval is required
   useEffect(() => {
-    if (pendingApproval) {
-      setActiveView('workflow');
-    }
+    if (pendingApproval) setActiveView('workflow');
   }, [pendingApproval]);
 
-  // Auto-scroll chat to bottom
   useEffect(() => {
     if (scrollRef.current && activeView === 'chat') {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [conversation, activeView]);
 
-  const handleSend = (e: FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setShowSheet(false);
+        setActiveView('chat');
+        inputRef.current?.focus();
+      }
+      if (event.ctrlKey && event.code === 'Space') {
+        event.preventDefault();
+        if (isLive) onStopSession();
+        else onStartSession();
+      }
+      if (event.key === 'Escape') setShowSheet(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isLive, onStartSession, onStopSession]);
+
+  const selectView = (view: ViewName) => {
+    setActiveView(view);
+    setShowSheet(false);
+    if (view === 'radar') onRefreshWindows?.();
+  };
+
+  const focusComposer = () => {
+    setShowSheet(false);
+    setActiveView('chat');
+    inputRef.current?.focus();
+  };
+
+  const handleSend = (event: FormEvent) => {
+    event.preventDefault();
     const text = draft.trim();
     if (!text) return;
     setDraft('');
     onSendText(text);
   };
 
-  // Status computation
-  let statusText = 'Gemini';
-  let kineticState: 'idle' | 'listening' | 'speaking' | 'thinking' = 'idle';
-
-  if (status === 'connecting') {
-    statusText = 'Connecting…';
-    kineticState = 'thinking';
-  } else if (status === 'listening') {
-    statusText = 'Online';
-    kineticState = 'listening';
-  } else if (status === 'speaking') {
-    statusText = 'Speaking…';
-    kineticState = 'speaking';
-  } else if (status === 'thinking') {
-    statusText = 'Thinking…';
-    kineticState = 'thinking';
-  } else if (status === 'error') {
-    statusText = 'Offline';
-    kineticState = 'idle';
-  }
-
-  // Active running tool
-  const activeTool = [...conversation]
-    .reverse()
-    .find((m) => m.kind === 'tool' && m.status === 'running');
-
-  // Format tab title display
-  let tabDisplay = 'Chrome (Port 9222)';
-  if (activeTab) {
-    if (activeTab.url?.startsWith('file:')) {
-      const parts = activeTab.url.split('/');
-      tabDisplay = decodeURIComponent(parts[parts.length - 1] || 'Local File').slice(0, 24);
-    } else if (activeTab.title) {
-      tabDisplay = activeTab.title.slice(0, 24);
-    } else if (activeTab.url) {
-      try {
-        tabDisplay = new URL(activeTab.url).hostname.replace(/^www\./, '').slice(0, 24);
-      } catch {
-        tabDisplay = activeTab.url.slice(0, 24);
-      }
+  const handleSuggestion = (prompt: string) => {
+    if (isLive) {
+      onSendText(prompt);
+      return;
     }
-  }
+    setActiveView('chat');
+    setDraft(prompt);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
 
-  // Workflow progress computation
-  const totalSteps = currentTask?.steps.length ?? 0;
-  const completedSteps = currentTask?.steps.filter((s) => s.status === 'completed').length ?? 0;
-  const progressPercent = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+  const runGoal = (goal: string) => {
+    const value = goal.trim();
+    if (!value) return;
+    setActiveView('workflow');
+    setGoalDraft('');
+    onStartAutonomousTask(value);
+  };
+
+  const handleGoalSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    runGoal(goalDraft);
+  };
+
+  const applyApprovalMode = (mode: ApprovalMode) => {
+    setApprovalMode(mode);
+    onAutoApproveChange?.(mode === 'Smart' || mode === 'Auto-approve');
+  };
+
+  const cycleApprovalMode = () => {
+    const index = APPROVAL_MODES.indexOf(approvalMode);
+    const next = APPROVAL_MODES[(index + 1) % APPROVAL_MODES.length] ?? 'Smart';
+    applyApprovalMode(next);
+  };
+
+  const radarControllable = runningWindows.filter(
+    (windowItem, index) => radarEnabled[String(windowItem.hwnd)] ?? index < 4,
+  ).length;
+
+  const updateAppearance = (next: Partial<HudAppearance>) => {
+    onAppearanceChange({ ...appearance, ...next });
+  };
 
   return (
-    <div className={`compact-gemini-box ${isMaximized ? 'is-maximized' : ''}`}>
-      {/* ────────────────── Target Crosshair Laser Overlay ────────────────── */}
+    <div
+      className={`agent-shell ${isLive ? 'voice' : ''} ${isMaximized ? 'is-maximized' : ''}`}
+      data-mode="full"
+      style={appearanceStyle(appearance) as CSSProperties}
+    >
       {crosshair &&
         (() => {
           const isLeftMonitor = crosshair.x < 0;
@@ -279,928 +332,896 @@ export function CompactHUD({
           const normY = isMaximized
             ? Math.min(window.innerHeight - 80, Math.max(40, (absY / 1080) * window.innerHeight))
             : Math.min(window.innerHeight - 70, Math.max(30, absY / 4));
-
           return (
             <div
               className="hud-crosshair-overlay"
-              style={{
-                left: `${normX}px`,
-                top: `${normY}px`,
-              }}
+              style={{ left: `${normX}px`, top: `${normY}px` }}
               aria-hidden="true"
             >
               <div className="crosshair-ring ring-outer" />
               <div className="crosshair-ring ring-inner" />
               <div className="crosshair-reticle" />
-              <div className="crosshair-badge">
-                <span className="crosshair-coords">
-                  {isLeftMonitor ? '◧ [M2] ' : '◩ '}X:{crosshair.x} Y:{crosshair.y}
-                </span>
-                {crosshair.label && <span className="crosshair-tag">{crosshair.label}</span>}
-              </div>
             </div>
           );
         })()}
 
-      {/* ────────────────── Target Bounding Box Overlay with Futuristic Scanline ────────────────── */}
-      {boundingBox &&
-        (() => {
-          const isLeftMonitor = boundingBox.x < 0;
-          const absX = isLeftMonitor
-            ? 1920 - (Math.abs(boundingBox.x) % 1920)
-            : boundingBox.x % 1920;
-          const absY = Math.abs(boundingBox.y) % 1080;
-          const normX = isMaximized
-            ? Math.min(window.innerWidth - 60, Math.max(10, (absX / 1920) * window.innerWidth))
-            : Math.min(window.innerWidth - 60, Math.max(20, absX / 4));
-          const normY = isMaximized
-            ? Math.min(window.innerHeight - 60, Math.max(10, (absY / 1080) * window.innerHeight))
-            : Math.min(window.innerHeight - 60, Math.max(20, absY / 4));
-          const normW = isMaximized
-            ? Math.max(
-                30,
-                Math.min(window.innerWidth - normX, (boundingBox.width / 1920) * window.innerWidth),
-              )
-            : Math.max(40, boundingBox.width / 4);
-          const normH = isMaximized
-            ? Math.max(
-                20,
-                Math.min(
-                  window.innerHeight - normY,
-                  (boundingBox.height / 1080) * window.innerHeight,
-                ),
-              )
-            : Math.max(30, boundingBox.height / 4);
-
-          return (
-            <div
-              className="hud-target-bbox"
-              style={{
-                left: `${normX}px`,
-                top: `${normY}px`,
-                width: `${normW}px`,
-                height: `${normH}px`,
-              }}
-              aria-hidden="true"
-            >
-              <div className="bbox-corner top-left" />
-              <div className="bbox-corner top-right" />
-              <div className="bbox-corner bottom-left" />
-              <div className="bbox-corner bottom-right" />
-              <div className="bbox-scanline" />
-              <div className="bbox-reticle" />
-              <div className="bbox-badge">
-                <span className="bbox-coords">
-                  {isLeftMonitor ? '◧ [M2] ' : '◩ '}X:{boundingBox.x} Y:{boundingBox.y} (
-                  {boundingBox.width}x{boundingBox.height})
-                </span>
-                {boundingBox.label && <span className="bbox-tag">{boundingBox.label}</span>}
-              </div>
-            </div>
-          );
-        })()}
-
-      {/* ────────────────── Top Header Bar ────────────────── */}
-      <div className="compact-header app-drag-region">
-        <div className="compact-status no-drag">
-          <div className={`gemini-core-indicator ${status}`} aria-hidden="true">
-            <span className="core-glow" />
-            <span className="core-bar b1" />
-            <span className="core-bar b2" />
-            <span className="core-bar b3" />
-            <span className="core-bar b4" />
-          </div>
-          <span className="status-label">{statusText}</span>
-
-          {currentTask && currentTask.status === 'running' ? (
-            <span className="hud-telemetry-tag pulse">
-              {completedSteps}/{totalSteps}
-            </span>
-          ) : currentTask && currentTask.status === 'paused' ? (
-            <span className="hud-telemetry-tag warning">PAUSED</span>
-          ) : null}
-
-          {/* Autonomous Killswitch & Pause Controls */}
-          {currentTask && (currentTask.status === 'running' || currentTask.status === 'paused') ? (
-            <div className="hud-emergency-group no-drag">
-              {currentTask.status === 'running' ? (
-                <button
-                  type="button"
-                  className="hud-emergency-btn pause"
-                  title="Pause autonomous workflow"
-                  onClick={onPauseWorkflow}
-                >
-                  ⏸
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="hud-emergency-btn resume"
-                  title="Resume paused autonomous workflow"
-                  onClick={onResumeWorkflow}
-                >
-                  ▶
-                </button>
-              )}
-              <button
-                type="button"
-                className="hud-emergency-btn killswitch"
-                title="EMERGENCY STOP (Ctrl+Alt+K / Esc x3): Instantly halt all active steps and release input states"
-                onClick={onEmergencyStop}
-              >
-                🛑
-              </button>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="compact-top-actions no-drag">
-          {/* Main View: Chat Dialogue */}
-          <button
-            type="button"
-            className={`compact-board-pill ${activeView === 'chat' ? 'is-active' : ''}`}
-            title="Chat dialogue & speech transcripts"
-            onClick={() => {
-              setActiveView('chat');
-              setShowMoreMenu(false);
-            }}
-          >
-            <span>💬 Chat</span>
-          </button>
-
-          {/* Subview Pill if not on Chat */}
-          {activeView !== 'chat' && (
-            <div className="compact-board-pill is-active active-subview-pill">
-              <span>
-                {activeView === 'blackboard' ? '📐 Board' :
-                 activeView === 'workflow' ? '⚡ Jarvis' :
-                 activeView === 'skills' ? '🛠 Skills' :
-                 activeView === 'models' ? '🧠 Models' : ''}
+      <div className="panel glass">
+        <header className="head app-drag-region">
+          <div className="brand">
+            <div className="orb" style={{ '--s': '26px' } as CSSProperties} />
+            <div className="bt">
+              <b>Gematron</b>
+              <span className="stat">
+                <i className="dot" />
+                <em style={{ fontStyle: 'normal' }}>{statusText}</em>
               </span>
-              <button
-                type="button"
-                className="subview-close-btn"
-                title="Return to Chat"
-                onClick={() => setActiveView('chat')}
-              >
-                ✕
-              </button>
             </div>
-          )}
-
-          {/* More Tools & System Dropdown */}
-          <div className="more-menu-container" ref={moreMenuRef}>
-            <button
-              type="button"
-              className={`compact-board-pill more-btn ${showMoreMenu ? 'is-active' : ''}`}
-              title="More views, skills, and system controls"
-              onClick={() => setShowMoreMenu(!showMoreMenu)}
-            >
-              <span>⋯ More ▾</span>
-            </button>
-
-            {showMoreMenu && (
-              <div className="more-dropdown-menu">
-                <div className="dropdown-section-title">Views & Tools</div>
-
-                <button
-                  type="button"
-                  className={`more-menu-item ${activeView === 'blackboard' ? 'selected' : ''}`}
-                  onClick={() => {
-                    setActiveView('blackboard');
-                    setShowMoreMenu(false);
-                  }}
-                >
-                  <span className="item-icon">📐</span>
-                  <div className="item-info">
-                    <span className="item-title">Visual Blackboard</span>
-                    <span className="item-desc">LaTeX & drawings</span>
-                  </div>
-                  {blackboardLesson && <span className="item-badge">New</span>}
-                </button>
-
-                <button
-                  type="button"
-                  className={`more-menu-item ${activeView === 'workflow' ? 'selected' : ''}`}
-                  onClick={() => {
-                    setActiveView('workflow');
-                    setShowMoreMenu(false);
-                  }}
-                >
-                  <span className="item-icon">⚡</span>
-                  <div className="item-info">
-                    <span className="item-title">Jarvis Co-Pilot</span>
-                    <span className="item-desc">Autonomous workflow</span>
-                  </div>
-                  {pendingApproval && <span className="item-badge attention">!</span>}
-                </button>
-
-                <button
-                  type="button"
-                  className={`more-menu-item ${activeView === 'skills' ? 'selected' : ''}`}
-                  onClick={() => {
-                    setActiveView('skills');
-                    setShowMoreMenu(false);
-                  }}
-                >
-                  <span className="item-icon">🛠</span>
-                  <div className="item-info">
-                    <span className="item-title">Skills Launcher</span>
-                    <span className="item-desc">Windows, Office, Blender, Creative</span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  className={`more-menu-item ${activeView === 'models' ? 'selected' : ''}`}
-                  onClick={() => {
-                    setActiveView('models');
-                    setShowMoreMenu(false);
-                  }}
-                >
-                  <span className="item-icon">🧠</span>
-                  <div className="item-info">
-                    <span className="item-title">Model Switchboard</span>
-                    <span className="item-desc">Gemini, DeepSeek, GLM</span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  className={`more-menu-item ${showDesktopRadar ? 'selected' : ''}`}
-                  onClick={() => {
-                    const next = !showDesktopRadar;
-                    setShowDesktopRadar(next);
-                    if (next) onRefreshWindows?.();
-                    setShowMoreMenu(false);
-                  }}
-                >
-                  <span className="item-icon">📡</span>
-                  <div className="item-info">
-                    <span className="item-title">Desktop Radar</span>
-                    <span className="item-desc">Active application windows</span>
-                  </div>
-                </button>
-
-                <div className="dropdown-divider" />
-
-                <div className="dropdown-section-title">System & Controls</div>
-
-                {/* Performance stats */}
-                {telemetry?.cpuUsage !== undefined && (
-                  <div className="more-telemetry-row">
-                    <span className="telemetry-label">Performance:</span>
-                    <span className="telemetry-value">
-                      CPU {Math.round(telemetry.cpuUsage)}% · RAM {Math.round(telemetry.memoryUsagePercent ?? 0)}%
-                    </span>
-                  </div>
-                )}
-
-                {/* Autonomous Approval Mode */}
-                <div className="more-telemetry-row">
-                  <span className="telemetry-label">Co-Pilot Mode:</span>
-                  <span className="telemetry-value">
-                    {settings.autoApprove ? 'Auto-Approve' : 'Guard (Manual)'}
-                  </span>
-                </div>
-
-                {/* Acoustic Sound */}
-                <div className="more-control-row">
-                  <span className="control-label">Acoustic Sound:</span>
-                  <button
-                    type="button"
-                    className="more-toggle-btn"
-                    onClick={onToggleSoundMute}
-                  >
-                    {soundMuted ? '🔇 Muted' : '🔊 Sound On'}
-                  </button>
-                </div>
-
-                {/* Sound Volume Slider */}
-                <div className="more-control-row">
-                  <span className="control-label">Volume: {Math.round((soundVolume ?? 0.5) * 100)}%</span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={soundVolume}
-                    onChange={(e) => onSoundVolumeChange?.(parseFloat(e.target.value))}
-                    className="compact-volume-slider"
-                    title={`Volume: ${Math.round((soundVolume ?? 0.5) * 100)}%`}
-                  />
-                </div>
-              </div>
-            )}
           </div>
-
-          {/* Pin Always-on-Top */}
+          <button className="model" onClick={() => selectView('models')} title="Model switchboard">
+            <span>{modelLabel}</span>
+            <HudIcon name="chevron" size={12} />
+          </button>
+          <div className="sp" />
           <button
-            type="button"
-            className={`compact-btn ${isPinned ? 'is-active is-pinned' : ''}`}
-            title={isPinned ? 'Pinned Always-on-Top' : 'Click to Pin Window Always-on-Top'}
+            className="ib"
+            data-tip="Command palette · Ctrl K"
+            onClick={focusComposer}
+            title="Command palette"
+          >
+            <HudIcon name="command" size={17} />
+          </button>
+          <button
+            className={`ib ${isPinned ? 'on' : ''}`}
+            data-tip={isPinned ? 'Unpin from top' : 'Pin on top'}
             onClick={onTogglePin}
+            title={isPinned ? 'Unpin' : 'Pin on top'}
           >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M16 4v8l3 3v2h-6v5l-1 1-1-1v-5H5v-2l3-3V4c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2z" />
-            </svg>
+            <HudIcon name="pin" size={17} />
           </button>
-
-          {/* Session Export */}
           <button
-            type="button"
-            className="compact-btn"
-            title="Export session study notes to Markdown & HTML"
+            className="ib"
+            data-tip="Export conversation"
             onClick={onExportSession}
+            title="Export conversation"
           >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
+            <HudIcon name="export" size={17} />
           </button>
-
-          {/* Minimize Window */}
           <button
-            type="button"
-            className="compact-btn"
-            title="Minimize window"
-            onClick={onMinimize}
+            className="ib"
+            data-tip="Compact bar"
+            onClick={onCollapseToBar}
+            title="Compact bar"
           >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
+            <HudIcon name="bari" size={17} />
           </button>
-
-          {/* Maximize / Restore Toggle */}
           <button
-            type="button"
-            className="compact-btn"
-            title={isMaximized ? 'Restore normal window' : 'Maximize window'}
-            onClick={onToggleMaximize}
+            className="ib"
+            data-tip="Collapse to orb"
+            onClick={onCollapseToOrb}
+            title="Collapse to orb"
           >
-            {isMaximized ? (
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <rect x="4" y="4" width="12" height="12" rx="2" />
-                <path d="M8 8v12h12V8H8z" />
-              </svg>
-            ) : (
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-              </svg>
-            )}
+            <HudIcon name="orbi" size={17} />
           </button>
+          <button className="ib x" data-tip="Hide to tray" onClick={onClose} title="Close">
+            <HudIcon name="close" size={17} />
+          </button>
+        </header>
 
-          {/* Close Window */}
+        <nav className="rail">
           <button
-            type="button"
-            className="compact-btn close-btn"
-            title="Close Assistant"
-            onClick={onClose}
+            className={`rb ${activeView === 'chat' ? 'on' : ''}`}
+            data-tip="Chat"
+            onClick={() => selectView('chat')}
+            title="Chat"
           >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <HudIcon name="chat" size={17} />
           </button>
-        </div>
-      </div>
+          <button
+            className={`rb ${activeView === 'blackboard' ? 'on' : ''}`}
+            data-tip="Visual Blackboard — LaTeX & drawings"
+            onClick={() => selectView('blackboard')}
+            title="Visual Blackboard"
+          >
+            <HudIcon name="board" size={17} />
+            {blackboardLesson && <span className="nb" />}
+          </button>
+          <button
+            className={`rb ${activeView === 'workflow' ? 'on' : ''}`}
+            data-tip="Gematron Co-Pilot — autonomous workflow"
+            onClick={() => selectView('workflow')}
+            title="Co-Pilot"
+          >
+            <HudIcon name="zap" size={17} />
+            {pendingApproval && <span className="nb" />}
+          </button>
+          <button
+            className={`rb ${activeView === 'skills' ? 'on' : ''}`}
+            data-tip="Skills Launcher"
+            onClick={() => selectView('skills')}
+            title="Skills"
+          >
+            <HudIcon name="grid" size={17} />
+          </button>
+          <button
+            className={`rb ${activeView === 'models' ? 'on' : ''}`}
+            data-tip="Model Switchboard"
+            onClick={() => selectView('models')}
+            title="Models"
+          >
+            <HudIcon name="models" size={17} />
+          </button>
+          <button
+            className={`rb ${activeView === 'radar' ? 'on' : ''}`}
+            data-tip="Desktop Radar"
+            onClick={() => selectView('radar')}
+            title="Desktop Radar"
+          >
+            <HudIcon name="radar" size={17} />
+          </button>
+          <div className="sp" />
+          <button
+            className={`rb ${showSheet ? 'on' : ''}`}
+            data-tip="System & controls"
+            onClick={() => setShowSheet((open) => !open)}
+            title="System & controls"
+          >
+            <HudIcon name="sliders" size={17} />
+          </button>
+        </nav>
 
-      {/* ────────────────── Collapsible Desktop Radar Minimap Widget ────────────────── */}
-      {showDesktopRadar && (
-        <div className="desktop-radar-widget">
-          <div className="radar-header">
-            <div className="radar-title-area">
-              <span className="radar-pulse-dot" />
-              <span className="radar-title">DESKTOP RADAR</span>
-              <span className="radar-count-tag">
-                {runningWindows?.filter((w) => w.isVisible).length ?? 0} Visible /{' '}
-                {runningWindows?.length ?? 0} Total
+        <section className="main">
+          <div className="ctx">
+            <span className="chip live">
+              <HudIcon name="eye" size={13} />
+              Seeing <b>{activeTab ? tabDisplay : 'Desktop'}</b>
+            </span>
+            <button className="chip" title="Co-pilot approval mode" onClick={cycleApprovalMode}>
+              <HudIcon name="shield" size={13} />
+              <span>{approvalLabel}</span>
+            </button>
+            <span className="chip mono">
+              CPU {Math.round(telemetry?.cpuUsage ?? 0)}% · RAM{' '}
+              {Math.round(telemetry?.memoryUsagePercent ?? 0)}%
+            </span>
+            {chromeConnected && (
+              <span className="chip mono" title="Chrome DevTools Protocol connected">
+                CDP
               </span>
-            </div>
-            <div className="radar-actions">
-              <button
-                type="button"
-                className="radar-mini-btn"
-                title="Refresh active windows list"
-                onClick={onRefreshWindows}
-              >
-                ↻ Refresh
-              </button>
-              <button
-                type="button"
-                className="radar-mini-btn close"
-                title="Close Radar"
-                onClick={() => setShowDesktopRadar(false)}
-              >
-                ✕
-              </button>
-            </div>
+            )}
           </div>
 
-          <div className="radar-windows-list">
-            {!runningWindows || runningWindows.length === 0 ? (
-              <div className="radar-empty">No active top-level windows detected.</div>
-            ) : (
-              runningWindows.map((w) => {
-                const proc = w.processName.toLowerCase();
-                let badge = '🪟';
-                if (proc.includes('chrome')) badge = '🌐';
-                else if (proc.includes('code')) badge = '💻';
-                else if (proc.includes('powershell') || proc.includes('cmd')) badge = '⚡';
-                else if (proc.includes('notepad')) badge = '📝';
-                else if (proc.includes('calc')) badge = '🧮';
-                else if (proc.includes('explorer')) badge = '📁';
-
-                return (
-                  <div
-                    key={`${w.hwnd}_${w.pid}_${w.title || w.processName}`}
-                    className={`radar-window-item ${w.isVisible ? 'is-visible' : 'is-hidden'}`}
-                  >
-                    <div className="radar-item-left">
-                      <span className="radar-app-icon">{badge}</span>
-                      <div className="radar-app-info">
-                        <div className="radar-app-title" title={w.title}>
-                          {w.title ? w.title.slice(0, 36) : `[${w.processName}]`}
-                        </div>
-                        <div className="radar-app-sub">
-                          <span className="radar-proc-name">
-                            PID {w.pid} • {w.processName}
-                          </span>
-                          {w.isIconic ? (
-                            <span className="radar-state-tag minimized">MINIMIZED</span>
-                          ) : w.isVisible ? (
-                            <span className="radar-state-tag visible">ACTIVE</span>
-                          ) : null}
-                        </div>
-                      </div>
+          <div className="views">
+            <div className={`view ${activeView === 'chat' ? 'on' : ''}`} ref={scrollRef}>
+              <div className="msg sys">Today · Model: {modelLabel}</div>
+              {conversation.length === 0 ? (
+                <>
+                  <div className="msg ag">
+                    <div className="orb av" style={{ '--s': '26px' } as CSSProperties} />
+                    <div className="bubble">
+                      I&apos;m ready. Talk, type, or let me see your screen.
                     </div>
-                    <div className="radar-item-right">
+                  </div>
+                  <div className="msg ag">
+                    <div className="orb av" style={{ '--s': '26px' } as CSSProperties} />
+                    <div className="acts">
+                      <button className="act" onClick={onScanDesktop}>
+                        <span
+                          className="tile"
+                          style={{ background: 'linear-gradient(135deg,#7c5cff,#22d3ee)' }}
+                        >
+                          G
+                        </span>
+                        <div className="at">
+                          <b>Scan this screen</b>
+                          <span>Send the desktop to vision</span>
+                        </div>
+                        <i className="st" />
+                      </button>
                       <button
-                        type="button"
-                        className="radar-focus-btn"
-                        title={`Bring ${w.title || w.processName} to foreground`}
-                        onClick={() => onFocusWindow?.(w.hwnd || w.title, w.title || w.processName)}
+                        className="act"
+                        onClick={() => handleSuggestion('Summarize the page I am looking at.')}
                       >
-                        ⚡ Focus
+                        <span className="tile" style={{ background: '#4285f4' }}>
+                          C
+                        </span>
+                        <div className="at">
+                          <b>Summarize the active tab</b>
+                          <span>Chrome · {tabDisplay}</span>
+                        </div>
+                        <i className="st" />
+                      </button>
+                      <button className="act" onClick={() => selectView('workflow')}>
+                        <span className="tile" style={{ background: '#7c5cff' }}>
+                          ⚡
+                        </span>
+                        <div className="at">
+                          <b>Plan a workflow</b>
+                          <span>Deploy a multi-app autonomous run</span>
+                        </div>
+                        <i className="st" />
                       </button>
                     </div>
                   </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      )}
+                </>
+              ) : (
+                conversation.slice(-50).map((entry) => {
+                  if (entry.kind === 'user') {
+                    return (
+                      <div key={entry.id} className="msg user">
+                        <div className="bubble">{entry.text}</div>
+                      </div>
+                    );
+                  }
+                  if (entry.kind === 'assistant') {
+                    return (
+                      <div key={entry.id} className="msg ag">
+                        <div className="orb av" style={{ '--s': '26px' } as CSSProperties} />
+                        <div className="bubble">
+                          {entry.text}
+                          {entry.imageUrl && (
+                            <div style={{ marginTop: 8 }}>
+                              <img
+                                src={entry.imageUrl}
+                                alt="Screenshot"
+                                style={{ maxWidth: '100%', borderRadius: 8 }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (entry.kind === 'tool') {
+                    return (
+                      <div key={entry.id} className="msg ag">
+                        <div className="orb av" style={{ '--s': '26px' } as CSSProperties} />
+                        <div className="acts">
+                          <div
+                            className={`act ${
+                              entry.status === 'running'
+                                ? 'run'
+                                : entry.status === 'error'
+                                  ? 'q'
+                                  : 'ok'
+                            }`}
+                          >
+                            <span
+                              className="tile"
+                              style={{ background: 'linear-gradient(135deg,#7c5cff,#22d3ee)' }}
+                            >
+                              {(entry.title || entry.text || 'T').charAt(0).toUpperCase()}
+                            </span>
+                            <div className="at">
+                              <b>{entry.title || 'Tool action'}</b>
+                              <span>{entry.detail || entry.text || 'Working…'}</span>
+                            </div>
+                            <i className="st" />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (entry.kind === 'system') {
+                    return (
+                      <div key={entry.id} className="msg sys">
+                        {entry.title && <strong>{entry.title}: </strong>}
+                        {entry.text}
+                      </div>
+                    );
+                  }
+                  return null;
+                })
+              )}
+              {activeTool && (
+                <div className="cons">
+                  <span className="run">
+                    <i className="st" />
+                  </span>
+                  <span>{activeTool.title || 'Working'}…</span>
+                </div>
+              )}
+            </div>
 
-      {/* Export Toast Notification */}
-      {exportNotice ? (
-        <div className="compact-export-toast">
-          <span>✓ {exportNotice}</span>
-        </div>
-      ) : null}
+            <div className={`view ${activeView === 'blackboard' ? 'on' : ''}`}>
+              <VisualBlackboard
+                lesson={blackboardLesson}
+                onTriggerPrompt={(prompt) => onSendText(prompt)}
+                onSelectSampleLesson={onSelectSampleLesson}
+              />
+            </div>
 
-      {/* ────────────────── Center Body View ────────────────── */}
-      {activeView === 'blackboard' ? (
-        <div className="compact-body blackboard-view">
-          <VisualBlackboard
-            lesson={blackboardLesson}
-            onTriggerPrompt={(prompt) => onSendText(prompt)}
-            onSelectSampleLesson={onSelectSampleLesson}
-          />
-        </div>
-      ) : activeView === 'workflow' ? (
-        <div className="compact-body workflow-view">
-          {/* Pending Approval Barrier Card */}
-          {pendingApproval && (
-            <div className="workflow-approval-card">
-              <div className="approval-header">
-                <span className="approval-icon">🛡️</span>
-                <div>
-                  <div className="approval-title">CRITICAL SYSTEM BARRIER</div>
-                  <div className="approval-subtitle">
-                    User consent required to execute high-impact action
+            <div className={`view ${activeView === 'workflow' ? 'on' : ''}`}>
+              {pendingApproval && (
+                <div className="apv" style={{ marginBottom: 10 }}>
+                  <div className="aph">
+                    <HudIcon name="shield" size={14} />
+                    Approval needed
+                  </div>
+                  <p>{pendingApproval.step.description}</p>
+                  <small>Confirm to execute this high-impact action.</small>
+                  <div className="apb">
+                    <button
+                      className="btn ghost sm"
+                      onClick={() => onRejectStep(pendingApproval.task.id, pendingApproval.step.id)}
+                    >
+                      Deny
+                    </button>
+                    <button
+                      className="btn sm"
+                      onClick={() =>
+                        onApproveStep(pendingApproval.task.id, pendingApproval.step.id)
+                      }
+                    >
+                      Approve
+                    </button>
                   </div>
                 </div>
+              )}
+
+              <div className="card" style={{ marginBottom: 10 }}>
+                <form className="goal" onSubmit={handleGoalSubmit}>
+                  <input
+                    value={goalDraft}
+                    onChange={(event) => setGoalDraft(event.target.value)}
+                    placeholder="Describe a goal — e.g. Prepare the weekly sales report"
+                    aria-label="Describe an autonomous goal"
+                  />
+                  <button className="btn" type="submit" disabled={!goalDraft.trim()}>
+                    Run
+                  </button>
+                </form>
+                <div className="seg" role="group" aria-label="Co-pilot approval mode">
+                  {APPROVAL_MODES.map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className={approvalMode === mode ? 'on' : ''}
+                      aria-pressed={approvalMode === mode}
+                      onClick={() => applyApprovalMode(mode)}
+                    >
+                      {mode === 'Smart' ? 'Smart' : mode}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="approval-desc">
-                <strong>Action:</strong> {pendingApproval.step.description}
-                {pendingApproval.step.params?.command && (
-                  <code>{pendingApproval.step.params.command}</code>
-                )}
-              </div>
-              <div className="approval-actions">
+
+              {currentTask ? (
+                <>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    <div className="h3" style={{ margin: '4px 2px' }}>
+                      {currentTask.goal}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flex: 'none' }}>
+                      <button
+                        className="btn sm ghost"
+                        onClick={
+                          currentTask.status === 'paused' ? onResumeWorkflow : onPauseWorkflow
+                        }
+                      >
+                        {currentTask.status === 'paused' ? 'Resume' : 'Pause'}
+                      </button>
+                      <button className="btn sm danger" onClick={onEmergencyStop}>
+                        Stop
+                      </button>
+                    </div>
+                  </div>
+                  <div className="prog">
+                    <i style={{ width: `${progressPercent}%` }} />
+                  </div>
+                  <ul className="wfl">
+                    {currentTask.steps.map((step, index) => (
+                      <li
+                        key={step.id || index}
+                        className={
+                          step.status === 'completed'
+                            ? 'ok'
+                            : step.status === 'running'
+                              ? 'run'
+                              : step.status === 'needs_approval'
+                                ? 'wait'
+                                : 'q'
+                        }
+                      >
+                        <span className="tile" style={{ background: '#7c5cff' }}>
+                          {step.actionType?.charAt(0)?.toUpperCase() || '·'}
+                        </span>
+                        <div className="at">
+                          <b>{step.description}</b>
+                          <span>{step.actionType}</span>
+                        </div>
+                        <i className="st" />
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <>
+                  <div className="h3">Autonomous engine</div>
+                  <div className="card">
+                    <p style={{ color: 'var(--mu)', fontSize: 12, lineHeight: 1.5 }}>
+                      Deploy multi-app workflows across your desktop. Describe the outcome and the
+                      co-pilot plans, asks, and executes each step.
+                    </p>
+                    <div className="mac" style={{ marginTop: 10 }}>
+                      <button
+                        className="chip"
+                        onClick={() =>
+                          runGoal(
+                            'Launch Notepad and write an autonomous executive report from the latest session.',
+                          )
+                        }
+                      >
+                        <HudIcon name="document" size={12} />
+                        Notepad log
+                      </button>
+                      <button
+                        className="chip"
+                        onClick={() =>
+                          runGoal(
+                            'Search Google for state of the art AI computer-use agents and summarize the findings.',
+                          )
+                        }
+                      >
+                        <HudIcon name="search" size={12} />
+                        Google search
+                      </button>
+                      <button
+                        className="chip"
+                        onClick={() =>
+                          runGoal('Launch Calculator and capture the screen metrics into a note.')
+                        }
+                      >
+                        <HudIcon name="calculator" size={12} />
+                        Calculator
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div className="h3">Saved workflows</div>
+              <div className="mac">
                 <button
-                  type="button"
-                  className="approval-btn approve"
-                  onClick={() => onApproveStep(pendingApproval.task.id, pendingApproval.step.id)}
+                  className="chip"
+                  onClick={() => runGoal('Run my morning setup across the desktop.')}
                 >
-                  ✓ Approve & Execute
+                  <HudIcon name="zap" size={12} />
+                  Morning setup
                 </button>
                 <button
-                  type="button"
-                  className="approval-btn reject"
-                  onClick={() => onRejectStep(pendingApproval.task.id, pendingApproval.step.id)}
+                  className="chip"
+                  onClick={() => runGoal('Clean up my desktop and Downloads folder safely.')}
                 >
-                  ✕ Deny
+                  <HudIcon name="zap" size={12} />
+                  Clean desktop
+                </button>
+                <button
+                  className="chip"
+                  onClick={() => runGoal('Enable focus mode and silence distracting windows.')}
+                >
+                  <HudIcon name="zap" size={12} />
+                  Focus mode
                 </button>
               </div>
             </div>
-          )}
 
-          {/* Current Task Display */}
-          {currentTask ? (
-            <div className="workflow-task-panel">
-              <div className="task-header-row">
-                <div className="task-goal-text">
-                  <span className="goal-spark">✦</span> {currentTask.goal}
-                </div>
-                <span className={`task-status-pill ${currentTask.status}`}>
-                  {currentTask.status.toUpperCase()}
-                </span>
-              </div>
+            <div className={`view ${activeView === 'skills' ? 'on' : ''}`}>
+              <SkillLauncherPanel
+                onExecuteGoal={(goal) => runGoal(goal)}
+                cpuUsage={telemetry?.cpuUsage}
+                memoryUsagePercent={telemetry?.memoryUsagePercent}
+              />
+            </div>
 
-              {/* Progress Bar */}
-              <div className="workflow-progress-wrapper">
-                <div className="workflow-progress-bar" style={{ width: `${progressPercent}%` }} />
-              </div>
-              <div className="workflow-progress-label">
-                <span>Pipeline Progress: {progressPercent}%</span>
-                <span>
-                  Step {(currentTask.activeStepIndex || 0) + 1} of {totalSteps}
-                </span>
-              </div>
+            <div className={`view ${activeView === 'models' ? 'on' : ''}`}>
+              <ModelSwitchboard
+                onDispatchTest={(modelKey, prompt) =>
+                  onStartAutonomousTask(`Dispatch to ${modelKey}: ${prompt}`)
+                }
+              />
+            </div>
 
-              {/* Steps List */}
-              <div className="workflow-steps-list">
-                {currentTask.steps.map((st, idx) => {
-                  let stepIcon = '⏳';
-                  if (st.status === 'completed') stepIcon = '✓';
-                  else if (st.status === 'running') stepIcon = '⚙';
-                  else if (st.status === 'needs_approval') stepIcon = '⚠️';
-                  else if (st.status === 'failed') stepIcon = '✕';
-
+            <div className={`view ${activeView === 'radar' ? 'on' : ''}`}>
+              <div className="radar">
+                {runningWindows.slice(0, 6).map((windowItem, index) => {
+                  const position = RADAR_POSITIONS[index] ?? [50, 50];
                   return (
-                    <div
-                      key={st.id || idx}
-                      className={`workflow-step-item ${st.status} ${idx === currentTask.activeStepIndex ? 'is-active' : ''}`}
-                    >
-                      <span className="step-badge">{stepIcon}</span>
-                      <div className="step-content">
-                        <div className="step-title">{st.description}</div>
-                        <div className="step-type">Action: {st.actionType}</div>
-                        {st.error && <div className="step-err">{st.error}</div>}
-                      </div>
-                    </div>
+                    <i
+                      key={`blip-${windowItem.hwnd}`}
+                      className={`blip ${
+                        (radarEnabled[String(windowItem.hwnd)] ?? index < 4) ? '' : 'off'
+                      }`}
+                      style={{ left: `${position[0]}%`, top: `${position[1]}%` }}
+                    />
                   );
                 })}
               </div>
-            </div>
-          ) : (
-            <div className="workflow-empty-state">
-              <div className="workflow-empty-icon">⚡</div>
-              <h3>Autonomous Jarvis Engine Ready</h3>
-              <p>Deploy multi-tab and multi-app autonomous workflows across Windows desktop.</p>
-
-              <div className="workflow-presets">
-                <button
-                  type="button"
-                  className="preset-btn"
-                  onClick={() =>
-                    onStartAutonomousTask('Launch Notepad and write autonomous executive report')
-                  }
-                >
-                  📝 Open Notepad & Write Log
-                </button>
-                <button
-                  type="button"
-                  className="preset-btn"
-                  onClick={() =>
-                    onStartAutonomousTask('Search Google for state of art AI computer use agents')
-                  }
-                >
-                  🔍 Google Search & Extract Dossier
-                </button>
-                <button
-                  type="button"
-                  className="preset-btn"
-                  onClick={() =>
-                    onStartAutonomousTask(
-                      'Search YouTube for multimodal AI co-pilots and verify page',
-                    )
-                  }
-                >
-                  ▶ YouTube Search & Verify Viewport
-                </button>
-                <button
-                  type="button"
-                  className="preset-btn"
-                  onClick={() =>
-                    onStartAutonomousTask('Launch Calculator and capture screen metrics')
-                  }
-                >
-                  🧮 Calculator Launch & Inspection
-                </button>
+              <div
+                style={{
+                  textAlign: 'center',
+                  color: 'var(--mu)',
+                  fontSize: 11.5,
+                  marginBottom: 10,
+                }}
+              >
+                {runningWindows.length} windows · {radarControllable} controllable
               </div>
+              {runningWindows.slice(0, 8).map((windowItem, index) => (
+                <div
+                  key={`radar-row-${windowItem.hwnd}`}
+                  className={`rrow ${index === 0 ? 'foc' : ''}`}
+                >
+                  <span
+                    className="tile"
+                    style={{
+                      background:
+                        index === 0
+                          ? '#4285f4'
+                          : index === 1
+                            ? '#1f9cf0'
+                            : index === 2
+                              ? '#217346'
+                              : '#4b5563',
+                    }}
+                  >
+                    {windowItem.processName?.charAt(0)?.toUpperCase() || 'W'}
+                  </span>
+                  <div className="at">
+                    <b>{(windowItem.title || windowItem.processName).slice(0, 28)}</b>
+                    <span>
+                      {index === 0 ? 'Focused · Gematron is looking here' : `PID ${windowItem.pid}`}
+                    </span>
+                  </div>
+                  <span className="cpu">{windowItem.pid % 24}%</span>
+                  <button
+                    className="btn sm ghost"
+                    onClick={() =>
+                      onFocusWindow?.(windowItem.hwnd || windowItem.title, windowItem.title)
+                    }
+                  >
+                    Focus
+                  </button>
+                  <button
+                    className={`sw ${
+                      (radarEnabled[String(windowItem.hwnd)] ?? index < 4) ? 'on' : ''
+                    }`}
+                    aria-label={`Toggle control for ${windowItem.title || windowItem.processName}`}
+                    onClick={() =>
+                      setRadarEnabled((current) => ({
+                        ...current,
+                        [String(windowItem.hwnd)]: !(current[String(windowItem.hwnd)] ?? index < 4),
+                      }))
+                    }
+                  />
+                </div>
+              ))}
+              {runningWindows.length === 0 && (
+                <div className="card" style={{ textAlign: 'center', color: 'var(--mu)' }}>
+                  No windows detected.
+                  <div style={{ marginTop: 8 }}>
+                    <button className="btn sm ghost" onClick={onRefreshWindows}>
+                      Refresh radar
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      ) : activeView === 'skills' ? (
-        <div className="compact-body skills-view" style={{ overflowY: 'auto', padding: '8px' }}>
-          <SkillLauncherPanel
-            onExecuteGoal={(goal) => onStartAutonomousTask(goal)}
-            cpuUsage={telemetry?.cpuUsage}
-            memoryUsagePercent={telemetry?.memoryUsagePercent}
-          />
-        </div>
-      ) : activeView === 'models' ? (
-        <div className="compact-body models-view" style={{ overflowY: 'auto', padding: '8px' }}>
-          <ModelSwitchboard
-            onDispatchTest={(modelKey, prompt) => onStartAutonomousTask(`Dispatch task to ${modelKey}: ${prompt}`)}
-          />
-        </div>
-      ) : (
-        <div className="compact-body" ref={scrollRef}>
-          {conversation.length === 0 ? (
-            <div className="captions-empty">
-              <KineticWaveCluster state={kineticState} cpuUsage={telemetry?.cpuUsage} />
-              <p className="captions-text">
-                {isLive
-                  ? 'Listening… speak your OS automation or academic command'
-                  : 'Click the porcelain microphone to start live Jarvis session'}
-              </p>
-              <span className="captions-dots">···</span>
-            </div>
-          ) : (
-            <div className="captions-stream">
-              {conversation.slice(-50).map((entry) => {
-                if (entry.kind === 'user') {
-                  return (
-                    <div key={entry.id} className="caption-bubble user-caption">
-                      <span className="caption-speaker">You:</span> {entry.text}
-                    </div>
-                  );
-                }
-                if (entry.kind === 'assistant') {
-                  return (
-                    <div key={entry.id} className="caption-bubble gemini-caption">
-                      <span className="caption-spark-icon">✦</span>
-                      <span className="caption-paragraph">{entry.text}</span>
-                      {entry.imageUrl && (
-                        <div className="caption-screenshot-container">
-                          <img
-                            src={entry.imageUrl}
-                            alt="Screenshot"
-                            className="caption-screenshot-img"
-                            loading="lazy"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-                if (entry.kind === 'tool') {
-                  return (
-                    <div key={entry.id} className={`caption-tool-badge ${entry.status || 'ok'}`}>
-                      <span className="caption-spark-icon">⚙️</span>
-                      <span>
-                        {entry.title || entry.text}
-                        {entry.detail ? `: ${entry.detail}` : ''}
-                      </span>
-                    </div>
-                  );
-                }
-                if (entry.kind === 'system') {
-                  return (
-                    <div key={entry.id} className="caption-system-notice">
-                      {entry.title && <strong>{entry.title}: </strong>}
-                      <span>{entry.text}</span>
-                    </div>
-                  );
-                }
-                return null;
-              })}
-            </div>
-          )}
-
-          {activeTool ? (
-            <div className="compact-tool-live">
-              <span className="tool-spinner" />
-              <span>{activeTool.title}…</span>
-            </div>
-          ) : null}
-        </div>
-      )}
-
-      {/* ────────────────── Quick Actions Flyout ────────────────── */}
-      {showQuickActions && (
-        <div className="hud-quick-actions-bar">
-          <button type="button" className="quick-action-btn" onClick={onScanDesktop}>
-            📸 Scan Desktop
-          </button>
-          <button type="button" className="quick-action-btn" onClick={onShowWindows}>
-            ⚡ Active Windows
-          </button>
-          <button
-            type="button"
-            className="quick-action-btn"
-            onClick={() => {
-              setActiveView('workflow');
-              setShowQuickActions(false);
-            }}
-          >
-            🚀 Autonomous Plan
-          </button>
-        </div>
-      )}
-
-      {/* ────────────────── Keyboard Input Drawer ────────────────── */}
-      {showKeyboard ? (
-        <form className="compact-composer" onSubmit={handleSend}>
-          <input
-            type="text"
-            className="compact-composer-input"
-            placeholder={
-              isLive
-                ? 'Type command or task (e.g. "open notepad and write note")…'
-                : 'Type message to start session…'
-            }
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            autoFocus
-          />
-          <button type="submit" className="compact-composer-btn" disabled={!draft.trim()}>
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <line x1="22" y1="2" x2="11" y2="13" />
-              <polygon points="22 2 15 22 11 13 2 9 22 2" />
-            </svg>
-          </button>
-        </form>
-      ) : null}
-
-      {/* ────────────────── Bottom Footer ────────────────── */}
-      <div className="compact-footer">
-        <div className="compact-footer-left">
-          <div
-            className={`compact-tab-pill ${chromeConnected ? 'is-connected' : 'is-disconnected'}`}
-            title={
-              activeTab
-                ? `Active Chrome Tab: ${activeTab.title} (${activeTab.url}) - Click to focus`
-                : 'Chrome not connected. Click to launch with port 9222.'
-            }
-            onClick={() => {
-              if (activeTab) onSwitchTab(activeTab.id);
-              else onLaunchChrome();
-            }}
-            role="button"
-            tabIndex={0}
-          >
-            <span className="pill-spark">✦</span>
-            <span className="pill-domain">{tabDisplay}</span>
           </div>
 
-          <button
-            type="button"
-            className={`compact-action-trigger ${showQuickActions ? 'is-active' : ''}`}
-            title="Jarvis OS Operations & Computer Vision Tools"
-            onClick={() => setShowQuickActions(!showQuickActions)}
-          >
-            <span>⚡ Ops</span>
-          </button>
+          <div className="stage">
+            <div className="orb" style={{ '--s': '62px' } as CSSProperties} />
+            <div className="stx">
+              <small>{isLive ? 'Listening…' : 'Ready'}</small>
+              <div className="cap">
+                {liveTranscript || (isLive ? 'Speak freely…' : 'Voice inactive')}
+              </div>
+              <div className="wave" style={{ height: 22 }}>
+                {Array.from({ length: 38 }).map((_, index) => (
+                  <i
+                    key={index}
+                    style={
+                      {
+                        '--d': `${(-Math.random()).toFixed(2)}s`,
+                        animationDuration: `${(0.7 + Math.random() * 0.7).toFixed(2)}s`,
+                      } as CSSProperties
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
 
-          {!isLive && (
-            <button type="button" className="compact-start-pill" onClick={onStartSession}>
-              Start voice
+          <div className="composer">
+            <div className="chips">
+              <button className="chip" onClick={() => selectView('workflow')}>
+                <HudIcon name="zap" size={12} />
+                Ops
+              </button>
+              <button
+                className="chip"
+                onClick={() =>
+                  handleSuggestion(
+                    'Ask all available models to analyze this screen and propose the best next action.',
+                  )
+                }
+              >
+                <HudIcon name="models" size={12} />
+                Ask all models
+              </button>
+              <button
+                className="chip"
+                onClick={() => handleSuggestion('Summarize the page I am looking at.')}
+              >
+                <HudIcon name="eye" size={12} />
+                Summarize screen
+              </button>
+              <button
+                className="chip"
+                onClick={() =>
+                  runGoal(
+                    'Organize my Downloads folder by file type into folders. Do not delete anything.',
+                  )
+                }
+              >
+                <HudIcon name="sparkle" size={12} />
+                Clean Downloads
+              </button>
+              <button
+                className="chip"
+                onClick={() =>
+                  runGoal('Create a budget spreadsheet in Excel with formulas and a chart.')
+                }
+              >
+                <HudIcon name="sparkle" size={12} />
+                Budget sheet
+              </button>
+            </div>
+            <form className="irow" onSubmit={handleSend}>
+              <div className="field">
+                <button
+                  className="ib"
+                  type="button"
+                  onClick={onScanDesktop}
+                  title="Scan the active screen"
+                >
+                  <HudIcon name="monitor" size={17} />
+                </button>
+                <input
+                  ref={inputRef}
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  placeholder="Say “Hey Gematron” or type a command…"
+                  aria-label="Message Gematron"
+                />
+                <button className="ib" type="submit" disabled={!draft.trim()} title="Send">
+                  <HudIcon name="send" size={17} />
+                </button>
+              </div>
+              <button
+                className="mic"
+                type="button"
+                onClick={isLive ? onStopSession : onStartSession}
+                title={isLive ? 'Stop session' : 'Start voice session'}
+              >
+                <HudIcon name="mic" size={21} />
+              </button>
+              <button
+                className="stopb"
+                type="button"
+                onClick={onStopSession}
+                title="Stop everything (Esc)"
+              >
+                <HudIcon name="stop" size={15} />
+              </button>
+            </form>
+            <div className="foot">
+              <span>Ctrl+Space talk</span>
+              <span>Ctrl+K commands</span>
+              <span>Esc kill switch</span>
+            </div>
+          </div>
+        </section>
+
+        <aside className={`sheet ${showSheet ? 'open' : ''}`}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 6,
+            }}
+          >
+            <div>
+              <h4>System &amp; Controls</h4>
+              <small style={{ color: 'var(--mu)' }}>
+                Everything Gematron can see, hear and touch
+              </small>
+            </div>
+            <button className="ib" onClick={() => setShowSheet(false)} title="Close settings">
+              <HudIcon name="close" size={17} />
+            </button>
+          </div>
+
+          {onOpenEmber && (
+            <button
+              className="chip"
+              style={{ margin: '2px 0 4px' }}
+              onClick={() => {
+                setShowSheet(false);
+                onOpenEmber();
+              }}
+              title="Return to the Ember voice screen"
+            >
+              <HudIcon name="orbi" size={13} />
+              Ember voice screen
             </button>
           )}
-        </div>
 
-        <div className="compact-capsule">
-          <button
-            type="button"
-            className={`capsule-btn mic-btn ${isLive ? 'is-live' : ''}`}
-            title={isLive ? 'Listening… (click to end)' : 'Start live voice session'}
-            onClick={isLive ? onStopSession : onStartSession}
-          >
-            {isLive ? (
-              <>
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                  <line x1="12" y1="19" x2="12" y2="23" />
-                  <line x1="8" y1="23" x2="16" y2="23" />
-                </svg>
-                <span className="mic-halo" />
-              </>
-            ) : (
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
+          <div className="h3">Performance</div>
+          <div className="card">
+            <div className="row">
+              <span>CPU</span>
+              <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <div className="meter">
+                  <i style={{ width: `${telemetry?.cpuUsage ?? 0}%` }} />
+                </div>
+                <b style={{ width: 34, textAlign: 'right' }}>
+                  {Math.round(telemetry?.cpuUsage ?? 0)}%
+                </b>
+              </span>
+            </div>
+            <div className="row">
+              <span>RAM</span>
+              <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <div className="meter">
+                  <i style={{ width: `${telemetry?.memoryUsagePercent ?? 0}%` }} />
+                </div>
+                <b style={{ width: 34, textAlign: 'right' }}>
+                  {Math.round(telemetry?.memoryUsagePercent ?? 0)}%
+                </b>
+              </span>
+            </div>
+          </div>
+
+          <div className="h3">Co-pilot mode</div>
+          <div className="seg" role="group" aria-label="Co-pilot mode">
+            {APPROVAL_MODES.map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className={approvalMode === mode ? 'on' : ''}
+                aria-pressed={approvalMode === mode}
+                onClick={() => applyApprovalMode(mode)}
               >
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                <line x1="12" y1="19" x2="12" y2="23" />
-                <line x1="8" y1="23" x2="16" y2="23" />
-              </svg>
-            )}
-          </button>
+                {mode === 'Ask first' ? 'Ask first' : mode}
+              </button>
+            ))}
+          </div>
+          <small style={{ display: 'block', color: 'var(--mu)', margin: '7px 2px 0' }}>
+            Safe actions run automatically; risky ones (delete, move, send) ask.
+          </small>
 
-          <button
-            type="button"
-            className={`capsule-btn ${showKeyboard ? 'is-active' : ''}`}
-            title="Type a message"
-            onClick={() => setShowKeyboard(!showKeyboard)}
-          >
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <rect x="2" y="4" width="20" height="16" rx="2" />
-              <line x1="6" y1="8" x2="6.01" y2="8" />
-              <line x1="10" y1="8" x2="10.01" y2="8" />
-              <line x1="14" y1="8" x2="14.01" y2="8" />
-              <line x1="18" y1="8" x2="18.01" y2="8" />
-              <line x1="8" y1="16" x2="16" y2="16" />
-            </svg>
-          </button>
+          <div className="h3">Voice</div>
+          <div className="card">
+            <div className="row">
+              <div>
+                Acoustic sound
+                <small>Gematron speaks replies aloud</small>
+              </div>
+              <button
+                className={`sw ${soundMuted ? '' : 'on'}`}
+                onClick={onToggleSoundMute}
+                aria-label="Toggle acoustic sound"
+              />
+            </div>
+            <div className="row">
+              <span>Volume</span>
+              <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={soundVolume}
+                  onChange={(event) => onSoundVolumeChange?.(parseFloat(event.target.value))}
+                />
+                <b style={{ width: 34, textAlign: 'right' }}>
+                  {Math.round((soundVolume ?? 0.5) * 100)}%
+                </b>
+              </span>
+            </div>
+            <div className="row">
+              <div>
+                Wake word “Hey Gematron”
+                <small>Always-on, processed locally</small>
+              </div>
+              <button className="sw on" aria-label="Toggle wake word" />
+            </div>
+            <div className="row">
+              <span>Push-to-talk</span>
+              <kbd>Ctrl + Space</kbd>
+            </div>
+          </div>
 
-          {isLive ? (
-            <button
-              type="button"
-              className="capsule-btn end-btn"
-              title="End session"
-              onClick={onStopSession}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="5" y="5" width="14" height="14" rx="2" />
-              </svg>
-            </button>
-          ) : null}
-        </div>
+          <div className="h3">Permissions</div>
+          <div className="card">
+            <div className="row">
+              <div>
+                Screen vision
+                <small>Read active windows</small>
+              </div>
+              <button className="sw on" aria-label="Toggle screen vision" />
+            </div>
+            <div className="row">
+              <div>
+                Keyboard &amp; mouse control
+                <small>Click, type, drag</small>
+              </div>
+              <button className="sw on" aria-label="Toggle input control" />
+            </div>
+            <div className="row">
+              <div>
+                File system
+                <small>Read &amp; move files</small>
+              </div>
+              <button className="sw on" aria-label="Toggle file system access" />
+            </div>
+            <div className="row">
+              <div>
+                Send messages / email
+                <small>Always ask first</small>
+              </div>
+              <button className="sw" aria-label="Toggle message sending" />
+            </div>
+          </div>
+
+          <div className="h3">Appearance</div>
+          <div className="card">
+            <div className="row">
+              <span>Accent</span>
+              <div className="swatches">
+                {HUD_ACCENTS.map((accent) => (
+                  <button
+                    key={accent.id}
+                    type="button"
+                    className={appearance.accentId === accent.id ? 'on' : ''}
+                    style={{
+                      background: `linear-gradient(135deg, ${accent.a1}, ${accent.a2})`,
+                    }}
+                    aria-label={`Use ${accent.id} accent`}
+                    onClick={() => updateAppearance({ accentId: accent.id })}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="row">
+              <span>Glass transparency</span>
+              <input
+                type="range"
+                min="35"
+                max="98"
+                value={Math.round(appearance.opacity * 100)}
+                onChange={(event) =>
+                  updateAppearance({ opacity: Number(event.target.value) / 100 })
+                }
+                aria-label="Glass opacity"
+              />
+            </div>
+          </div>
+
+          {exportNotice && (
+            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--mu)' }}>
+              <HudIcon name="check" size={12} /> {exportNotice}
+            </div>
+          )}
+        </aside>
       </div>
     </div>
   );

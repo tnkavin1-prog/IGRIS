@@ -38,6 +38,9 @@ const api = {
     close: (): Promise<void> => ipcRenderer.invoke('window:close'),
     togglePin: (): Promise<boolean> => ipcRenderer.invoke('window:toggle-pin'),
     isPinned: (): Promise<boolean> => ipcRenderer.invoke('window:is-pinned'),
+    setDisplayMode: (mode: 'orb' | 'bar' | 'full' | 'console'): Promise<string> =>
+      ipcRenderer.invoke('window:set-display-mode', mode),
+    getDisplayMode: (): Promise<string> => ipcRenderer.invoke('window:get-display-mode'),
     onMaximizedChanged: (callback: (isMaximized: boolean) => void): (() => void) => {
       const handler = (_: unknown, isMaximized: boolean) => callback(isMaximized);
       ipcRenderer.on('window:maximized-changed', handler);

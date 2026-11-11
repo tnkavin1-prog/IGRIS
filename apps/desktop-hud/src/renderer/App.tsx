@@ -6,6 +6,7 @@ import type {
   ConversationMessage,
   CrosshairTarget,
   HUDSettings,
+  HudDisplayMode,
   LiveHUDStatus,
   NeuralTelemetry,
   VisualBlackboardLesson,
@@ -13,8 +14,10 @@ import type {
   WorkflowStep,
 } from '../main/types.js';
 import { CompactHUD } from './CompactHUD.js';
+import { EmberHUD } from './EmberHUD.js';
 import { AudioController } from './audio-controller.js';
 import { SoundEffectsEngine } from './sound-effects.js';
+import { loadAppearance, saveAppearance, type HudAppearance } from './appearance.js';
 import './types.js';
 
 export function App() {
@@ -35,9 +38,20 @@ export function App() {
   const [isPinned, setIsPinned] = useState(true);
   const [isMaximized, setIsMaximized] = useState(false);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const [displayMode, setDisplayMode] = useState<HudDisplayMode>(() => {
+    try {
+      const saved = localStorage.getItem('lumen.displayMode');
+      return saved === 'full' || saved === 'console' || saved === 'orb' || saved === 'bar'
+        ? saved
+        : 'bar';
+    } catch {
+      return 'bar';
+    }
+  });
   const [runningWindows, setRunningWindows] = useState<WindowItem[]>([]);
   const [soundMuted, setSoundMuted] = useState(false);
   const [soundVolume, setSoundVolume] = useState(0.5);
+  const [appearance, setAppearance] = useState<HudAppearance>(() => loadAppearance());
 
   // Autonomous Jarvis Agent state
   const [currentTask, setCurrentTask] = useState<AgenticTask | null>(null);
@@ -59,6 +73,47 @@ export function App() {
   const bboxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const escapeCountRef = useRef(0);
   const lastEscapeTimeRef = useRef(0);
+  const displayModeRef = useRef(displayMode);
+  const statusRef = useRef(status);
+
+  // Prevent renderer crashes from unhandled promise rejections and errors.
+  // Chrome/CDP being unavailable must never kill the HUD window.
+  useEffect(() => {
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      event.preventDefault();
+      console.warn('[HUD] Unhandled promise rejection:', event.reason);
+    };
+    const handleError = (event: ErrorEvent) => {
+      console.warn('[HUD] Global error:', event.error?.message || event.message);
+      // Don't preventDefault — let the browser handle it, but log it.
+    };
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    window.addEventListener('error', handleError);
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+      window.removeEventListener('error', handleError);
+    };
+  }, []);
+
+  useEffect(() => {
+    saveAppearance(appearance);
+  }, [appearance]);
+
+  useEffect(() => {
+    displayModeRef.current = displayMode;
+  }, [displayMode]);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+  useEffect(() => {
+    try {
+      localStorage.setItem('lumen.displayMode', displayMode);
+    } catch {
+      /* ignore */
+    }
+    const api = window.geminiHUD?.windowControl;
+    if (api) void api.setDisplayMode(displayMode).catch(() => undefined);
+  }, [displayMode]);
 
   useEffect(() => {
     // 1. Initialize Audio Controller & Sound Effects Engine
@@ -154,6 +209,9 @@ export function App() {
           soundEngine.play('system_online');
         } else if (newStatus === 'idle' || newStatus === 'closed' || newStatus === 'error') {
           audioCtrl.stopCapture();
+          // Drop any audio that was already queued so the agent goes fully
+          // silent the moment the session ends or the window is closed.
+          audioCtrl.clearPlayback();
         }
       }),
     );
@@ -323,6 +381,22 @@ export function App() {
       }
 
       if (e.key === 'Escape') {
+        // In compact modes a single Escape cancels the live session.
+        if (displayModeRef.current !== 'full') {
+          if (
+            statusRef.current === 'connecting' ||
+            statusRef.current === 'listening' ||
+            statusRef.current === 'speaking' ||
+            statusRef.current === 'thinking'
+          ) {
+            e.preventDefault();
+            handleStopSession();
+            setDisplayMode('bar');
+            escapeCountRef.current = 0;
+            return;
+          }
+        }
+
         const now = Date.now();
         if (now - lastEscapeTimeRef.current < 800) {
           escapeCountRef.current += 1;
@@ -356,6 +430,22 @@ export function App() {
     };
   }, []);
 
+  // Auto-expand to the console when an approval is required (once per approval).
+  const lastApprovalKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pendingApproval) {
+      lastApprovalKeyRef.current = null;
+      return;
+    }
+    const key = `${pendingApproval.task.id}:${pendingApproval.step.id}`;
+    if (lastApprovalKeyRef.current === key) return;
+    lastApprovalKeyRef.current = key;
+    setDisplayMode('console');
+  }, [pendingApproval]);
+
+  const handleCollapseToBar = () => setDisplayMode('bar');
+  const handleCollapseToOrb = () => setDisplayMode('orb');
+
   const handleStartSession = async () => {
     if (!window.geminiHUD) return;
     void soundEngineRef.current?.unlock();
@@ -372,6 +462,13 @@ export function App() {
     audioControllerRef.current?.stopCapture();
     audioControllerRef.current?.clearPlayback();
     setStatus('idle');
+  };
+
+  // Closing the floating window must end the voice session too: otherwise the
+  // agent keeps listening and replying from the tray after the UI disappears.
+  const handleClose = () => {
+    handleStopSession();
+    window.geminiHUD?.windowControl.close();
   };
 
   const handleSendText = (text: string) => {
@@ -424,7 +521,7 @@ export function App() {
     });
     if (res.ok) {
       setExportNotice(
-        'Autonomous audit dossier & notes saved to E:\\Gemetron\\notes\\ (.md & .html)',
+        'Autonomous audit dossier & notes saved to E:\\Gematron\\notes\\ (.md & .html)',
       );
     } else {
       setExportNotice('Export error: ' + (res.error || 'unknown'));
@@ -505,6 +602,11 @@ export function App() {
     void window.geminiHUD?.gemini.updateSettings({ soundVolume: vol });
   };
 
+  const handleAutoApproveChange = (enabled: boolean) => {
+    setSettings((prev) => ({ ...prev, autoApprove: enabled }));
+    void window.geminiHUD?.gemini.updateSettings({ autoApprove: enabled });
+  };
+
   const handleRefreshWindows = async () => {
     if (!window.geminiHUD) return;
     try {
@@ -534,52 +636,84 @@ export function App() {
     const task = await window.geminiHUD.workflow.createTask(goal);
     await window.geminiHUD.workflow.startTask(task.id);
     setCurrentTask(task);
-    setExportNotice(`Jarvis Pipeline Launched: ${goal}`);
+    setExportNotice(`Pipeline Launched: ${goal}`);
     setTimeout(() => setExportNotice(null), 3000);
   };
 
-  return (
-    <CompactHUD
-      status={status}
-      conversation={conversation}
-      blackboardLesson={blackboardLesson}
-      activeTab={activeTab}
-      chromeConnected={chromeConnected}
-      settings={settings}
-      isPinned={isPinned}
-      isMaximized={isMaximized}
-      currentTask={currentTask}
-      pendingApproval={pendingApproval}
-      crosshair={crosshair}
-      boundingBox={boundingBox}
-      telemetry={telemetry}
-      onTogglePin={handleTogglePin}
-      onToggleMaximize={handleToggleMaximize}
-      onMinimize={() => window.geminiHUD?.windowControl.minimize()}
-      onClose={() => window.geminiHUD?.windowControl.close()}
-      onStartSession={handleStartSession}
-      onStopSession={handleStopSession}
-      onSendText={handleSendText}
-      onSelectSampleLesson={(sample) => setBlackboardLesson(sample)}
-      onExportSession={handleExportSession}
-      onSwitchTab={(tabId) => window.geminiHUD?.cdp.switchTab(tabId)}
-      onLaunchChrome={() => window.geminiHUD?.cdp.launchChrome()}
-      onApproveStep={handleApproveStep}
-      onRejectStep={handleRejectStep}
-      onScanDesktop={handleScanDesktop}
-      onShowWindows={handleShowWindows}
-      onStartAutonomousTask={handleStartAutonomousTask}
-      onEmergencyStop={() => handleEmergencyStop('HUD emergency button pressed')}
-      onPauseWorkflow={handlePauseWorkflow}
-      onResumeWorkflow={handleResumeWorkflow}
-      exportNotice={exportNotice}
-      runningWindows={runningWindows}
-      onFocusWindow={handleFocusWindow}
-      onRefreshWindows={handleRefreshWindows}
-      soundMuted={soundMuted}
-      soundVolume={soundVolume}
-      onToggleSoundMute={handleToggleSoundMute}
-      onSoundVolumeChange={handleSoundVolumeChange}
-    />
-  );
+  if (displayMode === 'full') {
+    return (
+      <EmberHUD
+        status={status}
+        conversation={conversation}
+        settings={settings}
+        soundMuted={soundMuted}
+        soundVolume={soundVolume}
+        onMinimize={() => window.geminiHUD?.windowControl.minimize()}
+        onClose={handleClose}
+        onStartSession={handleStartSession}
+        onStopSession={handleStopSession}
+        onToggleSoundMute={handleToggleSoundMute}
+        onSoundVolumeChange={handleSoundVolumeChange}
+        onAutoApproveChange={handleAutoApproveChange}
+        onCollapseToBar={handleCollapseToBar}
+        onCollapseToOrb={handleCollapseToOrb}
+        onOpenConsole={() => setDisplayMode('console')}
+      />
+    );
+  }
+
+  if (displayMode === 'console') {
+    return (
+      <CompactHUD
+        status={status}
+        conversation={conversation}
+        blackboardLesson={blackboardLesson}
+        activeTab={activeTab}
+        chromeConnected={chromeConnected}
+        settings={settings}
+        isPinned={isPinned}
+        isMaximized={isMaximized}
+        currentTask={currentTask}
+        pendingApproval={pendingApproval}
+        crosshair={crosshair}
+        boundingBox={boundingBox}
+        telemetry={telemetry}
+        onTogglePin={handleTogglePin}
+        onToggleMaximize={handleToggleMaximize}
+        onMinimize={() => window.geminiHUD?.windowControl.minimize()}
+        onClose={handleClose}
+        onCollapseToBar={handleCollapseToBar}
+        onCollapseToOrb={handleCollapseToOrb}
+        onOpenEmber={() => setDisplayMode('full')}
+        onStartSession={handleStartSession}
+        onStopSession={handleStopSession}
+        onSendText={handleSendText}
+        onSelectSampleLesson={(sample) => setBlackboardLesson(sample)}
+        onExportSession={handleExportSession}
+        onSwitchTab={(tabId) => window.geminiHUD?.cdp.switchTab(tabId)}
+        onLaunchChrome={() => window.geminiHUD?.cdp.launchChrome()}
+        onApproveStep={handleApproveStep}
+        onRejectStep={handleRejectStep}
+        onScanDesktop={handleScanDesktop}
+        onShowWindows={handleShowWindows}
+        onStartAutonomousTask={handleStartAutonomousTask}
+        onEmergencyStop={() => handleEmergencyStop('HUD emergency button pressed')}
+        onPauseWorkflow={handlePauseWorkflow}
+        onResumeWorkflow={handleResumeWorkflow}
+        exportNotice={exportNotice}
+        runningWindows={runningWindows}
+        onFocusWindow={handleFocusWindow}
+        onRefreshWindows={handleRefreshWindows}
+        soundMuted={soundMuted}
+        soundVolume={soundVolume}
+        onToggleSoundMute={handleToggleSoundMute}
+        onSoundVolumeChange={handleSoundVolumeChange}
+        appearance={appearance}
+        onAppearanceChange={setAppearance}
+        onAutoApproveChange={handleAutoApproveChange}
+      />
+    );
+  }
+
+  return null;
 }

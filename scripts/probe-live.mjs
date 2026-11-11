@@ -7,7 +7,6 @@
  *
  * Run: node scripts/probe-live.mjs
  */
-/* eslint-disable @typescript-eslint/no-unused-vars -- legacy probes kept for manual re-verification */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

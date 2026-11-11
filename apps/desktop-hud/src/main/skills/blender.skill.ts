@@ -2,11 +2,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync, promises as fs } from 'node:fs';
 import { join } from 'node:path';
-import type {
-  ApplicationSkill,
-  SkillActionDefinition,
-  SkillResult,
-} from '../skill-framework.js';
+import type { ApplicationSkill, SkillActionDefinition, SkillResult } from '../skill-framework.js';
 
 const execAsync = promisify(exec);
 
@@ -68,16 +64,36 @@ export class BlenderSkill implements ApplicationSkill {
         name: 'runPython',
         description: 'Executes Python code in a headless Blender session.',
         parameters: [
-          { name: 'code', type: 'string', description: 'Python code string to execute', required: true },
-          { name: 'blendFile', type: 'string', description: 'Optional .blend file path to open', required: false },
+          {
+            name: 'code',
+            type: 'string',
+            description: 'Python code string to execute',
+            required: true,
+          },
+          {
+            name: 'blendFile',
+            type: 'string',
+            description: 'Optional .blend file path to open',
+            required: false,
+          },
         ],
       },
       {
         name: 'renderScene',
         description: 'Renders a 3D scene from a .blend file to an image.',
         parameters: [
-          { name: 'blendFile', type: 'string', description: 'Source .blend file path', required: true },
-          { name: 'outputImg', type: 'string', description: 'Target output image path', required: true },
+          {
+            name: 'blendFile',
+            type: 'string',
+            description: 'Source .blend file path',
+            required: true,
+          },
+          {
+            name: 'outputImg',
+            type: 'string',
+            description: 'Target output image path',
+            required: true,
+          },
         ],
       },
     ];
@@ -87,13 +103,19 @@ export class BlenderSkill implements ApplicationSkill {
     switch (action) {
       case 'checkBlender': {
         if (this.mockMode) {
-          return { success: true, data: { installed: true, version: '4.2.0 (mock)', path: 'C:\\Blender\\blender.exe' } };
+          return {
+            success: true,
+            data: { installed: true, version: '4.2.0 (mock)', path: 'C:\\Blender\\blender.exe' },
+          };
         }
         const exe = await this.findBlenderExecutable();
         if (!exe) return { success: false, error: 'Blender executable not found on host.' };
         try {
           const { stdout } = await execAsync(`"${exe}" -v`);
-          return { success: true, data: { installed: true, version: stdout.split('\n')[0]?.trim(), path: exe } };
+          return {
+            success: true,
+            data: { installed: true, version: stdout.split('\n')[0]?.trim(), path: exe },
+          };
         } catch (err) {
           return { success: false, error: (err as Error).message };
         }
@@ -105,7 +127,10 @@ export class BlenderSkill implements ApplicationSkill {
         if (!code) return { success: false, error: 'Python code is required.' };
 
         if (this.mockMode) {
-          return { success: true, data: { executed: true, output: 'Scene executed in mock Blender' } };
+          return {
+            success: true,
+            data: { executed: true, output: 'Scene executed in mock Blender' },
+          };
         }
 
         const exe = await this.findBlenderExecutable();
@@ -117,7 +142,10 @@ export class BlenderSkill implements ApplicationSkill {
           const fileArg = blendFile && existsSync(blendFile) ? `"${blendFile}" ` : '';
           const cmd = `"${exe}" -b ${fileArg}-P "${tempScript}"`;
           const { stdout, stderr } = await execAsync(cmd);
-          return { success: true, data: { executed: true, stdout: stdout.trim(), stderr: stderr.trim() } };
+          return {
+            success: true,
+            data: { executed: true, stdout: stdout.trim(), stderr: stderr.trim() },
+          };
         } catch (err) {
           return { success: false, error: (err as Error).message };
         } finally {
