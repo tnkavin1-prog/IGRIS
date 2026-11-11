@@ -26,7 +26,7 @@ export class ChromeLauncher {
     return this.cachedExe;
   }
 
-  private static findChromeViaRegistry(): Promise<string | null> {
+  public static findChromeViaRegistry(): Promise<string | null> {
     const keys = [
       'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe',
       'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe',
@@ -64,15 +64,14 @@ export class ChromeLauncher {
 
   /** Open a tab in the already-running debug Chrome via the HTTP endpoint. */
   public static async openTab(url: string): Promise<boolean> {
-    for (const method of ['PUT', 'GET']) {
-      try {
-        const res = await fetch(
-          `http://127.0.0.1:${ChromeLauncher.DEBUG_PORT}/json/new?${encodeURIComponent(url)}`,
-          { method, signal: AbortSignal.timeout(3000) },
-        );
-        if (res.ok) return true;
-      } catch {}
-    }
+    try {
+      const res = await fetch(
+        `http://127.0.0.1:${ChromeLauncher.DEBUG_PORT}/json/new?${encodeURIComponent(url)}`,
+        { method: 'PUT', signal: AbortSignal.timeout(5000) },
+      );
+      if (res.ok) return true;
+    } catch {}
+    // No GET retry: a PUT that succeeded but timed out would create a second tab.
     return false;
   }
 
@@ -123,15 +122,8 @@ export class ChromeLauncher {
       return { ok: true, message: 'Chrome launched; remote debugging verified on port 9222.' };
     }
 
-    // Self-heal: a stale Chrome may own the profile without the debug port.
-    // A fresh profile directory guarantees a new instance that honors the flag.
-    if (await this.spawnWithProfile(exe, `${CHROME_PROFILE_DIR}-fresh`, targetUrl)) {
-      return {
-        ok: true,
-        message: 'Chrome launched with a fresh debug profile; port 9222 verified.',
-      };
-    }
-
+    // No "-fresh" second spawn: it used to open a second new window with the
+    // same URL, producing duplicate tabs. Fail honestly instead.
     return {
       ok: false,
       message:

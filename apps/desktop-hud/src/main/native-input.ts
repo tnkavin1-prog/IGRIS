@@ -4,11 +4,17 @@ import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import type { CursorPosition, DisplayMetrics, SingleDisplayInfo } from './types.js';
 import { SCRIPTS_DIR } from './runtime-paths.js';
+import {
+  NativeBridgeClient,
+  NativeBridgeError,
+  type NativeBridgeTransport,
+} from './native-bridge.js';
 
 export interface NativeInputOptions {
   mockMode?: boolean;
   scriptsDir?: string;
   displayMetrics?: DisplayMetrics;
+  bridge?: NativeBridgeTransport;
 }
 
 export interface InputCoordinateOptions {
@@ -17,7 +23,17 @@ export interface InputCoordinateOptions {
 }
 
 export interface InputActionEvent {
-  type: 'move' | 'click' | 'drag' | 'scroll' | 'type' | 'hotkey' | 'release-all';
+  type:
+    | 'move'
+    | 'click'
+    | 'drag'
+    | 'scroll'
+    | 'type'
+    | 'hotkey'
+    | 'key'
+    | 'uia-invoke'
+    | 'uia-set-value'
+    | 'release-all';
   x?: number;
   y?: number;
   button?: 'left' | 'right' | 'middle';
@@ -28,9 +44,21 @@ export interface InputActionEvent {
   timestamp: number;
 }
 
+export interface UIAutomationElementInfo {
+  name: string;
+  automationId: string;
+  controlType: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  isEnabled: boolean;
+}
+
 export class NativeInputService extends EventEmitter {
   private mockMode: boolean;
   private scriptsDir: string;
+  private bridge: NativeBridgeTransport;
   private simulatedCursor: CursorPosition = { x: 0, y: 0 };
   private actionHistory: InputActionEvent[] = [];
   private displayMetrics?: DisplayMetrics;
@@ -40,6 +68,11 @@ export class NativeInputService extends EventEmitter {
     this.mockMode = options.mockMode ?? process.platform !== 'win32';
     this.scriptsDir = options.scriptsDir || SCRIPTS_DIR;
     this.displayMetrics = options.displayMetrics;
+    this.bridge = options.bridge ?? new NativeBridgeClient(join(this.scriptsDir, 'Win32Input.exe'));
+  }
+
+  public dispose(): void {
+    this.bridge.dispose();
   }
 
   public setMockMode(enabled: boolean): void {
@@ -171,8 +204,10 @@ export class NativeInputService extends EventEmitter {
     try {
       const res = await this.runCli('release-all');
       return res.toLowerCase().includes('true');
-    } catch {
-      return this.invokeWin32('[Gemetron.Win32Input]::ReleaseAllInputs()');
+    } catch (error) {
+      return this.fallbackMutation(error, () =>
+        this.invokeWin32('[Gemetron.Win32Input]::ReleaseAllInputs()'),
+      );
     }
   }
 
@@ -200,8 +235,10 @@ export class NativeInputService extends EventEmitter {
     try {
       const res = await this.runCli('move', [String(coords.x), String(coords.y)]);
       return res.toLowerCase().includes('true');
-    } catch {
-      return this.invokeWin32(`[Gemetron.Win32Input]::MoveMouse(${coords.x}, ${coords.y})`);
+    } catch (error) {
+      return this.fallbackMutation(error, () =>
+        this.invokeWin32(`[Gemetron.Win32Input]::MoveMouse(${coords.x}, ${coords.y})`),
+      );
     }
   }
 
@@ -246,9 +283,11 @@ export class NativeInputService extends EventEmitter {
         double ? 'true' : 'false',
       ]);
       return res.toLowerCase().includes('true');
-    } catch {
-      return this.invokeWin32(
-        `[Gemetron.Win32Input]::Click(${coords.x}, ${coords.y}, '${button}', ${double ? '$true' : '$false'})`,
+    } catch (error) {
+      return this.fallbackMutation(error, () =>
+        this.invokeWin32(
+          `[Gemetron.Win32Input]::Click(${coords.x}, ${coords.y}, '${button}', ${double ? '$true' : '$false'})`,
+        ),
       );
     }
   }
@@ -288,9 +327,11 @@ export class NativeInputService extends EventEmitter {
         String(steps),
       ]);
       return res.toLowerCase().includes('true');
-    } catch {
-      return this.invokeWin32(
-        `[Gemetron.Win32Input]::Drag(${start.x}, ${start.y}, ${end.x}, ${end.y}, ${steps})`,
+    } catch (error) {
+      return this.fallbackMutation(error, () =>
+        this.invokeWin32(
+          `[Gemetron.Win32Input]::Drag(${start.x}, ${start.y}, ${end.x}, ${end.y}, ${steps})`,
+        ),
       );
     }
   }
@@ -329,14 +370,15 @@ export class NativeInputService extends EventEmitter {
         const res = await this.runCli('scroll', [String(Math.round(deltaY))]);
         return res.toLowerCase().includes('true');
       }
-    } catch {
-      if (x >= 0 && y >= 0) {
-        return this.invokeWin32(
-          `[Gemetron.Win32Input]::ScrollAt(${Math.round(x)}, ${Math.round(y)}, ${Math.round(deltaY)})`,
-        );
-      } else {
+    } catch (error) {
+      return this.fallbackMutation(error, () => {
+        if (x >= 0 && y >= 0) {
+          return this.invokeWin32(
+            `[Gemetron.Win32Input]::ScrollAt(${Math.round(x)}, ${Math.round(y)}, ${Math.round(deltaY)})`,
+          );
+        }
         return this.invokeWin32(`[Gemetron.Win32Input]::Scroll(${Math.round(deltaY)})`);
-      }
+      });
     }
   }
 
@@ -386,9 +428,11 @@ export class NativeInputService extends EventEmitter {
       const b64 = Buffer.from(text, 'utf8').toString('base64');
       const res = await this.runCli('type-b64', [b64]);
       return res.toLowerCase().includes('true');
-    } catch {
-      const escaped = text.replace(/'/g, "''");
-      return this.invokeWin32(`[Gemetron.Win32Input]::SendText('${escaped}')`);
+    } catch (error) {
+      return this.fallbackMutation(error, () => {
+        const escaped = text.replace(/'/g, "''");
+        return this.invokeWin32(`[Gemetron.Win32Input]::SendText('${escaped}')`);
+      });
     }
   }
 
@@ -410,43 +454,114 @@ export class NativeInputService extends EventEmitter {
     try {
       const res = await this.runCli('chord', [chord]);
       return res.toLowerCase().includes('true');
-    } catch {
-      const escaped = chord.replace(/'/g, "''");
-      return this.invokeWin32(`[Gemetron.Win32Input]::SendKeyChord('${escaped}')`);
+    } catch (error) {
+      return this.fallbackMutation(error, () => {
+        const escaped = chord.replace(/'/g, "''");
+        return this.invokeWin32(`[Gemetron.Win32Input]::SendKeyChord('${escaped}')`);
+      });
     }
   }
 
+  public async mouseMoveSmooth(
+    x: number,
+    y: number,
+    durationMs = 250,
+    options: InputCoordinateOptions = {},
+  ): Promise<boolean> {
+    const coords = this.mapCoordinates(x, y, options);
+    if (this.mockMode) return this.mouseMove(x, y, options);
+    const action: InputActionEvent = {
+      type: 'move',
+      x: coords.x,
+      y: coords.y,
+      timestamp: Date.now(),
+    };
+    this.actionHistory.push(action);
+    this.emit('action', action);
+    const res = await this.runCli('smooth-move', [
+      String(coords.x),
+      String(coords.y),
+      String(Math.max(0, Math.round(durationMs))),
+    ]);
+    this.simulatedCursor = coords;
+    return res.toLowerCase().includes('true');
+  }
+
+  public async mouseHorizontalScrollAt(x: number, y: number, deltaX: number): Promise<boolean> {
+    const action: InputActionEvent = { type: 'scroll', x, y, timestamp: Date.now() };
+    this.actionHistory.push(action);
+    this.emit('action', action);
+    if (this.mockMode) return true;
+    const res = await this.runCli('scroll-horizontal', [
+      String(Math.round(x)),
+      String(Math.round(y)),
+      String(Math.round(deltaX)),
+    ]);
+    return res.toLowerCase().includes('true');
+  }
+
+  public async setKeyState(key: string, down: boolean): Promise<boolean> {
+    const action: InputActionEvent = {
+      type: 'key',
+      keys: `${down ? 'down' : 'up'}:${key}`,
+      timestamp: Date.now(),
+    };
+    this.actionHistory.push(action);
+    this.emit('action', action);
+    if (this.mockMode) return true;
+    const res = await this.runCli('key-state', [key, down ? 'down' : 'up']);
+    return res.toLowerCase().includes('true');
+  }
+
+  public async findUIElements(query = '', windowTitle = ''): Promise<UIAutomationElementInfo[]> {
+    if (this.mockMode) return [];
+    const res = await this.runCli('uia-find', [
+      Buffer.from(query, 'utf8').toString('base64'),
+      Buffer.from(windowTitle, 'utf8').toString('base64'),
+    ]);
+    if (!res.trim().startsWith('[')) return [];
+    return JSON.parse(res) as UIAutomationElementInfo[];
+  }
+
+  public async invokeUIElement(query: string, windowTitle = ''): Promise<boolean> {
+    const action: InputActionEvent = { type: 'uia-invoke', text: query, timestamp: Date.now() };
+    this.actionHistory.push(action);
+    this.emit('action', action);
+    if (this.mockMode) return true;
+    const res = await this.runCli('uia-invoke', [
+      Buffer.from(query, 'utf8').toString('base64'),
+      Buffer.from(windowTitle, 'utf8').toString('base64'),
+    ]);
+    return res.toLowerCase().includes('true');
+  }
+
+  public async setUIElementValue(query: string, value: string, windowTitle = ''): Promise<boolean> {
+    const action: InputActionEvent = {
+      type: 'uia-set-value',
+      text: value,
+      timestamp: Date.now(),
+    };
+    this.actionHistory.push(action);
+    this.emit('action', action);
+    if (this.mockMode) return true;
+    const res = await this.runCli('uia-set-value', [
+      Buffer.from(query, 'utf8').toString('base64'),
+      Buffer.from(value, 'utf8').toString('base64'),
+      Buffer.from(windowTitle, 'utf8').toString('base64'),
+    ]);
+    return res.toLowerCase().includes('true');
+  }
+
   private runCli(action: string, args: string[] = []): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const exePath = join(this.scriptsDir, 'Win32Input.exe');
-      if (!existsSync(exePath)) {
-        return reject(new Error('Win32Input.exe not found'));
-      }
+    return this.bridge.request(action, args);
+  }
 
-      const child = spawn(exePath, [action, ...args], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      child.stdout.on('data', (d) => {
-        stdout += d.toString();
-      });
-      child.stderr.on('data', (d) => {
-        stderr += d.toString();
-      });
-
-      child.on('close', (code) => {
-        if (code === 0) {
-          resolve(stdout.trim());
-        } else {
-          reject(new Error(`Win32 CLI failed (${code}): ${stderr || stdout}`));
-        }
-      });
-
-      child.on('error', reject);
-    });
+  private fallbackMutation(error: unknown, fallback: () => Promise<boolean>): Promise<boolean> {
+    if (error instanceof NativeBridgeError && !error.retrySafe) {
+      console.warn(`[NativeInput] ${error.message}`);
+      return Promise.resolve(false);
+    }
+    return fallback();
   }
 
   private async invokeWin32(cmd: string): Promise<boolean> {
@@ -466,7 +581,7 @@ export class NativeInputService extends EventEmitter {
 
       const loader = existsSync(dllPath)
         ? `Add-Type -Path '${dllPath}';`
-        : `Add-Type -ReferencedAssemblies System.Windows.Forms,System.Drawing -Path '${csPath}';`;
+        : `Add-Type -ReferencedAssemblies System.Windows.Forms,System.Drawing,System.Runtime.Serialization,WindowsBase,UIAutomationClient,UIAutomationTypes -Path '${csPath}';`;
 
       const psScript = `${loader} ${snippet}`;
 

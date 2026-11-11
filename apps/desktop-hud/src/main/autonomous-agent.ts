@@ -100,8 +100,8 @@ export class AutonomousAgent extends EventEmitter {
 
   constructor(options: AgentOptions = {}) {
     super();
-    this.maxIterations = options.maxIterations ?? 200;
-    this.maxStepAttempts = options.maxStepAttempts ?? 5;
+    this.maxIterations = options.maxIterations ?? 30;
+    this.maxStepAttempts = options.maxStepAttempts ?? 3;
 
     this.onObservation = options.onObservation;
     this.onStepStart = options.onStepStart;
@@ -135,7 +135,7 @@ export class AutonomousAgent extends EventEmitter {
       currentStepIndex: 0,
       startedAt: Date.now(),
       iterations: 0,
-      maxIterations: options?.maxIterations ?? this.maxIterations,
+      maxIterations: Math.max(1, Math.min(50, options?.maxIterations ?? this.maxIterations)),
     };
 
     this.currentSession = session;
@@ -236,7 +236,7 @@ export class AutonomousAgent extends EventEmitter {
         params: nextAction.params,
         status: 'pending',
         attempts: 0,
-        maxAttempts: this.maxStepAttempts,
+        maxAttempts: this.isReadOnlyAction(nextAction.action) ? this.maxStepAttempts : 1,
       };
       session.steps.push(step);
       session.currentStepIndex = session.steps.length - 1;
@@ -256,6 +256,10 @@ export class AutonomousAgent extends EventEmitter {
         step.attempts += 1;
         if (this.onStepFail) this.onStepFail(step, step.error || '');
         this.emit('agent:step-fail', { session, step, error: step.error });
+        session.status = 'failed';
+        session.error = step.error;
+        session.completedAt = Date.now();
+        return;
       }
 
       // Brief pause between iterations
@@ -348,11 +352,18 @@ export class AutonomousAgent extends EventEmitter {
     }
 
     if (goal.includes('notepad') || goal.includes('write')) {
+      if (goal.includes('write') || goal.includes('type') || /\bnote\b/.test(goal)) {
+        return hasNotepad && completedActions.has('computer_type');
+      }
       return hasNotepad;
     }
 
     if (goal.includes('calculator') || goal.includes('calc')) {
       return hasCalculator;
+    }
+
+    if (goal.includes('open') && (goal.includes('chrome') || goal.includes('browser'))) {
+      return observation.windows.some((w) => w.processName.toLowerCase() === 'chrome');
     }
 
     return false;
@@ -512,8 +523,8 @@ export class AutonomousAgent extends EventEmitter {
       if (!hasNotepad && !completedActions.has('openApp')) {
         return {
           description: 'Open Notepad',
-          action: 'operator_goal',
-          params: { goal: 'Open Windows Notepad', context: {} },
+          action: 'openApp',
+          params: { name: 'notepad' },
         };
       }
       if (hasNotepad && !completedActions.has('computer_type')) {
@@ -532,8 +543,8 @@ export class AutonomousAgent extends EventEmitter {
       if (!hasCalculator && !completedActions.has('openApp')) {
         return {
           description: 'Open Calculator',
-          action: 'operator_goal',
-          params: { goal: 'Open Windows Calculator', context: {} },
+          action: 'openApp',
+          params: { name: 'calculator' },
         };
       }
     }
@@ -548,23 +559,32 @@ export class AutonomousAgent extends EventEmitter {
       if (!hasChrome && !completedActions.has('openApp')) {
         return {
           description: 'Open Google Chrome',
-          action: 'operator_goal',
-          params: { goal: 'Open Google Chrome browser', context: {} },
+          action: 'openApp',
+          params: { name: 'chrome' },
         };
       }
     }
 
-    // ---------- GENERAL FALLBACK ----------
-    return {
-      description: 'Capture current desktop state for observation',
-      action: 'computer_screenshot',
-      params: {},
-    };
+    // Observe once, then stop honestly instead of looping screenshots or repeating mutations.
+    if (!completedActions.has('computer_screenshot')) {
+      return {
+        description: 'Capture current desktop state for observation',
+        action: 'computer_screenshot',
+        params: {},
+      };
+    }
+    return null;
   }
 
   /* ---------------------------------------------------------------- */
   /*  4. ACT — execute step with retries                              */
   /* ---------------------------------------------------------------- */
+
+  private isReadOnlyAction(action: string): boolean {
+    return (
+      action === 'computer_screenshot' || action === 'takeScreenshot' || action === 'checkBlender'
+    );
+  }
 
   private async executeStepWithRetries(
     _session: AgentSession,
@@ -631,15 +651,11 @@ export class AutonomousAgent extends EventEmitter {
       return result;
     }
 
-    if (action === 'operator_goal') {
-      const result = await computerOperator.executeGoal(
-        String(params.goal || ''),
-        params.context as Record<string, unknown>,
-      );
-      if (!result.success) {
-        throw new Error(result.error || `Goal "${params.goal}" failed`);
-      }
-      return result;
+    if (action === 'openApp') {
+      const result = await am.launchApplication(String(params.name || ''));
+      if (!result.ok)
+        throw new Error(result.error || `Application "${params.name}" failed to open.`);
+      return { success: true, ...result };
     }
 
     switch (action) {

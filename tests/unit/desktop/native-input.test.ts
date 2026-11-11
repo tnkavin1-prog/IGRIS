@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NativeInputService } from '../../../apps/desktop-hud/src/main/native-input.js';
+import { NativeBridgeError } from '../../../apps/desktop-hud/src/main/native-bridge.js';
 
 describe('NativeInputService', () => {
   let input: NativeInputService;
@@ -91,5 +92,54 @@ describe('NativeInputService', () => {
     expect(input.getHistory().length).toBe(3);
     input.clearHistory();
     expect(input.getHistory().length).toBe(0);
+  });
+
+  it('emits and records smooth movement, key state, horizontal scroll, and UIA actions', async () => {
+    const actionListener = vi.fn();
+    input.on('action', actionListener);
+
+    await input.mouseMoveSmooth(20, 30);
+    await input.mouseHorizontalScrollAt(20, 30, 40);
+    await input.setKeyState('Shift', true);
+    await input.invokeUIElement('Save', 'Notepad');
+    await input.setUIElementValue('Document', 'Hello', 'Notepad');
+
+    expect(actionListener).toHaveBeenCalledTimes(5);
+    expect(input.getHistory().map((action) => action.type)).toEqual([
+      'move',
+      'scroll',
+      'key',
+      'uia-invoke',
+      'uia-set-value',
+    ]);
+  });
+
+  it('uses the persistent bridge and preserves Unicode text', async () => {
+    const request = vi.fn(async () => 'True');
+    input = new NativeInputService({
+      mockMode: false,
+      bridge: { request, dispose: vi.fn() },
+    });
+
+    await expect(input.mouseClick(100, 200)).resolves.toBe(true);
+    await expect(input.typeText('Hello 世界 👋')).resolves.toBe(true);
+
+    expect(request).toHaveBeenNthCalledWith(1, 'click', ['100', '200', 'left', 'false']);
+    const encoded = request.mock.calls[1]?.[1]?.[0];
+    expect(Buffer.from(String(encoded), 'base64').toString('utf8')).toBe('Hello 世界 👋');
+  });
+
+  it('never falls back or retries after an ambiguous native mutation failure', async () => {
+    const request = vi.fn(async () => {
+      throw new NativeBridgeError('Click timed out; outcome unknown.');
+    });
+    input = new NativeInputService({
+      mockMode: false,
+      bridge: { request, dispose: vi.fn() },
+    });
+
+    await expect(input.mouseClick(100, 200)).resolves.toBe(false);
+    await expect(input.sendHotkey('Ctrl+T')).resolves.toBe(false);
+    expect(request).toHaveBeenCalledTimes(2);
   });
 });

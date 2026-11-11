@@ -235,7 +235,7 @@ function compileWin32Pin() {
         [
           '-NoProfile',
           '-Command',
-          `Add-Type -ReferencedAssemblies System.Windows.Forms,System.Drawing -Path '${inputCsPath}' -OutputAssembly '${inputDllPath}'`,
+          `Add-Type -ReferencedAssemblies System.Windows.Forms,System.Drawing,System.Runtime.Serialization,WindowsBase,UIAutomationClient,UIAutomationTypes -Path '${inputCsPath}' -OutputAssembly '${inputDllPath}'`,
         ],
         { stdio: 'ignore' },
       );
@@ -245,7 +245,7 @@ function compileWin32Pin() {
         [
           '-NoProfile',
           '-Command',
-          `Add-Type -ReferencedAssemblies System.Windows.Forms,System.Drawing -Path '${inputCsPath}' -OutputAssembly '${inputExePath}' -OutputType ConsoleApplication`,
+          `Add-Type -ReferencedAssemblies System.Windows.Forms,System.Drawing,System.Runtime.Serialization,WindowsBase,UIAutomationClient,UIAutomationTypes -Path '${inputCsPath}' -OutputAssembly '${inputExePath}' -OutputType ConsoleApplication`,
         ],
         { stdio: 'ignore' },
       );

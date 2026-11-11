@@ -1,14 +1,16 @@
-import { spawn, exec } from 'node:child_process';
+import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync, promises as fs } from 'node:fs';
 import { join, extname } from 'node:path';
 import os from 'node:os';
 import type { ApplicationSkill, SkillActionDefinition, SkillResult } from '../skill-framework.js';
+import { AppManagerService } from '../app-manager.js';
 
 const execAsync = promisify(exec);
 
 export interface WindowsSkillOptions {
   mockMode?: boolean;
+  appManager?: AppManagerService;
 }
 
 export class WindowsSkill implements ApplicationSkill {
@@ -19,9 +21,11 @@ export class WindowsSkill implements ApplicationSkill {
     'Universal Windows OS operator: app lifecycle, window management, filesystem operations, and system telemetry.';
 
   private mockMode: boolean;
+  private appManager: AppManagerService;
 
   constructor(options: WindowsSkillOptions = {}) {
     this.mockMode = Boolean(options.mockMode);
+    this.appManager = options.appManager ?? new AppManagerService({ mockMode: this.mockMode });
   }
 
   public async isAvailable(): Promise<boolean> {
@@ -109,9 +113,12 @@ export class WindowsSkill implements ApplicationSkill {
         if (this.mockMode) return { success: true, data: { pid: 1234, app: name, launched: true } };
 
         const args = Array.isArray(params.args) ? (params.args as string[]) : [];
-        const proc = spawn(name, args, { detached: true, stdio: 'ignore' });
-        proc.unref();
-        return { success: true, data: { pid: proc.pid, app: name, launched: true } };
+        const launched = await this.appManager.launchApplication(name, args);
+        return {
+          success: launched.ok,
+          data: { pid: launched.pid, app: name, windowTitle: launched.windowTitle },
+          error: launched.error,
+        };
       }
 
       case 'closeApp': {

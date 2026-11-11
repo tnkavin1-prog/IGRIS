@@ -11,13 +11,14 @@ import type {
   WindowTilingLayout,
 } from './types.js';
 import type { JarvisMemoryStore } from './jarvis-memory.js';
-import { ChromeLauncher } from './chrome-launcher.js';
+import type { BrowserGateway } from './browser-gateway.js';
 import { SCRIPTS_DIR } from './runtime-paths.js';
 
 export interface AppManagerOptions {
   mockMode?: boolean;
   scriptsDir?: string;
   memoryStore?: JarvisMemoryStore;
+  browserGateway?: BrowserGateway;
 }
 
 const APP_ALIASES: Record<string, { cmd: string; defaultArgs?: string[] }> = {
@@ -66,10 +67,10 @@ function findExecutableForApp(appName: string): { exe: string; defaultArgs: stri
     if (candidates.length > 0 && candidates[0]) {
       return {
         exe: candidates[0],
-        defaultArgs: ['--remote-debugging-port=9222', 'https://www.google.com'],
+        defaultArgs: [],
       };
     }
-    return { exe: 'chrome.exe', defaultArgs: ['https://www.google.com'] };
+    return { exe: 'chrome.exe', defaultArgs: [] };
   }
 
   if (raw === 'code' || raw === 'vscode' || raw.includes('visual studio code')) {
@@ -147,6 +148,7 @@ export class AppManagerService {
   private mockMode: boolean;
   private scriptsDir: string;
   private memoryStore?: JarvisMemoryStore;
+  private browserGateway?: BrowserGateway;
   private activeProcesses: Set<ChildProcess> = new Set();
   private simulatedWindows: WindowItem[] = [
     {
@@ -191,6 +193,11 @@ export class AppManagerService {
     this.mockMode = options.mockMode ?? process.platform !== 'win32';
     this.scriptsDir = options.scriptsDir || SCRIPTS_DIR;
     this.memoryStore = options.memoryStore;
+    this.browserGateway = options.browserGateway;
+  }
+
+  public setBrowserGateway(gateway: BrowserGateway): void {
+    this.browserGateway = gateway;
   }
 
   public setMockMode(enabled: boolean): void {
@@ -243,17 +250,19 @@ export class AppManagerService {
     const raw = appName.trim().toLowerCase();
     const memAlias = this.memoryStore?.getAlias(raw);
 
-    // Chrome family goes through the ONE canonical launcher with a verified debug port.
     if (!memAlias && (raw.includes('chrome') || raw === 'browser' || raw === 'google')) {
-      const url = args.find((a) => /^https?:\/\//i.test(a));
-      const res = await ChromeLauncher.launch(url ?? 'about:blank');
-      if (res.ok) await this.focusWindow('chrome').catch(() => undefined);
-      return {
-        ok: res.ok,
-        appName,
-        windowTitle: res.ok ? 'Google Chrome' : undefined,
-        error: res.ok ? undefined : res.message,
-      };
+      if (this.browserGateway) {
+        const url = args.find((a) => /^https?:\/\//i.test(a));
+        const res = url
+          ? await this.browserGateway.openTab(url)
+          : await this.browserGateway.focusOrLaunch();
+        return {
+          ok: res.success,
+          appName,
+          windowTitle: res.windowTitle ?? (res.success ? 'Google Chrome' : undefined),
+          error: res.error,
+        };
+      }
     }
 
     let executable: string;
@@ -1141,7 +1150,7 @@ export class AppManagerService {
 
       const loader = existsSync(dllPath)
         ? `Add-Type -Path '${dllPath}';`
-        : `Add-Type -ReferencedAssemblies System.Windows.Forms,System.Drawing -Path '${csPath}';`;
+        : `Add-Type -ReferencedAssemblies System.Windows.Forms,System.Drawing,System.Runtime.Serialization,WindowsBase,UIAutomationClient,UIAutomationTypes -Path '${csPath}';`;
 
       const psScript = `${loader} ${snippet}`;
 

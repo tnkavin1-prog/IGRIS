@@ -29,6 +29,7 @@ import type {
   WorkflowStepInput,
 } from './types.js';
 import type { AppAlias, RecentContextEntry, TaskRecipe, UserPreferences } from './jarvis-memory.js';
+import type { OpenTabResult } from './browser-gateway.js';
 
 const api = {
   windowControl: {
@@ -53,14 +54,16 @@ const api = {
     listTabs: (): Promise<ChromeTabInfo[]> => ipcRenderer.invoke('cdp:list-tabs'),
     getActiveTab: (): Promise<ChromeTabInfo | null> => ipcRenderer.invoke('cdp:get-active-tab'),
     switchTab: (tabId: string): Promise<boolean> => ipcRenderer.invoke('cdp:switch-tab', tabId),
-    createTab: (url: string): Promise<ChromeTabInfo | null> =>
-      ipcRenderer.invoke('cdp:create-tab', url),
+    createTab: (url?: string): Promise<OpenTabResult> => ipcRenderer.invoke('cdp:create-tab', url),
     closeTab: (tabId: string): Promise<boolean> => ipcRenderer.invoke('cdp:close-tab', tabId),
     captureScreenshot: (tabId?: string): Promise<{ data: string; mimeType: 'image/jpeg' }> =>
       ipcRenderer.invoke('cdp:capture-screenshot', tabId),
-    navigate: (url: string, tabId?: string): Promise<{ ok: boolean; url: string }> =>
+    navigate: (
+      url: string,
+      tabId?: string,
+    ): Promise<{ ok: boolean; url: string; error?: string }> =>
       ipcRenderer.invoke('cdp:navigate', url, tabId),
-    openYouTube: (query?: string): Promise<ChromeTabInfo | null> =>
+    openYouTube: (query?: string): Promise<OpenTabResult> =>
       ipcRenderer.invoke('cdp:open-youtube', query),
     launchChrome: (url?: string): Promise<{ ok: boolean; message: string }> =>
       ipcRenderer.invoke('cdp:launch-chrome', url),

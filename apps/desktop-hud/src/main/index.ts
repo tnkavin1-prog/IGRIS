@@ -76,10 +76,12 @@ if (!gotLock) {
 
   let isQuitting = false;
   let trayManager: TrayManager | null = null;
+  let liveService: GeminiLiveService;
 
   app.on('before-quit', () => {
     logLine('hud-startup', `app before-quit fired (isQuitting: ${isQuitting})`);
     isQuitting = true;
+    liveService?.input.dispose();
     trayManager?.destroy();
   });
 
@@ -92,7 +94,6 @@ if (!gotLock) {
   });
 
   const cdpClient = new CDPClient(9222, '127.0.0.1');
-  let liveService: GeminiLiveService;
   let controlServer: ControlServer;
 
   app.whenReady().then(async () => {
@@ -232,7 +233,7 @@ if (!gotLock) {
           console.log(
             '[ChromeLauncher] Chrome remote debugging port 9222 not detected. Spawning Chrome...',
           );
-          void ChromeLauncher.launch();
+          void liveService.browser.focusOrLaunch();
         }
       }
 
@@ -357,133 +358,64 @@ if (!gotLock) {
   );
   ipcMain.handle('window:get-display-mode', () => getDisplayMode());
 
-  // CDP IPC Handlers (Retain HUD focus on browser operations)
-  /**
-   * Ensures Chrome is running with remote debugging before executing a CDP action.
-   * If Chrome is not available, launches it automatically and waits for the port.
-   */
-  async function ensureChrome(url?: string): Promise<{ ok: boolean; message?: string }> {
-    const isActive = await ChromeLauncher.isPortAvailable();
-    if (isActive) return { ok: true };
-
-    const launched = await ChromeLauncher.launch(url);
-    if (!launched.ok) {
-      return { ok: false, message: launched.message || 'Failed to launch Chrome.' };
-    }
-
-    // Wait up to 8 seconds for Chrome's remote debugging port to respond
-    for (let i = 0; i < 16; i += 1) {
-      await new Promise((r) => setTimeout(r, 500));
-      if (await ChromeLauncher.isPortAvailable()) {
-        return { ok: true };
-      }
-    }
-    return { ok: false, message: 'Chrome launched but remote debugging port did not respond.' };
-  }
-
-  ipcMain.handle('cdp:get-status', async () => {
-    const status = await cdpClient.getStatus();
-    if (!status.connected) {
-      const launched = await ensureChrome();
-      if (launched.ok) {
-        return await cdpClient.getStatus();
-      }
-      return {
-        connected: false,
-        port: 9222,
-        activeTab: null,
-        tabs: [],
-        error: launched.message || 'Chrome remote debugging is not available.',
-      };
-    }
-    return status;
-  });
-  ipcMain.handle('cdp:list-tabs', async () => {
-    const tabs = await cdpClient.listTabs();
-    if (tabs.length === 0) {
-      const launched = await ensureChrome();
-      if (launched.ok) {
-        return await cdpClient.listTabs();
-      }
-    }
-    return tabs;
-  });
-  ipcMain.handle('cdp:get-active-tab', async () => {
-    const tab = await cdpClient.getActiveTab();
-    if (!tab) {
-      const launched = await ensureChrome();
-      if (launched.ok) {
-        return await cdpClient.getActiveTab();
-      }
-    }
-    return tab;
-  });
+  // Read-only CDP queries never launch Chrome. Mutations that create or navigate
+  // tabs use the same attach-first gateway as voice commands.
+  ipcMain.handle('cdp:get-status', async () => await cdpClient.getStatus());
+  ipcMain.handle('cdp:list-tabs', async () => await cdpClient.listTabs());
+  ipcMain.handle('cdp:get-active-tab', async () => await cdpClient.getActiveTab());
   ipcMain.handle('cdp:switch-tab', async (_, tabId: string) => {
-    const launched = await ensureChrome();
-    if (!launched.ok) return false;
     const ok = await cdpClient.switchTab(tabId);
     getMainWindow()?.focus();
     return ok;
   });
-  ipcMain.handle('cdp:create-tab', async (_, url: string) => {
-    const launched = await ensureChrome(url);
-    if (!launched.ok) return null;
-    const tab = await cdpClient.createTab(url);
+  ipcMain.handle('cdp:create-tab', async (_, url?: string) => {
+    const result = await liveService.browser.openTab(url);
     getMainWindow()?.focus();
-    return tab;
+    return result;
   });
   ipcMain.handle('cdp:close-tab', async (_, tabId: string) => {
-    const launched = await ensureChrome();
-    if (!launched.ok) return false;
     return await cdpClient.closeTab(tabId);
   });
   ipcMain.handle('cdp:capture-screenshot', async (_, tabId?: string) => {
-    const launched = await ensureChrome();
-    if (!launched.ok) throw new Error(launched.message || 'Chrome is not available.');
     return await cdpClient.captureScreenshot(tabId);
   });
   ipcMain.handle('cdp:navigate', async (_, url: string, tabId?: string) => {
-    const launched = await ensureChrome();
-    if (!launched.ok) throw new Error(launched.message || 'Chrome is not available.');
-    const res = await cdpClient.navigate(url, tabId);
+    const result = await liveService.browser.navigate(url, tabId);
     getMainWindow()?.focus();
-    return res;
+    return { ok: result.success, url: result.url, error: result.error };
   });
   ipcMain.handle('cdp:open-youtube', async (_, query?: string) => {
-    const launched = await ensureChrome();
-    if (!launched.ok) return null;
-    const tab = await cdpClient.openYouTube(query);
+    const url = query
+      ? `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`
+      : 'https://www.youtube.com';
+    const result = await liveService.browser.openTab(url);
     getMainWindow()?.focus();
-    return tab;
+    return result;
   });
-  ipcMain.handle('cdp:launch-chrome', async (_, url?: string) => await ChromeLauncher.launch(url));
+  ipcMain.handle('cdp:launch-chrome', async (_, url?: string) => {
+    const result = url
+      ? await liveService.browser.openTab(url)
+      : await liveService.browser.focusOrLaunch();
+    return {
+      ok: result.success,
+      message: result.message ?? result.error ?? 'Chrome command completed.',
+    };
+  });
   ipcMain.handle('cdp:duplicate-tab', async (_, tabId?: string) => {
-    const launched = await ensureChrome();
-    if (!launched.ok) return null;
     const tab = await cdpClient.duplicateTab(tabId);
     getMainWindow()?.focus();
     return tab;
   });
   ipcMain.handle('cdp:reload-tab', async (_, tabId?: string, ignoreCache?: boolean) => {
-    const launched = await ensureChrome();
-    if (!launched.ok) return false;
     return await cdpClient.reloadTab(tabId, ignoreCache);
   });
   ipcMain.handle(
     'cdp:search-tab-content',
     async (_, query: string, options?: { caseSensitive?: boolean }) => {
-      const launched = await ensureChrome();
-      if (!launched.ok) {
-        return { query, totalTabs: 0, matchedTabs: [] };
-      }
       return await cdpClient.searchTabContent(query, options);
     },
   );
   ipcMain.handle('cdp:close-duplicate-tabs', async () => {
-    const launched = await ensureChrome();
-    if (!launched.ok) {
-      return { closedCount: 0, closedTabs: [], remainingCount: 0 };
-    }
     return await cdpClient.closeDuplicateTabs();
   });
 

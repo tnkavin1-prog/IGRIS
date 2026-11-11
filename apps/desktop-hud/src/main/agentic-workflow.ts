@@ -3,6 +3,7 @@ import type { CDPClient } from './cdp-client.js';
 import type { NativeInputService } from './native-input.js';
 import type { ComputerVisionService } from './computer-vision.js';
 import type { AppManagerService } from './app-manager.js';
+import type { BrowserGateway } from './browser-gateway.js';
 import type { ClipboardService } from './clipboard-manager.js';
 import type { JarvisMemoryStore } from './jarvis-memory.js';
 import { computerOperator } from './computer-operator.js';
@@ -19,6 +20,7 @@ export interface WorkflowEngineDependencies {
   nativeInput: NativeInputService;
   computerVision: ComputerVisionService;
   appManager: AppManagerService;
+  browserGateway?: BrowserGateway;
   clipboardService?: ClipboardService;
   memoryStore?: JarvisMemoryStore;
   autoApprove?: boolean;
@@ -29,6 +31,7 @@ export class AgenticWorkflowEngine extends EventEmitter {
   private nativeInput: NativeInputService;
   private computerVision: ComputerVisionService;
   private appManager: AppManagerService;
+  private browserGateway?: BrowserGateway;
   private clipboardService?: ClipboardService;
   private memoryStore?: JarvisMemoryStore;
 
@@ -42,6 +45,7 @@ export class AgenticWorkflowEngine extends EventEmitter {
     this.nativeInput = deps.nativeInput;
     this.computerVision = deps.computerVision;
     this.appManager = deps.appManager;
+    this.browserGateway = deps.browserGateway;
     this.clipboardService = deps.clipboardService;
     this.memoryStore = deps.memoryStore;
     if (typeof deps.autoApprove === 'boolean') {
@@ -735,18 +739,16 @@ export class AgenticWorkflowEngine extends EventEmitter {
       }
 
       case 'browser_open_tab': {
-        const tab = await this.cdpClient.createTab(p.url || 'https://www.google.com');
-        if (!tab) {
-          throw new Error('Failed to create Chrome browser tab.');
-        }
-        return tab;
+        if (!this.browserGateway) throw new Error('Browser control is not configured.');
+        const res = await this.browserGateway.openTab(p.url);
+        if (!res.success) throw new Error(res.error || 'Failed to create Chrome browser tab.');
+        return res;
       }
 
       case 'browser_navigate': {
-        const res = await this.cdpClient.navigate(p.url, p.tabId);
-        if (res && res.ok === false) {
-          throw new Error(`Navigation to ${p.url} failed.`);
-        }
+        if (!this.browserGateway) throw new Error('Browser control is not configured.');
+        const res = await this.browserGateway.navigate(p.url);
+        if (!res.success) throw new Error(res.error || `Navigation to ${p.url} failed.`);
         return res;
       }
 

@@ -2,6 +2,8 @@ import { EventEmitter } from 'node:events';
 import { readFileSync, existsSync } from 'node:fs';
 import WebSocket from 'ws';
 import type { CDPClient } from './cdp-client.js';
+import { BrowserGateway } from './browser-gateway.js';
+import { ExecutionGuard } from './execution-guard.js';
 import { NativeInputService } from './native-input.js';
 import { ComputerVisionService } from './computer-vision.js';
 import { AppManagerService } from './app-manager.js';
@@ -32,6 +34,7 @@ export interface GeminiLiveServiceDeps {
   nativeInput?: NativeInputService;
   computerVision?: ComputerVisionService;
   appManager?: AppManagerService;
+  browserGateway?: BrowserGateway;
   workflowEngine?: AgenticWorkflowEngine;
   memoryStore?: JarvisMemoryStore;
   hardwareMonitor?: HardwareMonitorService;
@@ -44,6 +47,8 @@ export class GeminiLiveService extends EventEmitter {
   private nativeInput: NativeInputService;
   private computerVision: ComputerVisionService;
   private appManager: AppManagerService;
+  private browserGateway: BrowserGateway;
+  private executionGuard = new ExecutionGuard();
   private workflowEngine: AgenticWorkflowEngine;
   private memoryStore: JarvisMemoryStore;
   private hardwareMonitor: HardwareMonitorService;
@@ -61,6 +66,14 @@ export class GeminiLiveService extends EventEmitter {
     this.nativeInput = deps?.nativeInput ?? new NativeInputService();
     this.computerVision = deps?.computerVision ?? new ComputerVisionService();
     this.appManager = deps?.appManager ?? new AppManagerService();
+    this.browserGateway =
+      deps?.browserGateway ??
+      new BrowserGateway({
+        cdpClient: this.cdpClient,
+        appManager: this.appManager,
+        nativeInput: this.nativeInput,
+      });
+    this.appManager.setBrowserGateway(this.browserGateway);
     this.clipboard =
       deps?.clipboard ?? new ClipboardService({ mockMode: this.appManager.isMockMode });
     this.memoryStore = deps?.memoryStore ?? new JarvisMemoryStore();
@@ -80,6 +93,7 @@ export class GeminiLiveService extends EventEmitter {
         nativeInput: this.nativeInput,
         computerVision: this.computerVision,
         appManager: this.appManager,
+        browserGateway: this.browserGateway,
         clipboardService: this.clipboard,
         memoryStore: this.memoryStore,
       });
@@ -150,6 +164,10 @@ export class GeminiLiveService extends EventEmitter {
 
   public get apps(): AppManagerService {
     return this.appManager;
+  }
+
+  public get browser(): BrowserGateway {
+    return this.browserGateway;
   }
 
   public get workflow(): AgenticWorkflowEngine {
@@ -390,11 +408,14 @@ export class GeminiLiveService extends EventEmitter {
                 '- When asked to MAXIMIZE a window (e.g. "maximize Chrome", "maximize window", "make it full screen"): IMMEDIATELY call maximize_window({ window_title: "Chrome" }). Do NOT call switch_active_window or tile_windows.',
                 '- When asked to SCROLL DOWN or SCROLL UP in a document, PDF, or webpage (e.g. "scroll down", "scroll up", "scroll pdf", "read further"): IMMEDIATELY call scroll_page({ direction: "down" }) or scroll_page({ direction: "up" }). Never merely claim you scrolled—always invoke the tool call.',
                 '- When asked to TAKE A SCREENSHOT, show screen, paste screenshot in chat, or view what is on screen: IMMEDIATELY call computer_use_screenshot({}). It captures the screen and displays the screenshot directly in the chat.',
-                '- When asked to CLICK a button, link, or label on screen (e.g. "click Download", "click Resume", "click Close"): IMMEDIATELY call click_element_by_text({ text: "..." }) or computer_use_click({ x, y }).',
+                '- When asked to CLICK a native Windows button, checkbox, or menu item, prefer computer_uia_invoke({ query: "...", window_title: "..." }) for semantic control. Use computer_uia_find to discover controls. For browser content use browser_click or click_element_by_text; coordinates are the final fallback.',
+                '- When asked to fill a native Windows text field, prefer computer_uia_set_value. Use computer_use_type only after focusing the correct field.',
                 '- When asked to PRESS a key (e.g. "press Enter", "press PageDown", "press Esc"): IMMEDIATELY call press_key({ key: "..." }) or computer_use_hotkey({ keys: ["..."] }).',
                 '- When asked to MINIMIZE, RESTORE, or CLOSE a window: call minimize_window, restore_window, or close_window.',
                 '- When asked to type or navigate: immediately invoke computer_use_type, computer_use_click, navigate_to_url, or launch_application.',
-                '- When asked to OPEN A NEW CHROME TAB: call browser_open_tab({ url: "..." }) — this actually creates a real tab in Chrome via DevTools Protocol.',
+                '- When asked to OPEN A NEW CHROME TAB: call browser_open_tab({}) exactly once, or include url only when the user specified a destination. It attaches to the existing Chrome window and creates exactly one tab.',
+                'EXECUTION INVARIANT: One user command means one mutation. Never repeat a successful tool, and never use launch_application, manage_browser_tabs, autonomous_goal, or open_youtube as a fallback for browser_open_tab or navigate_to_url.',
+                '- If a mutating browser tool reports deduplicated:true or deduplicated within its result, treat it as the same completed command and do not retry.',
                 '- When asked to NAVIGATE to a URL: call navigate_to_url({ url: "..." }) on the active Chrome tab.',
                 '- When asked to READ the current Chrome page: call browser_read({}) — returns page title, URL, text, and headings.',
                 '- When asked to CLICK something IN CHROME: call browser_click({ selector: "..." }) with a CSS selector, or click_element_by_text({ text: "..." }) for text-based clicking.',
@@ -406,7 +427,7 @@ export class GeminiLiveService extends EventEmitter {
                 '- When asked to CLICK a UI element by description in any app (Blender, Chrome, Notepad): call click_element_on_screen({ description: "..." }).',
                 '- When asked to WAIT for something to appear on screen: call wait_for_element_on_screen({ description: "..." }).',
                 '- When asked to READ what is on screen: call read_screen_text({ query: "..." }).',
-                'HONESTY RULE: If a tool returns ok:false or success:false, the action FAILED. Say so briefly and try one alternative approach. Never claim an action succeeded without a successful tool result.',
+                'HONESTY RULE: If a tool returns ok:false or success:false, say so briefly. Never claim success without a successful result. For browser creation, navigation, application launch, downloads, or any other side effect, do NOT retry or substitute another mutating tool; report the failure and wait for the user. Read-only inspection may use an alternative.',
                 'SCREEN & APPLICATION VISIBILITY GROUNDING (CRITICAL):',
                 '- You receive real-time streaming video frames of the user live desktop screen.',
                 '- Always observe the actual visual screen before asserting whether an application is open or visible. If the desktop wallpaper is showing and no application window is visible on screen, it is NOT open.',
@@ -507,6 +528,63 @@ export class GeminiLiveService extends EventEmitter {
                 },
               },
               {
+                name: 'computer_uia_find',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Finds native Windows controls through UI Automation and returns semantic names, control types, enabled state, and physical bounds.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    query: {
+                      type: 'STRING',
+                      description: 'Control name or AutomationId; empty lists controls',
+                    },
+                    window_title: {
+                      type: 'STRING',
+                      description: 'Optional application window scope',
+                    },
+                  },
+                },
+              },
+              {
+                name: 'computer_uia_invoke',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Semantically invokes a native Windows button, checkbox, or selection item through UI Automation without coordinate clicking.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    query: {
+                      type: 'STRING',
+                      description: 'Exact or partial control name or AutomationId',
+                    },
+                    window_title: {
+                      type: 'STRING',
+                      description: 'Optional application window scope',
+                    },
+                  },
+                  required: ['query'],
+                },
+              },
+              {
+                name: 'computer_uia_set_value',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Sets the value of a native Windows editable control through UI Automation and verifies the resulting value.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    query: { type: 'STRING', description: 'Control name or AutomationId' },
+                    value: { type: 'STRING', description: 'Value to set' },
+                    window_title: {
+                      type: 'STRING',
+                      description: 'Optional application window scope',
+                    },
+                  },
+                  required: ['query', 'value'],
+                },
+              },
+              {
                 name: 'computer_use_click',
                 behavior: 'NON_BLOCKING',
                 description:
@@ -544,6 +622,24 @@ export class GeminiLiveService extends EventEmitter {
                 },
               },
               {
+                name: 'computer_use_mouse_move_smooth',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Moves the native mouse cursor to a target with eased human-like motion over a controlled duration.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    x: { type: 'INTEGER', description: 'Screen X pixel coordinate' },
+                    y: { type: 'INTEGER', description: 'Screen Y pixel coordinate' },
+                    duration_ms: {
+                      type: 'INTEGER',
+                      description: 'Movement duration in milliseconds (default 250)',
+                    },
+                  },
+                  required: ['x', 'y'],
+                },
+              },
+              {
                 name: 'computer_use_mouse_drag',
                 behavior: 'NON_BLOCKING',
                 description: 'Drags mouse cursor from (start_x, start_y) to (end_x, end_y).',
@@ -557,6 +653,24 @@ export class GeminiLiveService extends EventEmitter {
                     steps: { type: 'INTEGER', description: 'Interpolation steps (default 10)' },
                   },
                   required: ['start_x', 'start_y', 'end_x', 'end_y'],
+                },
+              },
+              {
+                name: 'computer_use_horizontal_scroll',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Scrolls the native mouse wheel horizontally at specific desktop coordinates.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    x: { type: 'INTEGER', description: 'Screen X pixel coordinate' },
+                    y: { type: 'INTEGER', description: 'Screen Y pixel coordinate' },
+                    delta_x: {
+                      type: 'INTEGER',
+                      description: 'Horizontal wheel delta; positive right, negative left',
+                    },
+                  },
+                  required: ['x', 'y', 'delta_x'],
                 },
               },
               {
@@ -625,6 +739,20 @@ export class GeminiLiveService extends EventEmitter {
                     },
                   },
                   required: ['keys'],
+                },
+              },
+              {
+                name: 'computer_use_key_state',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Holds or releases one native keyboard key for advanced modifier sequences. Always pair key-down with key-up; prefer computer_use_hotkey for ordinary shortcuts.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    key: { type: 'STRING', description: 'Key name such as Shift, Control, Alt, or Win' },
+                    down: { type: 'BOOLEAN', description: 'True to hold the key; false to release it' },
+                  },
+                  required: ['key', 'down'],
                 },
               },
               {
@@ -1353,476 +1481,550 @@ export class GeminiLiveService extends EventEmitter {
       } as ConversationMessage);
 
       try {
-        let result: Record<string, any> = {};
+        const result = await this.executionGuard.execute(call.name, call.args, async () => {
+          let result: Record<string, any>;
 
-        switch (call.name) {
-          case 'teach_visual_blackboard': {
-            const lesson: VisualBlackboardLesson = {
-              id: `lesson_${Date.now()}`,
-              title: call.args.title || 'Visual Blackboard Lesson',
-              topic: call.args.topic || 'Academic Problem Solving',
-              diagramType: call.args.diagram_type || 'geometry',
-              latexFormula: call.args.latex_formula || '',
-              svgMarkup: call.args.svg_markup || '',
-              steps: Array.isArray(call.args.steps) ? call.args.steps : [String(call.args.steps)],
-              teachingNarration: call.args.teaching_narration || '',
-              createdAt: Date.now(),
-            };
-            this.emit('blackboard-lesson', lesson);
-            result = { success: true, lessonId: lesson.id, title: lesson.title };
-            break;
-          }
+          switch (call.name) {
+            case 'teach_visual_blackboard': {
+              const lesson: VisualBlackboardLesson = {
+                id: `lesson_${Date.now()}`,
+                title: call.args.title || 'Visual Blackboard Lesson',
+                topic: call.args.topic || 'Academic Problem Solving',
+                diagramType: call.args.diagram_type || 'geometry',
+                latexFormula: call.args.latex_formula || '',
+                svgMarkup: call.args.svg_markup || '',
+                steps: Array.isArray(call.args.steps) ? call.args.steps : [String(call.args.steps)],
+                teachingNarration: call.args.teaching_narration || '',
+                createdAt: Date.now(),
+              };
+              this.emit('blackboard-lesson', lesson);
+              result = { success: true, lessonId: lesson.id, title: lesson.title };
+              break;
+            }
 
-          case 'find_text_on_screen': {
-            const textToFind = String(call.args.text || '');
-            const winScope = call.args.window_title || call.args.windowTitle;
-            const shouldClick = Boolean(call.args.click);
-            const exact = Boolean(call.args.exact);
-            const caseSensitive = Boolean(call.args.case_sensitive ?? call.args.caseSensitive);
-            const maxResults = call.args.max_results ? Number(call.args.max_results) : undefined;
+            case 'find_text_on_screen': {
+              const textToFind = String(call.args.text || '');
+              const winScope = call.args.window_title || call.args.windowTitle;
+              const shouldClick = Boolean(call.args.click);
+              const exact = Boolean(call.args.exact);
+              const caseSensitive = Boolean(call.args.case_sensitive ?? call.args.caseSensitive);
+              const maxResults = call.args.max_results ? Number(call.args.max_results) : undefined;
 
-            const searchRes = await this.computerVision.findTextOnScreen(textToFind, {
-              windowTitle: winScope,
-              exact,
-              caseSensitive,
-              maxResults,
-            });
+              const searchRes = await this.computerVision.findTextOnScreen(textToFind, {
+                windowTitle: winScope,
+                exact,
+                caseSensitive,
+                maxResults,
+              });
 
-            if (searchRes.found && searchRes.bestMatch) {
-              const bm = searchRes.bestMatch;
+              if (searchRes.found && searchRes.bestMatch) {
+                const bm = searchRes.bestMatch;
+                this.emit('crosshair-target', {
+                  x: bm.x,
+                  y: bm.y,
+                  label: `Text "${bm.text}" (${bm.x}, ${bm.y})`,
+                  timestamp: Date.now(),
+                } as CrosshairTarget);
+
+                this.emit('bounding-box-target', {
+                  x: bm.bounds.x,
+                  y: bm.bounds.y,
+                  width: bm.bounds.width,
+                  height: bm.bounds.height,
+                  label: `Found: "${bm.text}"`,
+                  source: bm.source,
+                  timestamp: Date.now(),
+                } as BoundingBoxTarget);
+
+                const clicked = shouldClick
+                  ? await this.nativeInput.mouseClick(bm.x, bm.y, { skipHighlight: true })
+                  : undefined;
+
+                result = {
+                  success: clicked ?? true,
+                  found: true,
+                  x: bm.x,
+                  y: bm.y,
+                  bounds: bm.bounds,
+                  matchText: bm.text,
+                  matchesCount: searchRes.matches.length,
+                  clicked: clicked ?? false,
+                  source: bm.source,
+                  ...(clicked === false
+                    ? { error: 'The text was found, but the native click was not acknowledged.' }
+                    : {}),
+                };
+              } else {
+                result = {
+                  success: !shouldClick,
+                  found: false,
+                  query: textToFind,
+                  message: `Text "${textToFind}" not detected on screen.`,
+                  ...(shouldClick ? { error: 'No matching text was available to click.' } : {}),
+                };
+              }
+              break;
+            }
+
+            case 'computer_uia_find': {
+              const elements = await this.nativeInput.findUIElements(
+                String(call.args.query || ''),
+                String(call.args.window_title || ''),
+              );
+              result = { success: true, count: elements.length, elements };
+              break;
+            }
+
+            case 'computer_uia_invoke': {
+              const query = String(call.args.query || '');
+              const invoked = await this.nativeInput.invokeUIElement(
+                query,
+                String(call.args.window_title || ''),
+              );
+              result = {
+                success: invoked,
+                query,
+                ...(invoked ? {} : { error: 'No enabled UI Automation invoke target matched.' }),
+              };
+              break;
+            }
+
+            case 'computer_uia_set_value': {
+              const query = String(call.args.query || '');
+              const updated = await this.nativeInput.setUIElementValue(
+                query,
+                String(call.args.value ?? ''),
+                String(call.args.window_title || ''),
+              );
+              result = {
+                success: updated,
+                query,
+                ...(updated
+                  ? {}
+                  : {
+                      error: 'The matching control is missing, read-only, or has no ValuePattern.',
+                    }),
+              };
+              break;
+            }
+
+            case 'computer_use_click': {
+              const x = Number(call.args.x);
+              const y = Number(call.args.y);
+              const button = call.args.button || 'left';
+              const double = Boolean(call.args.double);
+
+              const clicked = await this.nativeInput.mouseClick(x, y, { button, double });
               this.emit('crosshair-target', {
-                x: bm.x,
-                y: bm.y,
-                label: `Text "${bm.text}" (${bm.x}, ${bm.y})`,
+                x,
+                y,
+                label: call.args.description || `Click (${x}, ${y})`,
                 timestamp: Date.now(),
               } as CrosshairTarget);
 
-              this.emit('bounding-box-target', {
-                x: bm.bounds.x,
-                y: bm.bounds.y,
-                width: bm.bounds.width,
-                height: bm.bounds.height,
-                label: `Found: "${bm.text}"`,
-                source: bm.source,
-                timestamp: Date.now(),
-              } as BoundingBoxTarget);
+              result = {
+                success: clicked,
+                x,
+                y,
+                button,
+                double,
+                ...(clicked ? {} : { error: 'The native click was not acknowledged; outcome is unknown.' }),
+              };
+              break;
+            }
 
-              if (shouldClick) {
-                await this.nativeInput.mouseClick(bm.x, bm.y, { skipHighlight: true });
+            case 'computer_use_mouse_move': {
+              const x = Number(call.args.x) || 0;
+              const y = Number(call.args.y) || 0;
+              const ok = await this.nativeInput.mouseMove(x, y);
+              result = { success: ok, x, y };
+              break;
+            }
+
+            case 'computer_use_mouse_drag': {
+              const sx = Number(call.args.start_x) || 0;
+              const sy = Number(call.args.start_y) || 0;
+              const ex = Number(call.args.end_x) || 0;
+              const ey = Number(call.args.end_y) || 0;
+              const steps = Number(call.args.steps) || 10;
+              const ok = await this.nativeInput.mouseDrag(sx, sy, ex, ey, steps);
+              result = { success: ok, from: { x: sx, y: sy }, to: { x: ex, y: ey } };
+              break;
+            }
+
+            case 'click_element_by_text': {
+              const textToClick = call.args.text || call.args.query || '';
+              let clicked = false;
+              try {
+                clicked = await this.cdpClient.clickElementByText(textToClick);
+              } catch {}
+              if (!clicked) {
+                try {
+                  const matches = await this.appManager.findText(textToClick);
+                  const target = matches[0];
+                  if (target) {
+                    clicked = await this.nativeInput.mouseClick(target.x, target.y);
+                    this.emit('crosshair-target', {
+                      x: target.x,
+                      y: target.y,
+                      label: `Clicked: "${textToClick}"`,
+                      timestamp: Date.now(),
+                    } as CrosshairTarget);
+                  }
+                } catch {}
+              }
+              result = { success: clicked, clickedText: textToClick };
+              break;
+            }
+
+            case 'press_key': {
+              const rawKey = call.args.key || 'Enter';
+              const ok = await this.nativeInput.sendHotkey(rawKey);
+              result = { success: ok, key: rawKey };
+              break;
+            }
+
+            case 'computer_use_type': {
+              const text = String(call.args.text || '');
+              await this.nativeInput.typeText(text);
+              if (call.args.press_enter) {
+                await this.nativeInput.sendHotkey('Enter');
+              }
+              result = { success: true, charactersTyped: text.length };
+              break;
+            }
+
+            case 'computer_use_hotkey': {
+              const rawKeys =
+                call.args.keys || call.args.key || call.args.hotkey || call.args.chord;
+              const keys = Array.isArray(rawKeys) ? rawKeys.join('+') : String(rawKeys || 'Enter');
+              await this.nativeInput.sendHotkey(keys);
+              result = { success: true, keysSent: keys };
+              break;
+            }
+
+            case 'computer_use_screenshot': {
+              const winTitle = call.args.window_title || call.args.windowTitle || call.args.title;
+              const shot =
+                call.args.target === 'window' && winTitle
+                  ? await this.computerVision.captureWindow(winTitle)
+                  : await this.computerVision.captureScreen();
+
+              if (call.args.feed_to_vision !== false) {
+                this.sendImageFrame(shot.data);
               }
 
+              this.emit('conversation-message', {
+                id: `shot_${Date.now()}`,
+                kind: 'assistant',
+                title: '📸 Screenshot',
+                text: `Desktop Screenshot captured (${shot.width}x${shot.height}):`,
+                imageUrl: `data:image/jpeg;base64,${shot.data}`,
+                at: Date.now(),
+              } as ConversationMessage);
+
               result = {
                 success: true,
-                found: true,
-                x: bm.x,
-                y: bm.y,
-                bounds: bm.bounds,
-                matchText: bm.text,
-                matchesCount: searchRes.matches.length,
-                clicked: shouldClick,
-                source: bm.source,
+                width: shot.width,
+                height: shot.height,
+                sourceName: shot.sourceName,
+                message:
+                  'Desktop screenshot captured, displayed in chat, and fed into vision stream.',
               };
-            } else {
-              result = {
-                success: true,
-                found: false,
-                query: textToFind,
-                message: `Text "${textToFind}" not detected on screen.`,
-              };
-            }
-            break;
-          }
-
-          case 'computer_use_click': {
-            const x = Number(call.args.x);
-            const y = Number(call.args.y);
-            const button = call.args.button || 'left';
-            const double = Boolean(call.args.double);
-
-            await this.nativeInput.mouseClick(x, y, { button, double });
-            this.emit('crosshair-target', {
-              x,
-              y,
-              label: call.args.description || `Click (${x}, ${y})`,
-              timestamp: Date.now(),
-            } as CrosshairTarget);
-
-            result = { success: true, x, y, button, double };
-            break;
-          }
-
-          case 'computer_use_mouse_move': {
-            const x = Number(call.args.x) || 0;
-            const y = Number(call.args.y) || 0;
-            const ok = await this.nativeInput.mouseMove(x, y);
-            result = { success: ok, x, y };
-            break;
-          }
-
-          case 'computer_use_mouse_drag': {
-            const sx = Number(call.args.start_x) || 0;
-            const sy = Number(call.args.start_y) || 0;
-            const ex = Number(call.args.end_x) || 0;
-            const ey = Number(call.args.end_y) || 0;
-            const steps = Number(call.args.steps) || 10;
-            const ok = await this.nativeInput.mouseDrag(sx, sy, ex, ey, steps);
-            result = { success: ok, from: { x: sx, y: sy }, to: { x: ex, y: ey } };
-            break;
-          }
-
-          case 'click_element_by_text': {
-            const textToClick = call.args.text || call.args.query || '';
-            let clicked = false;
-            try {
-              clicked = await this.cdpClient.clickElementByText(textToClick);
-            } catch {}
-            if (!clicked) {
-              try {
-                const matches = await this.appManager.findText(textToClick);
-                const target = matches[0];
-                if (target) {
-                  clicked = await this.nativeInput.mouseClick(target.x, target.y);
-                  this.emit('crosshair-target', {
-                    x: target.x,
-                    y: target.y,
-                    label: `Clicked: "${textToClick}"`,
-                    timestamp: Date.now(),
-                  } as CrosshairTarget);
-                }
-              } catch {}
-            }
-            result = { success: clicked, clickedText: textToClick };
-            break;
-          }
-
-          case 'press_key': {
-            const rawKey = call.args.key || 'Enter';
-            const ok = await this.nativeInput.sendHotkey(rawKey);
-            result = { success: ok, key: rawKey };
-            break;
-          }
-
-          case 'computer_use_type': {
-            const text = String(call.args.text || '');
-            await this.nativeInput.typeText(text);
-            if (call.args.press_enter) {
-              await this.nativeInput.sendHotkey('Enter');
-            }
-            result = { success: true, charactersTyped: text.length };
-            break;
-          }
-
-          case 'computer_use_hotkey': {
-            const rawKeys = call.args.keys || call.args.key || call.args.hotkey || call.args.chord;
-            const keys = Array.isArray(rawKeys) ? rawKeys.join('+') : String(rawKeys || 'Enter');
-            await this.nativeInput.sendHotkey(keys);
-            result = { success: true, keysSent: keys };
-            break;
-          }
-
-          case 'computer_use_screenshot': {
-            const winTitle = call.args.window_title || call.args.windowTitle || call.args.title;
-            const shot =
-              call.args.target === 'window' && winTitle
-                ? await this.computerVision.captureWindow(winTitle)
-                : await this.computerVision.captureScreen();
-
-            if (call.args.feed_to_vision !== false) {
-              this.sendImageFrame(shot.data);
+              break;
             }
 
-            this.emit('conversation-message', {
-              id: `shot_${Date.now()}`,
-              kind: 'assistant',
-              title: '📸 Screenshot',
-              text: `Desktop Screenshot captured (${shot.width}x${shot.height}):`,
-              imageUrl: `data:image/jpeg;base64,${shot.data}`,
-              at: Date.now(),
-            } as ConversationMessage);
-
-            result = {
-              success: true,
-              width: shot.width,
-              height: shot.height,
-              sourceName: shot.sourceName,
-              message:
-                'Desktop screenshot captured, displayed in chat, and fed into vision stream.',
-            };
-            break;
-          }
-
-          case 'launch_application': {
-            const app =
-              call.args.app_name || call.args.appName || call.args.app || call.args.name || '';
-            const rawArgs = call.args.arguments || call.args.args || [];
-            const res = await this.appManager.launchApplication(
-              app,
-              Array.isArray(rawArgs) ? rawArgs : [String(rawArgs)],
-            );
-            result = res;
-            break;
-          }
-
-          case 'switch_active_window': {
-            const target =
-              call.args.window_title ||
-              call.args.title ||
-              call.args.query ||
-              call.args.appName ||
-              call.args.app ||
-              '';
-            const ok = await this.appManager.focusWindow(target);
-            if (call.args.maximize === true || target.toLowerCase().includes('max')) {
-              await this.appManager.maximizeWindow(target);
-            }
-            result = { success: ok, window: target };
-            break;
-          }
-
-          case 'maximize_window': {
-            const target =
-              call.args.window_title ||
-              call.args.windowTitle ||
-              call.args.title ||
-              call.args.appName ||
-              call.args.app ||
-              'chrome';
-            const ok = await this.appManager.maximizeWindow(target);
-            result = { success: ok, maximized: true, window: target };
-            break;
-          }
-
-          case 'minimize_window': {
-            const target =
-              call.args.window_title ||
-              call.args.windowTitle ||
-              call.args.title ||
-              call.args.appName ||
-              call.args.app ||
-              'active';
-            const ok = await this.appManager.minimizeWindow(target);
-            result = { success: ok, minimized: true, window: target };
-            break;
-          }
-
-          case 'restore_window': {
-            const target =
-              call.args.window_title ||
-              call.args.windowTitle ||
-              call.args.title ||
-              call.args.appName ||
-              call.args.app ||
-              'chrome';
-            const ok = await this.appManager.restoreWindow(target);
-            result = { success: ok, restored: true, window: target };
-            break;
-          }
-
-          case 'close_window': {
-            const target =
-              call.args.window_title ||
-              call.args.windowTitle ||
-              call.args.title ||
-              call.args.appName ||
-              call.args.app ||
-              'active';
-            const ok = await this.appManager.closeWindow(target);
-            result = { success: ok, closed: true, window: target };
-            break;
-          }
-
-          case 'run_system_command': {
-            const cmd = call.args.command || call.args.cmd || '';
-            const res = await this.appManager.runSystemCommand(cmd);
-            result = res;
-            break;
-          }
-
-          case 'manage_browser_tabs': {
-            const act = call.args.action;
-            if (act === 'list') {
-              const tabs = await this.cdpClient.listTabs();
-              result = { success: true, count: tabs.length, tabs };
-            } else if (act === 'create') {
-              const tab = await this.cdpClient.createTab(call.args.url || 'https://www.google.com');
-              result = { success: true, tab };
-            } else if (act === 'switch') {
-              const ok = await this.cdpClient.switchTab(call.args.tab_id);
-              result = { success: ok, tabId: call.args.tab_id };
-            } else if (act === 'close') {
-              const ok = await this.cdpClient.closeTab(call.args.tab_id);
-              result = { success: ok, tabId: call.args.tab_id };
-            } else if (act === 'duplicate') {
-              const tab = await this.cdpClient.duplicateTab(call.args.tab_id);
-              result = { success: Boolean(tab), tab };
-            } else if (act === 'reload') {
-              const ok = await this.cdpClient.reloadTab(
-                call.args.tab_id,
-                Boolean(call.args.ignore_cache),
+            case 'launch_application': {
+              const app =
+                call.args.app_name || call.args.appName || call.args.app || call.args.name || '';
+              const rawArgs = call.args.arguments || call.args.args || [];
+              const res = await this.appManager.launchApplication(
+                app,
+                Array.isArray(rawArgs) ? rawArgs : [String(rawArgs)],
               );
-              result = { success: ok, tabId: call.args.tab_id };
-            } else if (act === 'close_duplicates') {
-              const dupRes = await this.cdpClient.closeDuplicateTabs();
-              result = dupRes;
-            } else {
-              result = { error: `Unknown tab action: ${act}` };
+              result = res;
+              break;
             }
-            break;
-          }
 
-          case 'search_tab_content': {
-            const query = call.args.query || call.args.text || '';
-            const caseSensitive = Boolean(call.args.case_sensitive || call.args.caseSensitive);
-            const searchRes = await this.cdpClient.searchTabContent(query, { caseSensitive });
-            result = searchRes;
-            break;
-          }
-
-          case 'close_duplicate_tabs': {
-            const closeRes = await this.cdpClient.closeDuplicateTabs();
-            result = closeRes;
-            break;
-          }
-
-          case 'read_clipboard': {
-            const text = this.clipboard.readText();
-            result = {
-              success: true,
-              text,
-              length: text.length,
-              hasText: this.clipboard.hasText(),
-            };
-            break;
-          }
-
-          case 'write_clipboard': {
-            const text = call.args.text || '';
-            const ok = this.clipboard.writeText(text);
-            result = { success: ok, length: text.length };
-            break;
-          }
-
-          case 'tile_windows': {
-            const layout = (call.args.layout || 'side-by-side') as WindowTilingLayout;
-            const targetApp =
-              call.args.target_app ||
-              call.args.targetApp ||
-              call.args.target ||
-              call.args.app ||
-              '';
-            const rawTitles =
-              call.args.window_titles ||
-              call.args.windowTitles ||
-              call.args.windows ||
-              call.args.titles;
-            const windowTitles = Array.isArray(rawTitles) ? rawTitles.map(String) : undefined;
-            const monitorIndex =
-              typeof call.args.monitor_index === 'number'
-                ? call.args.monitor_index
-                : typeof call.args.monitorIndex === 'number'
-                  ? call.args.monitorIndex
-                  : undefined;
-
-            const tileRes = await this.appManager.tileWindows(layout, {
-              targetApp: targetApp || undefined,
-              windowTitles,
-              monitorIndex,
-            });
-            result = tileRes;
-            break;
-          }
-
-          case 'plan_autonomous_task': {
-            const task = this.workflowEngine.createTask(
-              call.args.goal,
-              Array.isArray(call.args.steps) ? call.args.steps : undefined,
-            );
-            void this.workflowEngine.startTask(task.id);
-            result = {
-              success: true,
-              taskId: task.id,
-              goal: task.goal,
-              stepCount: task.steps.length,
-            };
-            break;
-          }
-
-          case 'get_desktop_state': {
-            const [cursor, windows, tabs] = await Promise.all([
-              this.nativeInput.getCursorPosition(),
-              this.appManager.listRunningWindows(),
-              this.cdpClient.listTabs(),
-            ]);
-            const display = this.computerVision.getDisplayMetrics();
-            result = {
-              cursor,
-              display,
-              windowsCount: windows.length,
-              activeWindows: windows.slice(0, 10),
-              openTabsCount: tabs.length,
-              tabs: tabs.map((t) => ({ id: t.id, title: t.title, url: t.url })),
-            };
-            break;
-          }
-
-          case 'capture_viewport': {
-            const shot = await this.cdpClient.captureScreenshot();
-            this.sendImageFrame(shot.data);
-            result = {
-              success: true,
-              message:
-                'Viewport screenshot captured successfully and fed into Gemini vision stream.',
-            };
-            break;
-          }
-
-          case 'open_youtube': {
-            const tab = await this.cdpClient.openYouTube(call.args.query);
-            result = { success: true, url: tab?.url || 'https://www.youtube.com' };
-            break;
-          }
-
-          case 'navigate_to_url': {
-            try {
-              await this.cdpClient.navigate(call.args.url);
-              result = { success: true, url: call.args.url };
-            } catch (err) {
-              result = { success: false, error: err instanceof Error ? err.message : String(err) };
+            case 'switch_active_window': {
+              const target =
+                call.args.window_title ||
+                call.args.title ||
+                call.args.query ||
+                call.args.appName ||
+                call.args.app ||
+                '';
+              const ok = await this.appManager.focusWindow(target);
+              if (call.args.maximize === true || target.toLowerCase().includes('max')) {
+                await this.appManager.maximizeWindow(target);
+              }
+              result = { success: ok, window: target };
+              break;
             }
-            break;
-          }
 
-          case 'browser_open_tab': {
-            const url = String(call.args.url || 'https://www.google.com');
-            const tab = await this.cdpClient.createTab(url);
-            if (!tab) {
-              result = { success: false, error: 'Failed to create Chrome tab.' };
-            } else {
-              result = { success: true, tabId: tab.id, url: tab.url, title: tab.title };
+            case 'maximize_window': {
+              const target =
+                call.args.window_title ||
+                call.args.windowTitle ||
+                call.args.title ||
+                call.args.appName ||
+                call.args.app ||
+                'chrome';
+              const ok = await this.appManager.maximizeWindow(target);
+              result = { success: ok, maximized: true, window: target };
+              break;
             }
-            break;
-          }
 
-          case 'browser_read': {
-            try {
-              const pageData = await this.cdpClient.readPage();
-              result = { success: true, ...pageData };
-            } catch (err) {
-              result = { success: false, error: err instanceof Error ? err.message : String(err) };
+            case 'minimize_window': {
+              const target =
+                call.args.window_title ||
+                call.args.windowTitle ||
+                call.args.title ||
+                call.args.appName ||
+                call.args.app ||
+                'active';
+              const ok = await this.appManager.minimizeWindow(target);
+              result = { success: ok, minimized: true, window: target };
+              break;
             }
-            break;
-          }
 
-          case 'browser_click': {
-            const selector = String(call.args.selector || '');
-            if (!selector) {
-              result = { success: false, error: 'selector is required.' };
-            } else {
+            case 'restore_window': {
+              const target =
+                call.args.window_title ||
+                call.args.windowTitle ||
+                call.args.title ||
+                call.args.appName ||
+                call.args.app ||
+                'chrome';
+              const ok = await this.appManager.restoreWindow(target);
+              result = { success: ok, restored: true, window: target };
+              break;
+            }
+
+            case 'close_window': {
+              const target =
+                call.args.window_title ||
+                call.args.windowTitle ||
+                call.args.title ||
+                call.args.appName ||
+                call.args.app ||
+                'active';
+              const ok = await this.appManager.closeWindow(target);
+              result = { success: ok, closed: true, window: target };
+              break;
+            }
+
+            case 'run_system_command': {
+              const cmd = call.args.command || call.args.cmd || '';
+              const res = await this.appManager.runSystemCommand(cmd);
+              result = res;
+              break;
+            }
+
+            case 'manage_browser_tabs': {
+              const act = call.args.action;
+              if (act === 'list') {
+                const tabs = await this.cdpClient.listTabs();
+                result = { success: true, count: tabs.length, tabs };
+              } else if (act === 'create') {
+                result = await this.browserGateway.openTab(call.args.url);
+              } else if (act === 'switch') {
+                const ok = await this.cdpClient.switchTab(call.args.tab_id);
+                result = { success: ok, tabId: call.args.tab_id };
+              } else if (act === 'close') {
+                const ok = await this.cdpClient.closeTab(call.args.tab_id);
+                result = { success: ok, tabId: call.args.tab_id };
+              } else if (act === 'duplicate') {
+                const tab = await this.cdpClient.duplicateTab(call.args.tab_id);
+                result = { success: Boolean(tab), tab };
+              } else if (act === 'reload') {
+                const ok = await this.cdpClient.reloadTab(
+                  call.args.tab_id,
+                  Boolean(call.args.ignore_cache),
+                );
+                result = { success: ok, tabId: call.args.tab_id };
+              } else if (act === 'close_duplicates') {
+                const dupRes = await this.cdpClient.closeDuplicateTabs();
+                result = dupRes;
+              } else {
+                result = { error: `Unknown tab action: ${act}` };
+              }
+              break;
+            }
+
+            case 'search_tab_content': {
+              const query = call.args.query || call.args.text || '';
+              const caseSensitive = Boolean(call.args.case_sensitive || call.args.caseSensitive);
+              const searchRes = await this.cdpClient.searchTabContent(query, { caseSensitive });
+              result = searchRes;
+              break;
+            }
+
+            case 'close_duplicate_tabs': {
+              const closeRes = await this.cdpClient.closeDuplicateTabs();
+              result = closeRes;
+              break;
+            }
+
+            case 'read_clipboard': {
+              const text = this.clipboard.readText();
+              result = {
+                success: true,
+                text,
+                length: text.length,
+                hasText: this.clipboard.hasText(),
+              };
+              break;
+            }
+
+            case 'write_clipboard': {
+              const text = call.args.text || '';
+              const ok = this.clipboard.writeText(text);
+              result = { success: ok, length: text.length };
+              break;
+            }
+
+            case 'tile_windows': {
+              const layout = (call.args.layout || 'side-by-side') as WindowTilingLayout;
+              const targetApp =
+                call.args.target_app ||
+                call.args.targetApp ||
+                call.args.target ||
+                call.args.app ||
+                '';
+              const rawTitles =
+                call.args.window_titles ||
+                call.args.windowTitles ||
+                call.args.windows ||
+                call.args.titles;
+              const windowTitles = Array.isArray(rawTitles) ? rawTitles.map(String) : undefined;
+              const monitorIndex =
+                typeof call.args.monitor_index === 'number'
+                  ? call.args.monitor_index
+                  : typeof call.args.monitorIndex === 'number'
+                    ? call.args.monitorIndex
+                    : undefined;
+
+              const tileRes = await this.appManager.tileWindows(layout, {
+                targetApp: targetApp || undefined,
+                windowTitles,
+                monitorIndex,
+              });
+              result = tileRes;
+              break;
+            }
+
+            case 'plan_autonomous_task': {
+              const task = this.workflowEngine.createTask(
+                call.args.goal,
+                Array.isArray(call.args.steps) ? call.args.steps : undefined,
+              );
+              void this.workflowEngine.startTask(task.id);
+              result = {
+                success: true,
+                taskId: task.id,
+                goal: task.goal,
+                stepCount: task.steps.length,
+              };
+              break;
+            }
+
+            case 'get_desktop_state': {
+              const [cursor, windows, tabs] = await Promise.all([
+                this.nativeInput.getCursorPosition(),
+                this.appManager.listRunningWindows(),
+                this.cdpClient.listTabs(),
+              ]);
+              const display = this.computerVision.getDisplayMetrics();
+              result = {
+                cursor,
+                display,
+                windowsCount: windows.length,
+                activeWindows: windows.slice(0, 10),
+                openTabsCount: tabs.length,
+                tabs: tabs.map((t) => ({ id: t.id, title: t.title, url: t.url })),
+              };
+              break;
+            }
+
+            case 'capture_viewport': {
+              const shot = await this.cdpClient.captureScreenshot();
+              this.sendImageFrame(shot.data);
+              result = {
+                success: true,
+                message:
+                  'Viewport screenshot captured successfully and fed into Gemini vision stream.',
+              };
+              break;
+            }
+
+            case 'open_youtube': {
+              const query = String(call.args.query || '').trim();
+              const url = query
+                ? `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`
+                : 'https://www.youtube.com';
+              result = await this.browserGateway.openTab(url);
+              break;
+            }
+
+            case 'navigate_to_url': {
+              result = await this.browserGateway.navigate(String(call.args.url || ''));
+              break;
+            }
+
+            case 'browser_open_tab': {
+              result = await this.browserGateway.openTab(call.args.url);
+              break;
+            }
+
+            case 'browser_read': {
               try {
-                const ok = await this.cdpClient.click(selector);
-                result = { success: ok, selector };
-                if (!ok) {
-                  result.error = `No element matching selector "${selector}" found.`;
+                const pageData = await this.cdpClient.readPage();
+                result = { success: true, ...pageData };
+              } catch (err) {
+                result = {
+                  success: false,
+                  error: err instanceof Error ? err.message : String(err),
+                };
+              }
+              break;
+            }
+
+            case 'browser_click': {
+              const selector = String(call.args.selector || '');
+              if (!selector) {
+                result = { success: false, error: 'selector is required.' };
+              } else {
+                try {
+                  const ok = await this.cdpClient.click(selector);
+                  result = { success: ok, selector };
+                  if (!ok) {
+                    result.error = `No element matching selector "${selector}" found.`;
+                  }
+                } catch (err) {
+                  result = {
+                    success: false,
+                    error: err instanceof Error ? err.message : String(err),
+                  };
+                }
+              }
+              break;
+            }
+
+            case 'browser_close_tab': {
+              const tabId = String(call.args.tab_id || '');
+              try {
+                if (tabId) {
+                  const ok = await this.cdpClient.closeTab(tabId);
+                  result = { success: ok, tabId };
+                } else {
+                  const active = await this.cdpClient.getActiveTab();
+                  if (!active) {
+                    result = { success: false, error: 'No active Chrome tab to close.' };
+                  } else {
+                    const ok = await this.cdpClient.closeTab(active.id);
+                    result = { success: ok, tabId: active.id };
+                  }
                 }
               } catch (err) {
                 result = {
@@ -1830,232 +2032,213 @@ export class GeminiLiveService extends EventEmitter {
                   error: err instanceof Error ? err.message : String(err),
                 };
               }
+              break;
             }
-            break;
-          }
 
-          case 'browser_close_tab': {
-            const tabId = String(call.args.tab_id || '');
-            try {
-              if (tabId) {
-                const ok = await this.cdpClient.closeTab(tabId);
-                result = { success: ok, tabId };
-              } else {
-                const active = await this.cdpClient.getActiveTab();
-                if (!active) {
-                  result = { success: false, error: 'No active Chrome tab to close.' };
-                } else {
-                  const ok = await this.cdpClient.closeTab(active.id);
-                  result = { success: ok, tabId: active.id };
-                }
+            case 'scroll_page':
+            case 'mouse_scroll': {
+              const direction = (call.args.direction || 'down') as 'up' | 'down';
+              const amount = Number(call.args.amount) || 450;
+              const targetApp =
+                call.args.target_app || call.args.app || call.args.window_title || 'chrome';
+              const yDelta = direction === 'down' ? amount : -amount;
+
+              // One scroll strategy only: CDP for Chrome, hardware wheel for everything else.
+              const isChromeTarget = /chrome|browser|web|page|youtube/i.test(targetApp);
+              let cdpOk = false;
+              if (isChromeTarget) {
+                cdpOk = await this.cdpClient.scroll(direction, amount).catch(() => false);
               }
-            } catch (err) {
-              result = { success: false, error: err instanceof Error ? err.message : String(err) };
+              let nativeOk = false;
+              if (!cdpOk) {
+                const metrics = this.computerVision.getDisplayMetrics();
+                const scrollX = Math.floor(metrics.width / 2);
+                const scrollY = Math.floor(metrics.height / 2);
+                nativeOk = await this.nativeInput.mouseScrollAt(scrollX, scrollY, -yDelta);
+              }
+              result = {
+                success: cdpOk || nativeOk,
+                direction,
+                amount,
+                targetApp,
+                via: cdpOk ? 'cdp' : 'native',
+              };
+              break;
             }
-            break;
-          }
 
-          case 'scroll_page':
-          case 'mouse_scroll': {
-            const direction = (call.args.direction || 'down') as 'up' | 'down';
-            const amount = Number(call.args.amount) || 450;
-            const targetApp =
-              call.args.target_app || call.args.app || call.args.window_title || 'chrome';
-            const yDelta = direction === 'down' ? amount : -amount;
-
-            // One scroll strategy only: CDP for Chrome, hardware wheel for everything else.
-            const isChromeTarget = /chrome|browser|web|page|youtube/i.test(targetApp);
-            let cdpOk = false;
-            if (isChromeTarget) {
-              cdpOk = await this.cdpClient.scroll(direction, amount).catch(() => false);
+            case 'read_page': {
+              const pageData = await this.cdpClient.readPage();
+              result = { success: true, ...pageData };
+              break;
             }
-            let nativeOk = false;
-            if (!cdpOk) {
-              const metrics = this.computerVision.getDisplayMetrics();
-              const scrollX = Math.floor(metrics.width / 2);
-              const scrollY = Math.floor(metrics.height / 2);
-              nativeOk = await this.nativeInput.mouseScrollAt(scrollX, scrollY, -yDelta);
+
+            case 'autonomous_goal': {
+              const goal = String(call.args.goal || '');
+              const maxIterations =
+                typeof call.args.maxIterations === 'number' ? call.args.maxIterations : undefined;
+              const session = await autonomousAgent.startSession(goal, {
+                maxIterations,
+                autoApprove: this.settings.autoApprove,
+                voiceEnabled: true,
+                onObservation: (obs) => {
+                  this.emit('conversation-message', {
+                    id: `obs_${Date.now()}`,
+                    kind: 'assistant',
+                    title: '👁️ Agent Observation',
+                    text: `Desktop state: ${obs.windows.length} windows active, cursor at (${obs.cursor.x}, ${obs.cursor.y})`,
+                    at: Date.now(),
+                  } as any);
+                },
+                onStepStart: (step) => {
+                  this.emit('conversation-message', {
+                    id: `step_start_${Date.now()}`,
+                    kind: 'tool',
+                    name: step.action,
+                    title: `▶️ ${step.description}`,
+                    at: Date.now(),
+                  } as any);
+                },
+                onStepComplete: (step, res) => {
+                  this.emit('conversation-message', {
+                    id: `step_done_${Date.now()}`,
+                    kind: 'tool',
+                    name: step.action,
+                    title: `✅ ${step.description}`,
+                    detail: JSON.stringify(res).slice(0, 300),
+                    at: Date.now(),
+                  } as any);
+                },
+                onStepFail: (step, error) => {
+                  this.emit('conversation-message', {
+                    id: `step_fail_${Date.now()}`,
+                    kind: 'tool',
+                    name: step.action,
+                    title: `❌ ${step.description}`,
+                    detail: error,
+                    at: Date.now(),
+                  } as any);
+                },
+                onGoalComplete: (session) => {
+                  this.emit('conversation-message', {
+                    id: `goal_done_${Date.now()}`,
+                    kind: 'assistant',
+                    title: '🎯 Autonomous Goal Complete',
+                    text: `Goal "${session.goal}" achieved in ${session.iterations} iterations and ${session.steps.length} steps.`,
+                    at: Date.now(),
+                  } as any);
+                },
+                onGoalFail: (session, error) => {
+                  this.emit('conversation-message', {
+                    id: `goal_fail_${Date.now()}`,
+                    kind: 'assistant',
+                    title: '⚠️ Autonomous Goal Failed',
+                    text: `Goal "${session.goal}" could not be completed: ${error}`,
+                    at: Date.now(),
+                  } as any);
+                },
+              });
+              result = {
+                success: session.status === 'completed',
+                sessionId: session.id,
+                goal: session.goal,
+                status: session.status,
+                iterations: session.iterations,
+                steps: session.steps.length,
+                error: session.error,
+              };
+              break;
             }
-            result = {
-              success: cdpOk || nativeOk,
-              direction,
-              amount,
-              targetApp,
-              via: cdpOk ? 'cdp' : 'native',
-            };
-            break;
+
+            case 'open_blender': {
+              const blendFile = String(call.args.blendFile || '');
+              const res = await computerOperator.executeSkillAction('blender-gui', 'openBlender', {
+                ...(blendFile ? { blendFile } : {}),
+              });
+              result = res;
+              break;
+            }
+
+            case 'download_scene': {
+              const url = String(call.args.url || '');
+              const filename = String(call.args.filename || '');
+              const res = await downloadManager.downloadFile(url, {
+                ...(filename ? { filename } : {}),
+              });
+              result = res;
+              break;
+            }
+
+            case 'add_blender_shader': {
+              const res = await computerOperator.executeSkillAction('blender-gui', 'addShader', {
+                shaderType: call.args.shaderType || 'principled',
+                color: call.args.color || undefined,
+                strength: call.args.strength || undefined,
+              });
+              result = res;
+              break;
+            }
+
+            case 'render_blender_scene': {
+              const res = await computerOperator.executeSkillAction('blender-gui', 'renderScene', {
+                outputPath: call.args.outputPath || undefined,
+                format: call.args.format || 'png',
+              });
+              result = res;
+              break;
+            }
+
+            case 'click_element_on_screen': {
+              const res = await screenGrounding.clickElement(String(call.args.description || ''), {
+                containerTitle: call.args.containerTitle || undefined,
+                button: call.args.button || 'left',
+                double: call.args.double ?? false,
+              });
+              result = res;
+              break;
+            }
+
+            case 'wait_for_element_on_screen': {
+              const res = await screenGrounding.waitForElement({
+                description: String(call.args.description || ''),
+                timeoutMs: typeof call.args.timeoutMs === 'number' ? call.args.timeoutMs : 30_000,
+              });
+              result = { success: Boolean(res), element: res || null };
+              break;
+            }
+
+            case 'read_screen_text': {
+              const res = await screenGrounding.readScreen(String(call.args.query || ''), {
+                maxResults: 20,
+              });
+              result = {
+                found: res.found,
+                query: res.query,
+                matches: res.matches.map((m) => ({
+                  text: m.text,
+                  x: m.x,
+                  y: m.y,
+                  confidence: m.confidence,
+                  source: m.source,
+                  container: m.containerTitle,
+                })),
+                bestMatch: res.bestMatch
+                  ? {
+                      text: res.bestMatch.text,
+                      x: res.bestMatch.x,
+                      y: res.bestMatch.y,
+                      confidence: res.bestMatch.confidence,
+                    }
+                  : null,
+              };
+              break;
+            }
+
+            default:
+              result = { error: `Unrecognized tool function: ${call.name}` };
           }
 
-          case 'read_page': {
-            const pageData = await this.cdpClient.readPage();
-            result = { success: true, ...pageData };
-            break;
-          }
-
-          case 'autonomous_goal': {
-            const goal = String(call.args.goal || '');
-            const maxIterations =
-              typeof call.args.maxIterations === 'number' ? call.args.maxIterations : undefined;
-            const session = await autonomousAgent.startSession(goal, {
-              maxIterations,
-              autoApprove: true,
-              voiceEnabled: true,
-              onObservation: (obs) => {
-                this.emit('conversation-message', {
-                  id: `obs_${Date.now()}`,
-                  kind: 'assistant',
-                  title: '👁️ Agent Observation',
-                  text: `Desktop state: ${obs.windows.length} windows active, cursor at (${obs.cursor.x}, ${obs.cursor.y})`,
-                  at: Date.now(),
-                } as any);
-              },
-              onStepStart: (step) => {
-                this.emit('conversation-message', {
-                  id: `step_start_${Date.now()}`,
-                  kind: 'tool',
-                  name: step.action,
-                  title: `▶️ ${step.description}`,
-                  at: Date.now(),
-                } as any);
-              },
-              onStepComplete: (step, res) => {
-                this.emit('conversation-message', {
-                  id: `step_done_${Date.now()}`,
-                  kind: 'tool',
-                  name: step.action,
-                  title: `✅ ${step.description}`,
-                  detail: JSON.stringify(res).slice(0, 300),
-                  at: Date.now(),
-                } as any);
-              },
-              onStepFail: (step, error) => {
-                this.emit('conversation-message', {
-                  id: `step_fail_${Date.now()}`,
-                  kind: 'tool',
-                  name: step.action,
-                  title: `❌ ${step.description}`,
-                  detail: error,
-                  at: Date.now(),
-                } as any);
-              },
-              onGoalComplete: (session) => {
-                this.emit('conversation-message', {
-                  id: `goal_done_${Date.now()}`,
-                  kind: 'assistant',
-                  title: '🎯 Autonomous Goal Complete',
-                  text: `Goal "${session.goal}" achieved in ${session.iterations} iterations and ${session.steps.length} steps.`,
-                  at: Date.now(),
-                } as any);
-              },
-              onGoalFail: (session, error) => {
-                this.emit('conversation-message', {
-                  id: `goal_fail_${Date.now()}`,
-                  kind: 'assistant',
-                  title: '⚠️ Autonomous Goal Failed',
-                  text: `Goal "${session.goal}" could not be completed: ${error}`,
-                  at: Date.now(),
-                } as any);
-              },
-            });
-            result = {
-              success: session.status === 'completed',
-              sessionId: session.id,
-              goal: session.goal,
-              status: session.status,
-              iterations: session.iterations,
-              steps: session.steps.length,
-              error: session.error,
-            };
-            break;
-          }
-
-          case 'open_blender': {
-            const blendFile = String(call.args.blendFile || '');
-            const res = await computerOperator.executeSkillAction('blender-gui', 'openBlender', {
-              ...(blendFile ? { blendFile } : {}),
-            });
-            result = res;
-            break;
-          }
-
-          case 'download_scene': {
-            const url = String(call.args.url || '');
-            const filename = String(call.args.filename || '');
-            const res = await downloadManager.downloadFile(url, {
-              ...(filename ? { filename } : {}),
-            });
-            result = res;
-            break;
-          }
-
-          case 'add_blender_shader': {
-            const res = await computerOperator.executeSkillAction('blender-gui', 'addShader', {
-              shaderType: call.args.shaderType || 'principled',
-              color: call.args.color || undefined,
-              strength: call.args.strength || undefined,
-            });
-            result = res;
-            break;
-          }
-
-          case 'render_blender_scene': {
-            const res = await computerOperator.executeSkillAction('blender-gui', 'renderScene', {
-              outputPath: call.args.outputPath || undefined,
-              format: call.args.format || 'png',
-            });
-            result = res;
-            break;
-          }
-
-          case 'click_element_on_screen': {
-            const res = await screenGrounding.clickElement(String(call.args.description || ''), {
-              containerTitle: call.args.containerTitle || undefined,
-              button: call.args.button || 'left',
-              double: call.args.double ?? false,
-            });
-            result = res;
-            break;
-          }
-
-          case 'wait_for_element_on_screen': {
-            const res = await screenGrounding.waitForElement({
-              description: String(call.args.description || ''),
-              timeoutMs: typeof call.args.timeoutMs === 'number' ? call.args.timeoutMs : 30_000,
-            });
-            result = { success: Boolean(res), element: res || null };
-            break;
-          }
-
-          case 'read_screen_text': {
-            const res = await screenGrounding.readScreen(String(call.args.query || ''), {
-              maxResults: 20,
-            });
-            result = {
-              found: res.found,
-              query: res.query,
-              matches: res.matches.map((m) => ({
-                text: m.text,
-                x: m.x,
-                y: m.y,
-                confidence: m.confidence,
-                source: m.source,
-                container: m.containerTitle,
-              })),
-              bestMatch: res.bestMatch
-                ? {
-                    text: res.bestMatch.text,
-                    x: res.bestMatch.x,
-                    y: res.bestMatch.y,
-                    confidence: res.bestMatch.confidence,
-                  }
-                : null,
-            };
-            break;
-          }
-
-          default:
-            result = { error: `Unrecognized tool function: ${call.name}` };
-        }
+          return result;
+        });
 
         responses.push({
           id: call.id,

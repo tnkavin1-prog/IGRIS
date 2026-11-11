@@ -5,6 +5,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Text.RegularExpressions;
+using System.IO;
+using System.Runtime.Serialization;
+using System.Runtime.Serialization.Json;
+using System.Windows.Automation;
 
 namespace Gemetron {
     [StructLayout(LayoutKind.Sequential)]
@@ -31,6 +35,52 @@ namespace Gemetron {
         public RECT rcNormalPosition;
     }
 
+    [DataContract]
+    public sealed class NativeRequest {
+        [DataMember] public string id { get; set; }
+        [DataMember] public string action { get; set; }
+        [DataMember] public string[] args { get; set; }
+    }
+
+    [DataContract]
+    public sealed class NativeResponse {
+        [DataMember] public string id { get; set; }
+        [DataMember] public bool ok { get; set; }
+        [DataMember] public string result { get; set; }
+        [DataMember] public string error { get; set; }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MOUSEINPUT {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public UIntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct KEYBDINPUT {
+        public ushort wVk;
+        public ushort wScan;
+        public uint dwFlags;
+        public uint time;
+        public UIntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    public struct INPUTUNION {
+        [FieldOffset(0)] public MOUSEINPUT mi;
+        [FieldOffset(0)] public KEYBDINPUT ki;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct INPUT {
+        public uint type;
+        public INPUTUNION U;
+    }
+
     public static class Win32Input {
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
@@ -52,6 +102,9 @@ namespace Gemetron {
 
         [DllImport("user32.dll", SetLastError = true)]
         public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
         [DllImport("user32.dll", SetLastError = true)]
         public static extern short VkKeyScan(char ch);
@@ -196,8 +249,12 @@ namespace Gemetron {
         private const uint MOUSEEVENTF_MIDDLEDOWN = 0x0020;
         private const uint MOUSEEVENTF_MIDDLEUP = 0x0040;
         private const uint MOUSEEVENTF_WHEEL = 0x0800;
+        private const uint MOUSEEVENTF_HWHEEL = 0x01000;
 
         private const uint KEYEVENTF_KEYUP = 0x0002;
+        private const uint KEYEVENTF_UNICODE = 0x0004;
+        private const uint INPUT_MOUSE = 0;
+        private const uint INPUT_KEYBOARD = 1;
 
         private const int SW_RESTORE = 9;
         private const int SW_SHOW = 5;
@@ -240,10 +297,51 @@ namespace Gemetron {
             }
         }
 
+        private static bool SendMouseInput(uint flags, uint data = 0) {
+            INPUT[] inputs = new INPUT[1];
+            inputs[0].type = INPUT_MOUSE;
+            inputs[0].U.mi.dwFlags = flags;
+            inputs[0].U.mi.mouseData = data;
+            return SendInput(1, inputs, Marshal.SizeOf(typeof(INPUT))) == 1;
+        }
+
+        private static bool SendKeyInput(ushort vk, bool keyUp, ushort scan = 0, bool unicode = false) {
+            INPUT[] inputs = new INPUT[1];
+            inputs[0].type = INPUT_KEYBOARD;
+            inputs[0].U.ki.wVk = unicode ? (ushort)0 : vk;
+            inputs[0].U.ki.wScan = scan;
+            inputs[0].U.ki.dwFlags = (keyUp ? KEYEVENTF_KEYUP : 0) | (unicode ? KEYEVENTF_UNICODE : 0);
+            return SendInput(1, inputs, Marshal.SizeOf(typeof(INPUT))) == 1;
+        }
+
         public static bool MoveMouse(int x, int y) {
             bool ok = false;
             RunOnInputDesktop(() => {
                 ok = SetCursorPos(x, y);
+            });
+            return ok;
+        }
+
+        public static bool MoveMouseSmooth(int x, int y, int durationMs) {
+            bool ok = true;
+            RunOnInputDesktop(() => {
+                POINT start;
+                if (!GetCursorPos(out start)) {
+                    ok = false;
+                    return;
+                }
+                int duration = Math.Max(0, Math.Min(5000, durationMs));
+                int steps = Math.Max(1, Math.Min(120, duration / 8));
+                for (int i = 1; i <= steps; i++) {
+                    double t = (double)i / steps;
+                    double eased = t * t * (3.0 - 2.0 * t);
+                    int nextX = start.X + (int)Math.Round((x - start.X) * eased);
+                    int nextY = start.Y + (int)Math.Round((y - start.Y) * eased);
+                    if (!SetCursorPos(nextX, nextY)) ok = false;
+                    if (i < steps && duration > 0) Thread.Sleep(Math.Max(1, duration / steps));
+                }
+                POINT finalPosition;
+                ok = ok && GetCursorPos(out finalPosition) && finalPosition.X == x && finalPosition.Y == y;
             });
             return ok;
         }
@@ -262,8 +360,9 @@ namespace Gemetron {
         }
 
         public static bool Click(int x, int y, string button, bool isDouble) {
+            bool ok = false;
             RunOnInputDesktop(() => {
-                SetCursorPos(x, y);
+                if (!SetCursorPos(x, y)) return;
                 uint downFlag = MOUSEEVENTF_LEFTDOWN;
                 uint upFlag = MOUSEEVENTF_LEFTUP;
 
@@ -275,35 +374,35 @@ namespace Gemetron {
                     upFlag = MOUSEEVENTF_MIDDLEUP;
                 }
 
-                mouse_event(downFlag, 0, 0, 0, UIntPtr.Zero);
-                mouse_event(upFlag, 0, 0, 0, UIntPtr.Zero);
-
+                ok = SendMouseInput(downFlag) && SendMouseInput(upFlag);
                 if (isDouble) {
                     Thread.Sleep(60);
-                    mouse_event(downFlag, 0, 0, 0, UIntPtr.Zero);
-                    mouse_event(upFlag, 0, 0, 0, UIntPtr.Zero);
+                    ok = ok && SendMouseInput(downFlag) && SendMouseInput(upFlag);
                 }
+                POINT position;
+                ok = ok && GetCursorPos(out position) && position.X == x && position.Y == y;
             });
-            return true;
+            return ok;
         }
 
         public static bool Drag(int startX, int startY, int endX, int endY, int steps) {
+            bool ok = false;
             RunOnInputDesktop(() => {
-                SetCursorPos(startX, startY);
-                mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+                if (!SetCursorPos(startX, startY) || !SendMouseInput(MOUSEEVENTF_LEFTDOWN)) return;
                 Thread.Sleep(40);
 
                 if (steps <= 0) steps = 10;
+                ok = true;
                 for (int i = 1; i <= steps; i++) {
                     int currX = startX + (endX - startX) * i / steps;
                     int currY = startY + (endY - startY) * i / steps;
-                    SetCursorPos(currX, currY);
+                    if (!SetCursorPos(currX, currY)) ok = false;
                     Thread.Sleep(15);
                 }
 
-                mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                ok = SendMouseInput(MOUSEEVENTF_LEFTUP) && ok;
             });
-            return true;
+            return ok;
         }
 
         public static bool Scroll(int deltaY) {
@@ -311,6 +410,7 @@ namespace Gemetron {
         }
 
         public static bool ScrollAt(int x, int y, int deltaY) {
+            bool ok = true;
             RunOnInputDesktop(() => {
                 if (x >= 0 && y >= 0) {
                     SetCursorPos(x, y);
@@ -323,12 +423,29 @@ namespace Gemetron {
 
                 for (int i = 0; i < totalSteps; i++) {
                     unchecked {
-                        mouse_event(MOUSEEVENTF_WHEEL, 0, 0, (uint)stepDelta, UIntPtr.Zero);
+                        ok = SendMouseInput(MOUSEEVENTF_WHEEL, (uint)stepDelta) && ok;
                     }
                     if (totalSteps > 1) Thread.Sleep(15);
                 }
             });
-            return true;
+            return ok;
+        }
+
+        public static bool ScrollHorizontal(int x, int y, int deltaX) {
+            bool ok = true;
+            RunOnInputDesktop(() => {
+                if (x >= 0 && y >= 0) SetCursorPos(x, y);
+                int totalSteps = Math.Max(1, Math.Min(5, Math.Abs(deltaX) / 120));
+                int stepDelta = deltaX / totalSteps;
+                if (stepDelta == 0) stepDelta = deltaX > 0 ? 120 : -120;
+                for (int i = 0; i < totalSteps; i++) {
+                    unchecked {
+                        ok = SendMouseInput(MOUSEEVENTF_HWHEEL, (uint)stepDelta) && ok;
+                    }
+                    if (totalSteps > 1) Thread.Sleep(15);
+                }
+            });
+            return ok;
         }
 
         private static byte MapKeyNameToVk(string key) {
@@ -420,63 +537,53 @@ namespace Gemetron {
             }
 
             if (vks.Count == 0) return false;
-
+            bool ok = true;
             RunOnInputDesktop(() => {
                 for (int i = 0; i < vks.Count; i++) {
-                    keybd_event(vks[i], 0, 0, UIntPtr.Zero);
+                    ok = SendKeyInput(vks[i], false) && ok;
                 }
                 Thread.Sleep(35);
                 for (int i = vks.Count - 1; i >= 0; i--) {
-                    keybd_event(vks[i], 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    ok = SendKeyInput(vks[i], true) && ok;
                 }
             });
-            return true;
+            return ok;
+        }
+
+        public static bool SetKeyState(string key, bool down) {
+            byte vk = MapKeyNameToVk(key);
+            if (vk == 0) return false;
+            bool ok = false;
+            RunOnInputDesktop(() => { ok = SendKeyInput(vk, !down); });
+            return ok;
         }
 
         public static bool SendText(string text) {
             if (string.IsNullOrEmpty(text)) return false;
+            bool ok = true;
 
             RunOnInputDesktop(() => {
                 foreach (char c in text) {
                     if (c == '\r') continue;
                     if (c == '\n') {
-                        keybd_event(0x0D, 0, 0, UIntPtr.Zero);
-                        keybd_event(0x0D, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                        Thread.Sleep(10);
+                        ok = SendKeyInput(0x0D, false) && ok;
+                        ok = SendKeyInput(0x0D, true) && ok;
+                        Thread.Sleep(5);
                         continue;
                     }
                     if (c == '\t') {
-                        keybd_event(0x09, 0, 0, UIntPtr.Zero);
-                        keybd_event(0x09, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                        Thread.Sleep(10);
+                        ok = SendKeyInput(0x09, false) && ok;
+                        ok = SendKeyInput(0x09, true) && ok;
+                        Thread.Sleep(5);
                         continue;
                     }
 
-                    short vkScan = VkKeyScan(c);
-                    if (vkScan != -1) {
-                        byte vk = (byte)(vkScan & 0xFF);
-                        byte shift = (byte)((vkScan >> 8) & 0xFF);
-
-                        bool needShift = (shift & 1) != 0;
-                        bool needCtrl = (shift & 2) != 0;
-                        bool needAlt = (shift & 4) != 0;
-
-                        if (needShift) keybd_event(0x10, 0, 0, UIntPtr.Zero);
-                        if (needCtrl) keybd_event(0x11, 0, 0, UIntPtr.Zero);
-                        if (needAlt) keybd_event(0x12, 0, 0, UIntPtr.Zero);
-
-                        keybd_event(vk, 0, 0, UIntPtr.Zero);
-                        keybd_event(vk, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-
-                        if (needAlt) keybd_event(0x12, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                        if (needCtrl) keybd_event(0x11, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                        if (needShift) keybd_event(0x10, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                        Thread.Sleep(5);
-                    }
+                    ok = SendKeyInput(0, false, c, true) && ok;
+                    ok = SendKeyInput(0, true, c, true) && ok;
                 }
             });
 
-            return true;
+            return ok;
         }
 
         private static string EscapeJson(string s) {
@@ -648,8 +755,8 @@ namespace Gemetron {
                 }
 
                 // Alt key simulation ensures Windows foreground rights
-                keybd_event(VK_MENU, 0, 0, UIntPtr.Zero);
-                keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                SendKeyInput(VK_MENU, false);
+                SendKeyInput(VK_MENU, true);
 
                 BringWindowToTop(hwnd);
                 bool ok = SetForegroundWindow(hwnd);
@@ -680,8 +787,8 @@ namespace Gemetron {
             }
             if (hwnd != IntPtr.Zero) {
                 // Ensure foreground focus
-                keybd_event(VK_MENU, 0, 0, UIntPtr.Zero);
-                keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                SendKeyInput(VK_MENU, false);
+                SendKeyInput(VK_MENU, true);
                 BringWindowToTop(hwnd);
                 SetForegroundWindow(hwnd);
 
@@ -719,8 +826,8 @@ namespace Gemetron {
                 hwnd = GetForegroundWindow();
             }
             if (hwnd != IntPtr.Zero) {
-                keybd_event(VK_MENU, 0, 0, UIntPtr.Zero);
-                keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                SendKeyInput(VK_MENU, false);
+                SendKeyInput(VK_MENU, true);
                 BringWindowToTop(hwnd);
                 SetForegroundWindow(hwnd);
 
@@ -848,30 +955,189 @@ namespace Gemetron {
             return "[" + string.Join(",", items.ToArray()) + "]";
         }
 
+        private static List<AutomationElement> FindMatchingUIElements(string query, string windowScope) {
+            List<AutomationElement> matches = new List<AutomationElement>();
+            AutomationElement root = AutomationElement.RootElement;
+            if (!string.IsNullOrWhiteSpace(windowScope)) {
+                IntPtr hwnd = FindWindowByQuery(windowScope);
+                if (hwnd == IntPtr.Zero) return matches;
+                root = AutomationElement.FromHandle(hwnd);
+            }
+            if (root == null) return matches;
+
+            Condition visible = new NotCondition(
+                new PropertyCondition(AutomationElement.IsOffscreenProperty, true));
+            AutomationElementCollection elements = root.FindAll(TreeScope.Descendants, visible);
+            string q = (query ?? "").Trim();
+            List<AutomationElement> partial = new List<AutomationElement>();
+            int inspected = 0;
+            foreach (AutomationElement element in elements) {
+                if (++inspected > 10000 || matches.Count + partial.Count >= 200) break;
+                string name = element.Current.Name ?? "";
+                string automationId = element.Current.AutomationId ?? "";
+                if (q.Length == 0) {
+                    matches.Add(element);
+                } else if (name.Equals(q, StringComparison.OrdinalIgnoreCase) ||
+                           automationId.Equals(q, StringComparison.OrdinalIgnoreCase)) {
+                    matches.Add(element);
+                } else if (name.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                           automationId.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0) {
+                    partial.Add(element);
+                }
+                if (matches.Count >= 100) break;
+            }
+            foreach (AutomationElement element in partial) {
+                if (matches.Count >= 100) break;
+                matches.Add(element);
+            }
+            return matches;
+        }
+
+        public static string UIAFind(string query, string windowScope) {
+            List<string> items = new List<string>();
+            foreach (AutomationElement element in FindMatchingUIElements(query, windowScope)) {
+                System.Windows.Rect bounds = element.Current.BoundingRectangle;
+                if (bounds.Width <= 0 || bounds.Height <= 0) continue;
+                string controlType = element.Current.ControlType.ProgrammaticName;
+                int dot = controlType.LastIndexOf('.');
+                if (dot >= 0) controlType = controlType.Substring(dot + 1);
+                items.Add(string.Format(
+                    "{{\"name\":\"{0}\",\"automationId\":\"{1}\",\"controlType\":\"{2}\",\"x\":{3},\"y\":{4},\"width\":{5},\"height\":{6},\"isEnabled\":{7}}}",
+                    EscapeJson(element.Current.Name ?? ""),
+                    EscapeJson(element.Current.AutomationId ?? ""),
+                    EscapeJson(controlType),
+                    Math.Round(bounds.Left), Math.Round(bounds.Top),
+                    Math.Round(bounds.Width), Math.Round(bounds.Height),
+                    element.Current.IsEnabled ? "true" : "false"));
+            }
+            return "[" + string.Join(",", items.ToArray()) + "]";
+        }
+
+        public static bool UIAInvoke(string query, string windowScope) {
+            List<AutomationElement> matches = FindMatchingUIElements(query, windowScope);
+            if (matches.Count == 0 || !matches[0].Current.IsEnabled) return false;
+            AutomationElement element = matches[0];
+            object pattern;
+            if (element.TryGetCurrentPattern(InvokePattern.Pattern, out pattern)) {
+                ((InvokePattern)pattern).Invoke();
+                return true;
+            }
+            if (element.TryGetCurrentPattern(TogglePattern.Pattern, out pattern)) {
+                ((TogglePattern)pattern).Toggle();
+                return true;
+            }
+            if (element.TryGetCurrentPattern(SelectionItemPattern.Pattern, out pattern)) {
+                ((SelectionItemPattern)pattern).Select();
+                return true;
+            }
+            return false;
+        }
+
+        public static bool UIASetValue(string query, string value, string windowScope) {
+            List<AutomationElement> matches = FindMatchingUIElements(query, windowScope);
+            if (matches.Count == 0 || !matches[0].Current.IsEnabled) return false;
+            object pattern;
+            if (!matches[0].TryGetCurrentPattern(ValuePattern.Pattern, out pattern)) return false;
+            ValuePattern valuePattern = (ValuePattern)pattern;
+            if (valuePattern.Current.IsReadOnly) return false;
+            valuePattern.SetValue(value ?? "");
+            return valuePattern.Current.Value == (value ?? "");
+        }
+
         public static bool ReleaseAllInputs() {
             try {
                 RunOnInputDesktop(() => {
                     // Release mouse buttons individually
-                    mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
-                    mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
-                    mouse_event(MOUSEEVENTF_MIDDLEUP, 0, 0, 0, UIntPtr.Zero);
+                    SendMouseInput(MOUSEEVENTF_LEFTUP);
+                    SendMouseInput(MOUSEEVENTF_RIGHTUP);
+                    SendMouseInput(MOUSEEVENTF_MIDDLEUP);
 
-                    // Release modifier keys: Ctrl, Alt, Shift, Win (generic + specific L/R)
-                    keybd_event(0x11, 0, KEYEVENTF_KEYUP, UIntPtr.Zero); // VK_CONTROL
-                    keybd_event(0x12, 0, KEYEVENTF_KEYUP, UIntPtr.Zero); // VK_MENU (Alt)
-                    keybd_event(0x10, 0, KEYEVENTF_KEYUP, UIntPtr.Zero); // VK_SHIFT
-                    keybd_event(0x5B, 0, KEYEVENTF_KEYUP, UIntPtr.Zero); // VK_LWIN
-                    keybd_event(0x5C, 0, KEYEVENTF_KEYUP, UIntPtr.Zero); // VK_RWIN
-                    keybd_event(0xA0, 0, KEYEVENTF_KEYUP, UIntPtr.Zero); // VK_LSHIFT
-                    keybd_event(0xA1, 0, KEYEVENTF_KEYUP, UIntPtr.Zero); // VK_RSHIFT
-                    keybd_event(0xA2, 0, KEYEVENTF_KEYUP, UIntPtr.Zero); // VK_LCONTROL
-                    keybd_event(0xA3, 0, KEYEVENTF_KEYUP, UIntPtr.Zero); // VK_RCONTROL
-                    keybd_event(0xA4, 0, KEYEVENTF_KEYUP, UIntPtr.Zero); // VK_LMENU
-                    keybd_event(0xA5, 0, KEYEVENTF_KEYUP, UIntPtr.Zero); // VK_RMENU
+                    ushort[] modifiers = new ushort[] { 0x11, 0x12, 0x10, 0x5B, 0x5C, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5 };
+                    foreach (ushort vk in modifiers) SendKeyInput(vk, true);
                 });
                 return true;
             } catch {
                 return false;
+            }
+        }
+
+        private static string DecodeBase64(string value) {
+            return string.IsNullOrEmpty(value) ? "" : Encoding.UTF8.GetString(Convert.FromBase64String(value));
+        }
+
+        private static string ExecuteNativeAction(string action, string[] args) {
+            switch ((action ?? "").ToLowerInvariant()) {
+                case "release-all":
+                    return ReleaseAllInputs().ToString();
+                case "cursor":
+                    return GetCursor();
+                case "move":
+                    return MoveMouse(int.Parse(args[0]), int.Parse(args[1])).ToString();
+                case "smooth-move":
+                    return MoveMouseSmooth(int.Parse(args[0]), int.Parse(args[1]), int.Parse(args[2])).ToString();
+                case "click":
+                    return Click(int.Parse(args[0]), int.Parse(args[1]),
+                        args.Length > 2 ? args[2] : "left",
+                        args.Length > 3 && (args[3] == "true" || args[3] == "1")).ToString();
+                case "drag":
+                    return Drag(int.Parse(args[0]), int.Parse(args[1]), int.Parse(args[2]),
+                        int.Parse(args[3]), args.Length > 4 ? int.Parse(args[4]) : 10).ToString();
+                case "scroll":
+                    return Scroll(int.Parse(args[0])).ToString();
+                case "scroll-at":
+                    return ScrollAt(int.Parse(args[0]), int.Parse(args[1]), int.Parse(args[2])).ToString();
+                case "scroll-horizontal":
+                    return ScrollHorizontal(int.Parse(args[0]), int.Parse(args[1]), int.Parse(args[2])).ToString();
+                case "type-b64":
+                    return SendText(DecodeBase64(args[0])).ToString();
+                case "chord":
+                case "hotkey":
+                    return SendKeyChord(args[0]).ToString();
+                case "key-state":
+                    return SetKeyState(args[0], args[1].Equals("down", StringComparison.OrdinalIgnoreCase)).ToString();
+                case "uia-find":
+                    return UIAFind(DecodeBase64(args[0]), args.Length > 1 ? DecodeBase64(args[1]) : "");
+                case "uia-invoke":
+                    return UIAInvoke(DecodeBase64(args[0]), args.Length > 1 ? DecodeBase64(args[1]) : "").ToString();
+                case "uia-set-value":
+                    return UIASetValue(DecodeBase64(args[0]), DecodeBase64(args[1]),
+                        args.Length > 2 ? DecodeBase64(args[2]) : "").ToString();
+                default:
+                    throw new ArgumentException("Unknown native action: " + action);
+            }
+        }
+
+        private static string SerializeResponse(NativeResponse response) {
+            DataContractJsonSerializer serializer = new DataContractJsonSerializer(typeof(NativeResponse));
+            using (MemoryStream stream = new MemoryStream()) {
+                serializer.WriteObject(stream, response);
+                return Encoding.UTF8.GetString(stream.ToArray());
+            }
+        }
+
+        private static void Serve() {
+            Console.InputEncoding = Encoding.UTF8;
+            Console.OutputEncoding = new UTF8Encoding(false);
+            Console.WriteLine("{\"ready\":true}");
+            Console.Out.Flush();
+            DataContractJsonSerializer serializer = new DataContractJsonSerializer(typeof(NativeRequest));
+            string line;
+            while ((line = Console.ReadLine()) != null) {
+                NativeResponse response = new NativeResponse();
+                try {
+                    NativeRequest request;
+                    using (MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(line))) {
+                        request = (NativeRequest)serializer.ReadObject(stream);
+                    }
+                    response.id = request.id;
+                    response.result = ExecuteNativeAction(request.action, request.args ?? new string[0]);
+                    response.ok = true;
+                } catch (Exception ex) {
+                    response.ok = false;
+                    response.error = ex.Message;
+                }
+                Console.WriteLine(SerializeResponse(response));
+                Console.Out.Flush();
             }
         }
 
@@ -886,6 +1152,10 @@ namespace Gemetron {
 
             try {
                 string verb = args[0].ToLowerInvariant();
+                if (verb == "serve") {
+                    Serve();
+                    return 0;
+                }
                 switch (verb) {
                     case "init-dpi":
                         Console.WriteLine(InitDpiAwareness());
