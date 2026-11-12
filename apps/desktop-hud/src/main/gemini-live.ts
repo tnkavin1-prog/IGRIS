@@ -378,8 +378,7 @@ export class GeminiLiveService extends EventEmitter {
   private rememberFrame(shot: CaptureResult): void {
     const metrics = this.computerVision.getDisplayMetrics();
     const primary = metrics.allDisplays?.find((display) => display.isPrimary);
-    const bounds =
-      shot.screenBounds ??
+    const bounds = shot.screenBounds ??
       primary?.physicalBounds ?? {
         x: 0,
         y: 0,
@@ -1674,7 +1673,10 @@ export class GeminiLiveService extends EventEmitter {
         const update = msg.sessionResumptionUpdate;
         if (typeof update.newHandle === 'string' && update.newHandle) {
           this.resumeHandle = update.newHandle;
-          this.emit('session-resumption-update', { handle: update.newHandle, resumable: update.resumable !== false });
+          this.emit('session-resumption-update', {
+            handle: update.newHandle,
+            resumable: update.resumable !== false,
+          });
         }
       }
 
@@ -1750,6 +1752,7 @@ export class GeminiLiveService extends EventEmitter {
                 result = {
                   success: false,
                   error: 'This skill action requires approval in HUD settings.',
+                  hint: 'Ask the user to enable Smart approval, or to run the action as a workflow step so they can approve it explicitly. Do not retry on your own.',
                 };
                 break;
               }
@@ -1974,13 +1977,7 @@ export class GeminiLiveService extends EventEmitter {
                 call.args.coordinate_space,
               );
               const steps = Number(call.args.steps) || 10;
-              const ok = await this.nativeInput.mouseDrag(
-                start.x,
-                start.y,
-                end.x,
-                end.y,
-                steps,
-              );
+              const ok = await this.nativeInput.mouseDrag(start.x, start.y, end.x, end.y, steps);
               result = {
                 success: ok,
                 from: { x: start.x, y: start.y },
@@ -1998,11 +1995,7 @@ export class GeminiLiveService extends EventEmitter {
                 call.args.coordinate_space,
               );
               const deltaX = Number(call.args.delta_x) || 0;
-              const ok = await this.nativeInput.mouseHorizontalScrollAt(
-                point.x,
-                point.y,
-                deltaX,
-              );
+              const ok = await this.nativeInput.mouseHorizontalScrollAt(point.x, point.y, deltaX);
               result = { success: ok, x: point.x, y: point.y, deltaX, scaled: point.scaled };
               break;
             }
@@ -2105,7 +2098,7 @@ export class GeminiLiveService extends EventEmitter {
                 height: shot.height,
                 coordinateSpace: 'frame-pixels',
                 message:
-                  'Desktop screenshot captured. Click/move coordinates are in this frame\'s pixels; the runtime maps them to the physical desktop.',
+                  "Desktop screenshot captured. Click/move coordinates are in this frame's pixels; the runtime maps them to the physical desktop.",
               };
               break;
             }
@@ -2201,11 +2194,17 @@ export class GeminiLiveService extends EventEmitter {
                 },
               });
               if (res.blocked) {
+                const needsApproval = String(res.reason ?? '').startsWith('approval-required');
                 result = {
                   success: false,
                   blocked: true,
                   reason: res.reason,
                   error: res.stderr,
+                  ...(needsApproval
+                    ? {
+                        hint: 'Ask the user to enable Smart approval in the HUD settings, or to run this as a workflow step so they can approve it explicitly. Do not retry the command on your own.',
+                      }
+                    : {}),
                 };
                 break;
               }

@@ -25,7 +25,7 @@ export default defineConfig({
     // A handful of suites bind real loopback ports. One worker per core
     // exhausted the file-descriptor budget on busy machines and made those
     // binds fail intermittently, so the pool is capped.
-    pool: 'threads',
-    poolOptions: { threads: { maxThreads: 8, minThreads: 1 } },
+    maxWorkers: 8,
+    minWorkers: 1,
   },
 });

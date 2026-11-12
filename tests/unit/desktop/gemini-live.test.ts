@@ -548,6 +548,9 @@ describe('GeminiLiveService', () => {
     expect(responses[0].response.result.success).toBe(false);
     expect(responses[1].response.result.blocked).toBe(true);
     expect(responses[1].response.result.reason).toContain('approval-required');
+    // The refusal must tell the model how the user can unblock it.
+    expect(responses[1].response.result.hint).toContain('Smart approval');
+    expect(responses[0].response.result.hint).toBeUndefined();
   });
 
   it('handles tool parameter aliases seamlessly (appName, query, hotkey, cmd)', async () => {
