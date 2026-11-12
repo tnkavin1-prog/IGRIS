@@ -231,6 +231,10 @@ export function App() {
   if (overlaySurface) {
     return (
       <>
+        {/* Window chrome for the overlay only: drag strip, minimize to orb,
+            dock to the side panel and close. Without it the overlay had no
+            way to collapse out of the way. */}
+        <OverlayBar onMinimize={() => setOverlayView('orb')} />
         <CompactOverlay
           snapshot={snapshot}
           controller={controller}
@@ -258,7 +262,6 @@ export function App() {
 
   return (
     <div className="app-shell">
-      {overlaySurface ? <OverlayBar onMinimize={() => setOverlayView('orb')} /> : null}
       <div className="ambient" aria-hidden="true">
         <span className="ambient-blob blob-a" />
         <span className="ambient-blob blob-b" />

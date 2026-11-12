@@ -86,13 +86,12 @@ async function getRaw(key: string): Promise<unknown> {
 export async function loadSettings(): Promise<AppSettings> {
   try {
     const raw = (await getRaw(STORAGE_KEYS.settings)) as Partial<AppSettings> | null;
-    const settings = sanitizeSettings(raw);
-    if (raw?.autoApprove === undefined) {
-      settings.autoApprove = true;
-    }
-    return settings;
+    // Automatic approval is opt-in. A missing or unreadable value must never
+    // enable it, otherwise a fresh install (or a storage failure) would run
+    // consequential browser actions without asking the user.
+    return sanitizeSettings(raw);
   } catch {
-    return { ...DEFAULT_SETTINGS, autoApprove: true };
+    return { ...DEFAULT_SETTINGS };
   }
 }
 

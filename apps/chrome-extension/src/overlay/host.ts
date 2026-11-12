@@ -193,10 +193,11 @@ function mount(): void {
       return;
     }
 
-    // Normal view: compact floating panel
-    wrap.style.setProperty('width', `${SIZES.panel.width}px`, 'important');
-    wrap.style.setProperty('height', `${SIZES.panel.height}px`, 'important');
-    wrap.style.setProperty('border-radius', `${SIZES.panel.radius}px`, 'important');
+    // Normal views: the box always matches the active view's footprint.
+    const size = SIZES[state.view];
+    wrap.style.setProperty('width', `${size.width}px`, 'important');
+    wrap.style.setProperty('height', `${size.height}px`, 'important');
+    wrap.style.setProperty('border-radius', `${size.radius}px`, 'important');
     wrap.style.removeProperty('bottom');
 
     if (state.left === null || state.top === null) {
@@ -206,8 +207,8 @@ function mount(): void {
       return;
     }
 
-    const maxLeft = Math.max(16, (window.innerWidth || 1200) - SIZES.panel.width - 16);
-    const maxTop = Math.max(16, (window.innerHeight || 800) - SIZES.panel.height - 16);
+    const maxLeft = Math.max(16, (window.innerWidth || 1200) - size.width - 16);
+    const maxTop = Math.max(16, (window.innerHeight || 800) - size.height - 16);
     state.left = clamp(state.left, 16, maxLeft);
     state.top = clamp(state.top, 16, maxTop);
     wrap.style.setProperty('left', `${state.left}px`, 'important');
@@ -271,6 +272,10 @@ function mount(): void {
   };
 
   const onMessage = (event: MessageEvent): void => {
+    // A host that was replaced (or removed) must not react: its listener
+    // lives on the page window and would otherwise answer for the current
+    // overlay instance.
+    if (!host.isConnected) return;
     if (event.source !== frame.contentWindow) return;
     const data = event.data as HostMessage | null;
     if (!data || data.source !== 'gbl-overlay') return;

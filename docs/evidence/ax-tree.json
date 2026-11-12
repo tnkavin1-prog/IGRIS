@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-12T05:20:02.159Z",
+  "generatedAt": "2026-11-12T06:33:21.961Z",
   "surfaces": {
     "live panel": [
       {
@@ -55,13 +55,6 @@
         "role": "generic",
         "name": "",
         "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "generic",
-        "name": "",
-        "description": "Autonomous mode: Gemini executes browser actions automatically without approval prompts",
         "disabled": false,
         "focused": false
       },
@@ -152,13 +145,6 @@
       {
         "role": "StaticText",
         "name": "VOICE · VISION · ACTION",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "StaticText",
-        "name": "Autonomous",
         "description": "",
         "disabled": false,
         "focused": false
@@ -370,42 +356,7 @@
       },
       {
         "role": "InlineTextBox",
-        "name": "Bro",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "…",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "VOICE · ",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "VISION · ",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "ACTION",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "Autonomous",
+        "name": "VOICE · VISION · ACTION",
         "description": "",
         "disabled": false,
         "focused": false
@@ -903,13 +854,6 @@
         "focused": false
       },
       {
-        "role": "generic",
-        "name": "",
-        "description": "Autonomous mode: Gemini executes browser actions automatically without approval prompts",
-        "disabled": false,
-        "focused": false
-      },
-      {
         "role": "button",
         "name": "Bridge online",
         "description": "Check the loopback token bridge",
@@ -1003,13 +947,6 @@
       {
         "role": "StaticText",
         "name": "VOICE · VISION · ACTION",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "StaticText",
-        "name": "Autonomous",
         "description": "",
         "disabled": false,
         "focused": false
@@ -1306,42 +1243,7 @@
       },
       {
         "role": "InlineTextBox",
-        "name": "Bro",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "…",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "VOICE · ",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "VISION · ",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "ACTION",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "Autonomous",
+        "name": "VOICE · VISION · ACTION",
         "description": "",
         "disabled": false,
         "focused": false

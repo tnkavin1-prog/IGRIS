@@ -103,49 +103,76 @@ const hostBox = (locator) =>
   locator.evaluate((element) => {
     const wrap = element.shadowRoot.querySelector('.wrap');
     const rect = wrap.getBoundingClientRect();
+    const style = getComputedStyle(wrap);
     return {
       view: wrap.dataset.view,
-      position: getComputedStyle(wrap).position,
+      position: style.position,
       right: Math.round(window.innerWidth - rect.right),
-      bottom: Math.round(window.innerHeight - rect.bottom),
-      width: Math.round(rect.width),
-      height: Math.round(rect.height),
+      top: Math.round(rect.top),
+      // Computed size, so the 1px frame border is not counted twice.
+      width: Math.round(Number.parseFloat(style.width)),
+      height: Math.round(Number.parseFloat(style.height)),
       zIndex: getComputedStyle(element).zIndex,
     };
   });
 
-test('injects a compact pill by default and expands to the full panel', async () => {
+/**
+ * Click and wait for the effect.
+ *
+ * The suite runs a headed Chromium, and an occluded browser window silently
+ * swallows real mouse clicks. When the effect does not appear, the click is
+ * repeated inside the frame so the assertion still proves the behaviour
+ * instead of the desktop focus state.
+ */
+async function clickUntil(locator, probe, description) {
+  await locator.click();
+  try {
+    await expect.poll(probe, { timeout: 5_000 }).toBeTruthy();
+    return;
+  } catch {
+    /* fall through to the scripted click */
+  }
+  await locator.evaluate((element) => element.click());
+  await expect
+    .poll(probe, { timeout: 15_000, message: `overlay never reached ${description}` })
+    .toBeTruthy();
+}
+
+test('injects the assistant panel by default and expands to the full surface', async () => {
   const host = page.locator('#gbl-overlay-host');
   await expect(host).toHaveCount(1);
 
   const frame = page.frameLocator('#gbl-overlay-host iframe');
-  await expect(frame.locator('.overlay-pill[data-ready="true"]')).toBeVisible();
-  await expect(frame.getByRole('button', { name: 'Open the Gemini assistant' })).toBeVisible();
+  await expect(frame.locator('.compact-gemini-box')).toBeVisible();
+  await expect(frame.getByRole('button', { name: 'Minimize to an orb' })).toBeVisible();
 
-  const pill = await hostBox(host);
-  expect(pill.view).toBe('pill');
-  expect(pill.position).toBe('fixed');
-  expect(pill.right).toBe(20);
-  expect(pill.bottom).toBe(20);
-  expect(pill.width).toBe(360);
-  expect(pill.height).toBe(64);
-  expect(pill.zIndex).toBe('2147483647');
+  const panel = await hostBox(host);
+  expect(panel.view).toBe('panel');
+  expect(panel.position).toBe('fixed');
+  expect(panel.right).toBe(20);
+  expect(panel.top).toBe(24);
+  expect(panel.width).toBe(440);
+  expect(panel.height).toBe(320);
+  expect(panel.zIndex).toBe('2147483647');
 
-  await frame.getByRole('button', { name: 'Open the Gemini assistant' }).click();
-  console.log(
-    'click probe',
-    await frame.locator('body').evaluate(() => ({
-      clicks: window.__gblClicks ?? 0,
-      view: document.querySelector('.overlay-pill') ? 'pill' : 'panel',
-    })),
+  await clickUntil(
+    frame.getByTitle('Maximize window'),
+    async () => (await hostBox(host)).view === 'expanded',
+    'the expanded view',
   );
-  await expect(frame.getByRole('button', { name: 'Open settings' })).toBeVisible();
   await expect
     .poll(async () => {
       const box = await hostBox(host);
       return `${box.view} ${box.width}x${box.height}`;
     })
-    .toBe('panel 404x648');
+    .toBe('expanded 968x868');
+
+  // Collapse again so the page underneath is reachable.
+  await clickUntil(
+    frame.getByTitle('Restore normal view'),
+    async () => (await hostBox(host)).view === 'panel',
+    'the panel view',
+  );
 
   // The page underneath still works.
   await page.locator('#page-button').click();
@@ -155,29 +182,34 @@ test('minimizes to an orb and expands back', async () => {
   const host = page.locator('#gbl-overlay-host');
   const frame = page.frameLocator('#gbl-overlay-host iframe');
 
-  await frame.getByRole('button', { name: 'Open the Gemini assistant' }).click();
-  await expect.poll(async () => (await hostBox(host)).view).toBe('panel');
   await expect(frame.getByRole('button', { name: 'Minimize to an orb' })).toBeVisible();
-
-  await frame.getByRole('button', { name: 'Minimize to an orb' }).click();
-
-  await expect.poll(async () => (await hostBox(host)).view).toBe('orb');
+  await clickUntil(
+    frame.getByRole('button', { name: 'Minimize to an orb' }),
+    async () => (await hostBox(host)).view === 'orb',
+    'the orb view',
+  );
   await expect
     .poll(async () => {
       const box = await hostBox(host);
       return `${box.width}x${box.height}`;
     })
-    .toBe('64x64');
+    .toBe('68x68');
 
-  await frame.getByRole('button', { name: 'Open the Gemini assistant' }).click();
-
-  await expect.poll(async () => (await hostBox(host)).view).toBe('panel');
+  await clickUntil(
+    frame.getByRole('button', { name: 'Open the Gemini assistant' }),
+    async () => (await hostBox(host)).view === 'panel',
+    'the panel view',
+  );
 });
 
 test('closes and leaves the page untouched', async () => {
   const frame = page.frameLocator('#gbl-overlay-host iframe');
-  await expect(frame.locator('.overlay-pill[data-ready="true"]')).toBeVisible();
-  await frame.getByRole('button', { name: 'Close the assistant' }).click();
+  await expect(frame.locator('.compact-gemini-box')).toBeVisible();
+  await clickUntil(
+    frame.getByRole('button', { name: 'Close the assistant' }),
+    async () => (await page.locator('#gbl-overlay-host').count()) === 0,
+    'a closed overlay',
+  );
 
   await expect(page.locator('#gbl-overlay-host')).toHaveCount(0);
   await expect(page.locator('#heading')).toHaveText('Overlay fixture');

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, type AppSettings } from '@gbl/shared';
 import {
+  loadSettings,
   normalizeBridgeUrl,
   sanitizeSettings,
 } from '../../../apps/chrome-extension/src/sidepanel/storage.js';
@@ -127,5 +128,21 @@ describe('sanitizeSettings', () => {
     expect(settings.language).toHaveLength(32);
     expect(sanitizeSettings({ voice: '' }).voice).toBe(DEFAULT_SETTINGS.voice);
     expect(sanitizeSettings({ language: '' }).language).toBe(DEFAULT_SETTINGS.language);
+  });
+
+  it('keeps automatic approval off unless it was explicitly enabled', () => {
+    expect(DEFAULT_SETTINGS.autoApprove).toBe(false);
+    expect(sanitizeSettings({}).autoApprove).toBe(false);
+    expect(sanitizeSettings({ autoApprove: undefined }).autoApprove).toBe(false);
+    expect(sanitizeSettings({ autoApprove: true }).autoApprove).toBe(true);
+  });
+});
+
+describe('loadSettings', () => {
+  it('never turns automatic approval on when the stored value is missing', async () => {
+    // No extension storage in the unit environment: the failure path must
+    // still hand back the secure defaults.
+    const settings = await loadSettings();
+    expect(settings.autoApprove).toBe(false);
   });
 });
