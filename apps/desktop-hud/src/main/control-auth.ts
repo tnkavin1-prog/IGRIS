@@ -32,7 +32,16 @@ export interface ControlAuthOptions {
 export class ControlAuthService {
   private cached: string | null = null;
 
-  constructor(private readonly options: ControlAuthOptions = {}) {}
+  constructor(private readonly options: ControlAuthOptions = {}) {
+    // Materialize the token right away. Validation only compares a candidate
+    // that was actually presented, so a lazy token would never be written to
+    // disk and the user would have no way to copy it into the extension.
+    try {
+      this.getToken();
+    } catch {
+      /* the token stays process-local if the data root is not writable */
+    }
+  }
 
   /** Load (or generate-and-persist) the permanent control token. */
   public getToken(): string {

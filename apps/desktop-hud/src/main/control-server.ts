@@ -51,9 +51,19 @@ export class ControlServer {
     private readonly options: ControlServerOptions = {},
   ) {}
 
-  public start(getWindow: () => BrowserWindow | null, cdpClient: CDPClient): Promise<void> {
+  /**
+   * Start the control API.
+   *
+   * Resolves with `true` when the port was bound and `false` when the
+   * address is already in use. A silent failure here is confusing: the HUD
+   * looks healthy while a stale instance keeps serving the control API.
+   */
+  public start(
+    getWindow: () => BrowserWindow | null,
+    cdpClient: CDPClient,
+  ): Promise<boolean> {
     return new Promise((resolve) => {
-      const createAndListen = (retriesLeft = 10) => {
+      const createAndListen = (retriesLeft = 3) => {
         this.server = createServer(async (req, res) => {
           const originDecision: OriginDecision = classifyOrigin(req.headers.origin);
           const allowedOrigin = originDecision === 'allow' ? String(req.headers.origin) : undefined;
@@ -330,11 +340,17 @@ export class ControlServer {
           if (err.code === 'EADDRINUSE' && retriesLeft > 0) {
             setTimeout(() => {
               createAndListen(retriesLeft - 1);
-            }, 60);
+            }, 250);
             return;
           }
-          console.warn(`[ControlServer] Failed to bind on port ${this.port}:`, err.message);
-          resolve();
+          console.warn(
+            `[ControlServer] Failed to bind on port ${this.port}:`,
+            err.message,
+            err.code === 'EADDRINUSE'
+              ? 'Another Gemetron instance is already serving the control API.'
+              : '',
+          );
+          resolve(false);
         });
 
         this.server.listen(this.port, this.host, () => {
@@ -347,7 +363,7 @@ export class ControlServer {
           console.log(
             `[ControlServer] In-Chrome summon endpoint active at http://${this.host}:${this.port}/summon`,
           );
-          resolve();
+          resolve(true);
         });
       };
 

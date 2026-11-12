@@ -244,8 +244,14 @@ if (!gotLock) {
       cdpClient.startTracking(1500);
 
       // Start in-Chrome loopback summon server (http://127.0.0.1:9228/summon)
-      await controlServer.start(() => getMainWindow(), cdpClient);
-      logLine('hud-startup', 'ControlServer started on port 9228');
+      const controlPort = Number(process.env.GEMATRON_CONTROL_PORT ?? 9228);
+      const controlBound = await controlServer.start(() => getMainWindow(), cdpClient);
+      logLine(
+        'hud-startup',
+        controlBound
+          ? `ControlServer started on port ${controlPort}`
+          : `ControlServer could not bind port ${controlPort}; another instance is already serving it`,
+      );
 
       // Do not open Chrome when the HUD starts: only the Gematron HUD should appear.
       // Chrome can be launched explicitly from the HUD ("Open Chrome").

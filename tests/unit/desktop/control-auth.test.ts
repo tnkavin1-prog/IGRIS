@@ -28,6 +28,14 @@ describe('ControlAuthService', () => {
     expect(readFileSync(tokenPath, 'utf-8').trim()).toBe(token);
   });
 
+  it('writes the token file when the service is created', () => {
+    // The user has to be able to copy the token into the extension, so it
+    // must exist on disk before the first request arrives.
+    const auth = new ControlAuthService({ tokenPath });
+    expect(existsSync(tokenPath)).toBe(true);
+    expect(readFileSync(tokenPath, 'utf-8').trim()).toBe(auth.getToken());
+  });
+
   it('reuses a persisted token across instances', () => {
     const first = new ControlAuthService({ tokenPath });
     const token = first.getToken();

@@ -1,5 +1,13 @@
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync } from 'node:fs';
+import {
+  copyFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,5 +71,16 @@ mkdirSync(release, { recursive: true });
 for (const file of readdirSync(staging)) {
   if (/\.(exe|blockmap|yml)$/.test(file)) copyFileSync(join(staging, file), join(release, file));
 }
+
+// Keep a stable, current copy of the unpacked application: the staging
+// directory is a temporary folder, and a stale win-unpacked from an older
+// build is worse than none at all when the executable is launched for
+// verification.
+const unpackedSource = join(staging, 'win-unpacked');
+const unpackedTarget = join(release, 'win-unpacked');
+if (existsSync(unpackedSource)) {
+  rmSync(unpackedTarget, { recursive: true, force: true });
+  cpSync(unpackedSource, unpackedTarget, { recursive: true });
+}
 console.log(`Installer output: ${release}`);
-console.log(`Unpacked application for verification: ${join(staging, 'win-unpacked')}`);
+console.log(`Unpacked application for verification: ${unpackedTarget}`);

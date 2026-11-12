@@ -151,6 +151,25 @@ describe('ControlServer', () => {
     expect(res.status).toBe(200);
   });
 
+  it('reports a failed bind instead of pretending the control API is up', async () => {
+    const mockCdp = {
+      getActiveTab: vi.fn().mockResolvedValue(null),
+      getStatus: vi.fn(),
+    } as unknown as CDPClient;
+
+    const first = new ControlServer(0, '127.0.0.1', { auth });
+    const bound = await first.start(() => null, mockCdp);
+    expect(bound).toBe(true);
+
+    // A second server on the same port cannot bind and must say so.
+    const second = new ControlServer(first.port, '127.0.0.1', { auth });
+    const secondBound = await second.start(() => null, mockCdp);
+    expect(secondBound).toBe(false);
+
+    second.stop();
+    first.stop();
+  });
+
   it('un-minimizes, raises, focuses window and returns active tab on POST /summon', async () => {
     const mockWin = {
       isMinimized: vi.fn().mockReturnValue(true),
