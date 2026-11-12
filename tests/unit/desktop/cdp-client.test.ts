@@ -283,4 +283,91 @@ describe('CDPClient', () => {
       expect(closeSpy).toHaveBeenCalledWith('tab2');
     });
   });
+
+  describe('Deep DOM probing and single-strategy scrolling', () => {
+    const pageTab = {
+      id: 'tab1',
+      type: 'page' as const,
+      title: 'Test Page',
+      url: 'https://example.com',
+      webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/page/tab1',
+    };
+
+    it('scrolls the deepest DOM container without also dispatching a wheel event', async () => {
+      const evaluateSpy = vi
+        .spyOn(client, 'evaluate')
+        .mockResolvedValue({ scrolled: true } as never);
+      const wheelSpy = vi.spyOn(client, 'dispatchMouseWheel').mockResolvedValue(true);
+      const keySpy = vi
+        .spyOn(client as any, 'dispatchKeyEvent')
+        .mockResolvedValue({ result: {} });
+
+      const scrolled = await client.scroll('down', 450, 'tab1');
+
+      expect(scrolled).toBe(true);
+      expect(evaluateSpy).toHaveBeenCalledTimes(1);
+      expect(wheelSpy).not.toHaveBeenCalled();
+      // The old implementation also sent PageDown/PageUp, double-scrolling.
+      expect(keySpy).not.toHaveBeenCalled();
+      expect(String(evaluateSpy.mock.calls[0]?.[0])).toContain('scrollBy');
+      expect(String(evaluateSpy.mock.calls[0]?.[0])).toContain('shadowRoot');
+    });
+
+    it('falls back to exactly one wheel event when no container scrolled', async () => {
+      vi.spyOn(client, 'evaluate').mockResolvedValue({ scrolled: false } as never);
+      const wheelSpy = vi.spyOn(client, 'dispatchMouseWheel').mockResolvedValue(true);
+
+      const scrolled = await client.scroll('up', 300, 'tab1');
+
+      expect(scrolled).toBe(true);
+      expect(wheelSpy).toHaveBeenCalledTimes(1);
+      expect(wheelSpy).toHaveBeenCalledWith(-300, 600, 400, 'tab1');
+    });
+
+    it('finds elements inside open shadow roots and translates iframe coordinates', async () => {
+      vi.spyOn(client, 'listTabs').mockResolvedValue([pageTab]);
+      const evaluateSpy = vi.spyOn(client, 'evaluate').mockResolvedValue({
+        text: 'Deep button',
+        x: 120,
+        y: 80,
+        width: 40,
+        height: 20,
+      } as never);
+
+      const element = await client.findElementByText('Deep button', 'tab1', true);
+
+      expect(element).toEqual({
+        text: 'Deep button',
+        x: 120,
+        y: 80,
+        width: 40,
+        height: 20,
+        tabId: 'tab1',
+        coordinateSpace: 'css_viewport',
+      });
+      const expression = String(evaluateSpy.mock.calls[0]?.[0]);
+      // Deep traversal must cover shadow roots AND same-origin frames.
+      expect(expression).toContain('el.shadowRoot');
+      expect(expression).toContain('contentDocument');
+      expect(expression).toContain('__deepQueryAll');
+      expect(expression).toContain('__deepHit');
+      expect(expression).toContain('frameElement');
+    });
+
+    it('resolves click targets through the same deep DOM helpers', async () => {
+      vi.spyOn(client, 'listTabs').mockResolvedValue([pageTab]);
+      const evaluateSpy = vi
+        .spyOn(client, 'evaluate')
+        .mockResolvedValue({ x: 10, y: 20 } as never);
+      const clickAtSpy = vi.spyOn(client, 'clickAt').mockResolvedValue(true);
+
+      const clicked = await client.click('#deep-button', 'tab1');
+
+      expect(clicked).toBe(true);
+      expect(clickAtSpy).toHaveBeenCalledWith(10, 20, 'tab1');
+      const expression = String(evaluateSpy.mock.calls[0]?.[0]);
+      expect(expression).toContain('__deepQuery');
+      expect(expression).toContain('frameElement');
+    });
+  });
 });
