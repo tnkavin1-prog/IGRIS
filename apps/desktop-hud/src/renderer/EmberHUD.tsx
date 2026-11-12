@@ -15,6 +15,7 @@ export interface EmberHUDProps {
   onToggleSoundMute: () => void;
   onSoundVolumeChange: (volume: number) => void;
   onAutoApproveChange: (enabled: boolean) => void;
+  onWakeWordChange: (enabled: boolean) => void;
   onCollapseToBar: () => void;
   onCollapseToOrb: () => void;
   onOpenConsole: () => void;
@@ -92,6 +93,7 @@ export function EmberHUD({
   onToggleSoundMute,
   onSoundVolumeChange,
   onAutoApproveChange,
+  onWakeWordChange,
   onCollapseToBar,
   onCollapseToOrb,
   onOpenConsole,
@@ -338,10 +340,16 @@ export function EmberHUD({
                 </div>
                 <div className="em-row">
                   <div>
-                    Wake word “Hey Gematron”
-                    <small>Always-on, processed locally</small>
+                    Wake word “Hey Jarvis”
+                    <small>Windows speech, local while idle</small>
                   </div>
-                  <button type="button" className="em-switch on" aria-label="Toggle wake word" />
+                  <button
+                    type="button"
+                    className={`em-switch ${settings.wakeWordEnabled ? 'on' : ''}`}
+                    aria-label="Toggle wake word"
+                    aria-pressed={settings.wakeWordEnabled === true}
+                    onClick={() => onWakeWordChange(!settings.wakeWordEnabled)}
+                  />
                 </div>
                 <div className="em-row">
                   <span>Push-to-talk</span>

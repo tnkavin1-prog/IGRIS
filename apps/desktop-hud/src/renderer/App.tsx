@@ -15,6 +15,7 @@ import type {
 } from '../main/types.js';
 import { CompactHUD } from './CompactHUD.js';
 import { EmberHUD } from './EmberHUD.js';
+import { HudIcon } from './HudIcon.js';
 import { AudioController } from './audio-controller.js';
 import { SoundEffectsEngine } from './sound-effects.js';
 import { loadAppearance, saveAppearance, type HudAppearance } from './appearance.js';
@@ -296,6 +297,11 @@ export function App() {
     );
 
     cleanups.push(
+      window.geminiHUD.gemini.onWakeWord(() => {
+        void handleStartSession();
+      }),
+    );
+    cleanups.push(
       window.geminiHUD.gemini.onAskGeminiPrompt?.((data) => {
         if (!data?.prompt) return;
         soundEngine.play('target_locked');
@@ -446,13 +452,27 @@ export function App() {
   const handleCollapseToBar = () => setDisplayMode('bar');
   const handleCollapseToOrb = () => setDisplayMode('orb');
 
+  const handleWakeWordChange = (enabled: boolean) => {
+    setSettings((previous) => ({ ...previous, wakeWordEnabled: enabled }));
+    void window.geminiHUD?.gemini.updateSettings({ wakeWordEnabled: enabled });
+  };
+
   const handleStartSession = async () => {
-    if (!window.geminiHUD) return;
+    if (
+      !window.geminiHUD ||
+      ['connecting', 'listening', 'speaking', 'thinking'].includes(statusRef.current)
+    )
+      return;
     void soundEngineRef.current?.unlock();
+    statusRef.current = 'connecting';
     setStatus('connecting');
     const ok = await window.geminiHUD.gemini.connect();
-    if (ok) {
-      await audioControllerRef.current?.startCapture();
+    if (ok && !(await audioControllerRef.current?.startCapture())) {
+      await window.geminiHUD.gemini.disconnect();
+      setExportNotice('Microphone unavailable. Check Windows microphone permissions.');
+    } else if (!ok) {
+      statusRef.current = 'error';
+      setStatus('error');
     }
   };
 
@@ -520,9 +540,7 @@ export function App() {
       currentTask,
     });
     if (res.ok) {
-      setExportNotice(
-        'Autonomous audit dossier & notes saved to E:\\Gematron\\notes\\ (.md & .html)',
-      );
+      setExportNotice('Audit dossier & notes saved to the Gemetron notes folder (.md & .html)');
     } else {
       setExportNotice('Export error: ' + (res.error || 'unknown'));
     }
@@ -655,6 +673,7 @@ export function App() {
         onToggleSoundMute={handleToggleSoundMute}
         onSoundVolumeChange={handleSoundVolumeChange}
         onAutoApproveChange={handleAutoApproveChange}
+        onWakeWordChange={handleWakeWordChange}
         onCollapseToBar={handleCollapseToBar}
         onCollapseToOrb={handleCollapseToOrb}
         onOpenConsole={() => setDisplayMode('console')}
@@ -711,9 +730,68 @@ export function App() {
         appearance={appearance}
         onAppearanceChange={setAppearance}
         onAutoApproveChange={handleAutoApproveChange}
+        onWakeWordChange={handleWakeWordChange}
       />
     );
   }
 
-  return null;
+  const isLive = ['connecting', 'listening', 'speaking', 'thinking'].includes(status);
+  const statusLabel =
+    status === 'closed' ? 'Idle' : status.charAt(0).toUpperCase() + status.slice(1);
+
+  return (
+    <div className={`agent-shell ember-ambient${isLive ? ' voice' : ''}`} data-mode={displayMode}>
+      {displayMode === 'orb' ? (
+        <div className="orbwrap glass app-drag-region">
+          <button
+            type="button"
+            className="orb"
+            aria-label="Open bar"
+            onClick={handleCollapseToBar}
+          />
+          <span className="odot" aria-hidden="true" />
+        </div>
+      ) : (
+        <div className="bar glass app-drag-region">
+          <button
+            type="button"
+            className="orb"
+            aria-label="Open full HUD"
+            onClick={() => setDisplayMode('full')}
+          />
+          <div className="info" role="status">
+            <small>Gemetron · {statusLabel}</small>
+            <div>{exportNotice || (isLive ? 'Escape to stop' : 'Ready to talk')}</div>
+          </div>
+          <button
+            type="button"
+            className="mic"
+            aria-label={isLive ? 'Stop session' : 'Start session'}
+            onClick={isLive ? handleStopSession : handleStartSession}
+          >
+            <HudIcon name={isLive ? 'stop' : 'mic'} size={21} />
+          </button>
+          <button
+            type="button"
+            className="ib"
+            aria-label="Open console"
+            onClick={() => setDisplayMode('console')}
+          >
+            <HudIcon name="terminal" size={17} />
+          </button>
+          <button
+            type="button"
+            className="ib"
+            aria-label="Collapse to orb"
+            onClick={handleCollapseToOrb}
+          >
+            <HudIcon name="orbi" size={17} />
+          </button>
+          <button type="button" className="ib x" aria-label="Close" onClick={handleClose}>
+            <HudIcon name="close" size={17} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }

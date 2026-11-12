@@ -65,6 +65,7 @@ export interface CompactHUDProps {
   appearance: HudAppearance;
   onAppearanceChange: (appearance: HudAppearance) => void;
   onAutoApproveChange?: (enabled: boolean) => void;
+  onWakeWordChange?: (enabled: boolean) => void;
 }
 
 type ViewName = 'chat' | 'blackboard' | 'workflow' | 'skills' | 'models' | 'radar';
@@ -149,6 +150,7 @@ export function CompactHUD({
   appearance,
   onAppearanceChange,
   onAutoApproveChange,
+  onWakeWordChange,
 }: CompactHUDProps) {
   const [activeView, setActiveView] = useState<ViewName>('chat');
   const [showSheet, setShowSheet] = useState(false);
@@ -1139,10 +1141,16 @@ export function CompactHUD({
             </div>
             <div className="row">
               <div>
-                Wake word “Hey Gematron”
-                <small>Always-on, processed locally</small>
+                Wake word “Hey Jarvis”
+                <small>Windows speech, local while idle</small>
               </div>
-              <button className="sw on" aria-label="Toggle wake word" />
+              <button
+                type="button"
+                className={`sw ${settings.wakeWordEnabled ? 'on' : ''}`}
+                aria-label="Toggle wake word"
+                aria-pressed={settings.wakeWordEnabled === true}
+                onClick={() => onWakeWordChange?.(!settings.wakeWordEnabled)}
+              />
             </div>
             <div className="row">
               <span>Push-to-talk</span>

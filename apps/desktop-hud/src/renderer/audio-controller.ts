@@ -56,7 +56,7 @@ export class AudioController {
   private micStream: MediaStream | null = null;
   private audioCtxIn: AudioContext | null = null;
   private audioCtxOut: AudioContext | null = null;
-  private scriptNode: ScriptProcessorNode | null = null;
+  private captureNode: AudioWorkletNode | null = null;
   private resampler: StreamingResampler | null = null;
   private nextPlayTime = 0;
   private activeSources: AudioBufferSourceNode[] = [];
@@ -86,25 +86,27 @@ export class AudioController {
 
       // Try 16000 Hz AudioContext; if sound driver rejects it, use hardware rate with resampler
       try {
-        this.audioCtxIn = new (window.AudioContext || (window as any).webkitAudioContext)({
-          sampleRate: 16000,
-        });
+        this.audioCtxIn = new AudioContext({ sampleRate: 16000 });
       } catch {
-        this.audioCtxIn = new (window.AudioContext || (window as any).webkitAudioContext)();
+        this.audioCtxIn = new AudioContext();
       }
 
       const inRate = this.audioCtxIn.sampleRate;
       this.resampler = inRate === 16000 ? null : new StreamingResampler(inRate, 16000);
 
-      const source = this.audioCtxIn.createMediaStreamSource(this.micStream);
-      // Buffer size 1024 or 2048 provides ~64ms low-latency frames
-      const bufferSize = inRate >= 44100 ? 2048 : 1024;
-      this.scriptNode = this.audioCtxIn.createScriptProcessor(bufferSize, 1, 1);
+      await this.audioCtxIn.audioWorklet.addModule(
+        new URL('./capture-worklet.js', document.baseURI).href,
+      );
 
-      this.scriptNode.onaudioprocess = (e) => {
+      const source = this.audioCtxIn.createMediaStreamSource(this.micStream);
+      this.captureNode = new AudioWorkletNode(this.audioCtxIn, 'hud-capture', {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1],
+      });
+      this.captureNode.port.onmessage = (e: MessageEvent<Float32Array>) => {
         if (!this.isCapturing) return;
-        const inputData = e.inputBuffer.getChannelData(0);
-        const resampled = this.resampler ? this.resampler.process(inputData) : inputData;
+        const resampled = this.resampler ? this.resampler.process(e.data) : e.data;
         if (resampled.length === 0) return;
         const pcm16 = this.float32ToInt16(resampled);
         const base64 = this.arrayBufferToBase64(pcm16.buffer);
@@ -113,13 +115,18 @@ export class AudioController {
         }
       };
 
-      source.connect(this.scriptNode);
-      this.scriptNode.connect(this.audioCtxIn.destination);
+      // Chromium only pulls worklets that reach the destination; the muted sink keeps it live silently.
+      const sink = this.audioCtxIn.createGain();
+      sink.gain.value = 0;
+      source.connect(this.captureNode);
+      this.captureNode.connect(sink);
+      sink.connect(this.audioCtxIn.destination);
 
       this.isCapturing = true;
       return true;
     } catch (err) {
       console.error('[AudioController] Failed to start microphone capture:', err);
+      this.stopCapture();
       return false;
     }
   }
@@ -130,11 +137,12 @@ export class AudioController {
       this.resampler.reset();
       this.resampler = null;
     }
-    if (this.scriptNode) {
+    if (this.captureNode) {
       try {
-        this.scriptNode.disconnect();
+        this.captureNode.port.onmessage = null;
+        this.captureNode.disconnect();
       } catch {}
-      this.scriptNode = null;
+      this.captureNode = null;
     }
     if (this.micStream) {
       this.micStream.getTracks().forEach((t) => t.stop());
