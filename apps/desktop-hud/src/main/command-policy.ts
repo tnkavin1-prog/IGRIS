@@ -168,20 +168,21 @@ const DANGEROUS_RULES: PolicyRule[] = [
     id: 'registry-write',
     risk: 'dangerous',
     reason: 'Writes to the Windows registry.',
-    pattern: /\breg(?:\.exe)?\s+(?:add|delete|import|restore)\b|\b(?:set-itemproperty|new-itemproperty|remove-itemproperty)\b[^\n]*\bhk(?:lm|cu|cr|u|cc)\b/i,
+    pattern:
+      /\breg(?:\.exe)?\s+(?:add|delete|import|restore)\b|\b(?:set-itemproperty|new-itemproperty|remove-itemproperty)\b[^\n]*\bhk(?:lm|cu|cr|u|cc)\b/i,
   },
   {
     id: 'persistence',
     risk: 'dangerous',
     reason: 'Creates scheduled tasks or startup entries (persistence).',
-    pattern:
-      /\b(?:schtasks|register-scheduledtask|new-scheduledtask)\b|\bstartup\b[^\n]*\.lnk\b/i,
+    pattern: /\b(?:schtasks|register-scheduledtask|new-scheduledtask)\b|\bstartup\b[^\n]*\.lnk\b/i,
   },
   {
     id: 'service-change',
     risk: 'dangerous',
     reason: 'Creates, stops or deletes a Windows service.',
-    pattern: /\b(?:sc|sc\.exe)\s+(?:create|delete|config|stop|start)\b|\b(?:new-service|set-service|stop-service|remove-service)\b/i,
+    pattern:
+      /\b(?:sc|sc\.exe)\s+(?:create|delete|config|stop|start)\b|\b(?:new-service|set-service|stop-service|remove-service)\b/i,
   },
   {
     id: 'process-control',
@@ -193,7 +194,8 @@ const DANGEROUS_RULES: PolicyRule[] = [
     id: 'script-execution',
     risk: 'dangerous',
     reason: 'Executes a script or dynamic expression.',
-    pattern: /\b(?:invoke-expression|iex|invoke-command|start-job)\b|\.ps1\b|\b(?:powershell|pwsh|cmd|wscript|cscript)\b[^\n]*\s-(?:command|c|file)\b/i,
+    pattern:
+      /\b(?:invoke-expression|iex|invoke-command|start-job)\b|\.ps1\b|\b(?:powershell|pwsh|cmd|wscript|cscript)\b[^\n]*\s-(?:command|c|file)\b/i,
   },
   {
     id: 'execution-policy',
@@ -205,7 +207,8 @@ const DANGEROUS_RULES: PolicyRule[] = [
     id: 'system-path-write',
     risk: 'dangerous',
     reason: 'Writes inside a Windows or Program Files directory.',
-    pattern: /(?:>|>>|\bout-file\b|\bset-content\b)[^\n]*\b[a-z]:\\(?:windows|program files|program files \(x86\)|programdata)\b/i,
+    pattern:
+      /(?:>|>>|\bout-file\b|\bset-content\b)[^\n]*\b[a-z]:\\(?:windows|program files|program files \(x86\)|programdata)\b/i,
   },
   {
     id: 'driver-install',
@@ -217,19 +220,22 @@ const DANGEROUS_RULES: PolicyRule[] = [
     id: 'network-config',
     risk: 'dangerous',
     reason: 'Changes network or proxy configuration.',
-    pattern: /\bnetsh\b|\bipconfig\s+\/(?:release|renew|flushdns)\b|\broute\s+(?:add|delete)\b|\bnetsh\b/i,
+    pattern:
+      /\bnetsh\b|\bipconfig\s+\/(?:release|renew|flushdns)\b|\broute\s+(?:add|delete)\b|\bnetsh\b/i,
   },
   {
     id: 'package-publish',
     risk: 'dangerous',
     reason: 'Publishes or deploys artifacts to a remote registry.',
-    pattern: /\b(?:npm|pnpm|yarn)\s+publish\b|\b(?:twine|npm)\s+upload\b|\bgit\s+push\b[^\n]*--force/i,
+    pattern:
+      /\b(?:npm|pnpm|yarn)\s+publish\b|\b(?:twine|npm)\s+upload\b|\bgit\s+push\b[^\n]*--force/i,
   },
   {
     id: 'external-network-write',
     risk: 'dangerous',
     reason: 'Uploads local data over the network.',
-    pattern: /\b(?:invoke-webrequest|invoke-restmethod|iwr|irm|curl|wget)\b[^\n]*(?:-method\s+post|-body\s+|-infile\b|--data\b|-d\s+@)/i,
+    pattern:
+      /\b(?:invoke-webrequest|invoke-restmethod|iwr|irm|curl|wget)\b[^\n]*(?:-method\s+post|-body\s+|-infile\b|--data\b|-d\s+@)/i,
   },
 ];
 

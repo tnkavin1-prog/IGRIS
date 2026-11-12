@@ -2,8 +2,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { CompactHUD, type CompactHUDProps } from '../../../apps/desktop-hud/src/renderer/CompactHUD.js';
-import type { AgenticTask, HUDSettings, WorkflowStep } from '../../../apps/desktop-hud/src/main/types.js';
+import {
+  CompactHUD,
+  type CompactHUDProps,
+} from '../../../apps/desktop-hud/src/renderer/CompactHUD.js';
+import type {
+  AgenticTask,
+  HUDSettings,
+  WorkflowStep,
+} from '../../../apps/desktop-hud/src/main/types.js';
 
 /**
  * Renderer behaviour of the desktop HUD shell.

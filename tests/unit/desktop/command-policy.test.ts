@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  assessCommand,
-  isCommandSafe,
-} from '../../../apps/desktop-hud/src/main/command-policy.js';
+import { assessCommand, isCommandSafe } from '../../../apps/desktop-hud/src/main/command-policy.js';
 
 describe('assessCommand', () => {
   it('treats empty commands as safe no-ops', () => {

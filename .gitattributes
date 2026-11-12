@@ -1,0 +1,30 @@
+# Normalise text files to LF in the repository and in every checkout.
+#
+# Prettier is configured with "endOfLine": "lf", so a CRLF checkout (the
+# default on Windows with core.autocrlf=true) failed the format check
+# locally while the same tree passed in CI on Linux. Checking out LF
+# everywhere keeps the two environments in agreement.
+* text=auto eol=lf
+
+# Binary files must never be line-ending converted.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.cur binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+*.mp3 binary
+*.wav binary
+*.dll binary
+*.exe binary
+*.pdb binary
+*.pdf binary
+*.zip binary
+*.7z binary
+*.asar binary
