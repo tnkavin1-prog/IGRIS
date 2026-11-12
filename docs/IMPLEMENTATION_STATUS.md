@@ -46,6 +46,8 @@ Prompt framing is a mitigation, not proof against arbitrary prompt injection. Ne
 | Extension approval      | Automatic approval is now opt-in on the extension too: a missing stored value can no longer switch it on, so a fresh install always asks before a consequential action                                                                                     | 2 new storage unit tests plus the offline Live approval end-to-end suite, which gates a submit-like click, traps focus and honours a denial.                                                                                                                                                   |
 | Overlay chrome          | The overlay panel renders its drag strip with minimize-to-orb, dock-to-side-panel and close controls, and the host resizes the frame to the active view (pill, panel, orb, expanded)                                                                       | Overlay end-to-end suite covers the default panel, the expanded surface, the orb, closing, and that a second request does not stack a second frame.                                                                                                                                            |
 | Approval transparency   | The desktop approval card shows the risk tier of the step and the exact command that would run, so the decision is informed                                                                                                                                | The HUD renders the risk badge and the command text for `run_command` steps; the workflow tests assert the tier that reaches the renderer.                                                                                                                                                     |
+| Test integrity          | The unit suite is typechecked with the same strictness as the sources, and the HUD shell is rendered in a DOM test                                                                                                                                         | A dedicated `tsconfig.tests.json` is part of `npm run typecheck`; the renderer test asserts the approval card, its callbacks and the workflow list.                                                                                                                                            |
+| Repository consistency  | Text files are checked out as LF everywhere, so the Prettier check behaves the same on a Windows workstation and in CI                                                                                                                                     | `npm run format:check` passes locally and in CI; `.gitattributes` marks the binary assets as binary.                                                                                                                                                                                           |
 
 ## Remaining priorities
 
@@ -59,11 +61,14 @@ The unused cloud relay and simulated recovery/supervision modules were removed r
 ```powershell
 npm run typecheck
 npm run lint
+npm run format:check
 npm test
 npm run test:e2e
 npm run build
 npm run dist:desktop
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/wake-word.ps1 -SelfTest
 ```
+
+Last executed on this tree: typecheck over five projects (including the test suite), lint clean, Prettier clean, 597 unit tests, 23 end-to-end tests, the production build, the NSIS installer and the synthesised wake-word self-test.
 
 Packaging does not publish. Physical microphone, model action, and installer/update checks require separate supervised testing on non-sensitive fixtures.
