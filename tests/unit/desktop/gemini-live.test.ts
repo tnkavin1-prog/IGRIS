@@ -4,6 +4,9 @@ import { CDPClient } from '../../../apps/desktop-hud/src/main/cdp-client.js';
 import { NativeInputService } from '../../../apps/desktop-hud/src/main/native-input.js';
 import { ComputerVisionService } from '../../../apps/desktop-hud/src/main/computer-vision.js';
 import { AppManagerService } from '../../../apps/desktop-hud/src/main/app-manager.js';
+import { computerOperator } from '../../../apps/desktop-hud/src/main/computer-operator.js';
+import { autonomousAgent } from '../../../apps/desktop-hud/src/main/autonomous-agent.js';
+import { SecurityAuditor } from '../../../apps/desktop-hud/src/main/security-auditor.js';
 
 describe('GeminiLiveService', () => {
   let cdpClient: CDPClient;
@@ -22,11 +25,29 @@ describe('GeminiLiveService', () => {
     const settings = service.currentSettings;
     expect(settings.modelId).toBe('gemini-3.8-live');
     expect(settings.voice).toBe('Kore');
-    expect(settings.autoApprove).toBe(true);
+    expect(settings.autoApprove).toBe(false);
     expect(settings.alwaysOnTop).toBe(true);
     expect(settings.soundEffectsEnabled).toBe(true);
     expect(settings.soundVolume).toBe(0.5);
     expect(settings.minimizeToTray).toBe(true);
+  });
+
+  it('audits tool metadata without typed secrets or raw arguments', async () => {
+    const auditor = new SecurityAuditor({ mockMode: true });
+    const live = new GeminiLiveService(cdpClient, {
+      auditor,
+      nativeInput: new NativeInputService({ mockMode: true }),
+      computerVision: new ComputerVisionService({ mockMode: true }),
+      appManager: new AppManagerService({ mockMode: true }),
+    });
+    await (live as any).handleToolCalls([
+      { id: 'fixture', name: 'computer_use_type', args: { text: 'private-fixture-token' } },
+    ]);
+    const records = auditor.getAuditTrail();
+    expect(records.map((entry) => entry.action)).toEqual(['tool:started', 'tool:completed']);
+    expect(JSON.stringify(records)).not.toContain('private-fixture-token');
+    expect(auditor.verifyChainIntegrity()).toBe(true);
+    live.dispose();
   });
 
   it('updates settings and emits settings-updated', () => {
@@ -257,6 +278,67 @@ describe('GeminiLiveService', () => {
     expect(responses[0].name).toBe('teach_visual_blackboard');
     expect(responses[0].response.result.success).toBe(true);
   });
+
+  it.each([
+    ['{}', false, false],
+    ['{"filePath":"report.docx"}', false, true],
+    ['[]', false, false],
+    ['{"filePath":"report.docx"}', true, false],
+  ])(
+    'validates skill parameters and approval: %s dangerous=%s',
+    async (paramsJson, dangerous, expected) => {
+      const initialize = vi.spyOn(computerOperator, 'initialize').mockResolvedValue();
+      const getSkill = vi.spyOn(computerOperator.registry, 'getSkill').mockReturnValue({
+        id: 'office',
+        name: 'Office',
+        targetApp: 'Word',
+        description: '',
+        isAvailable: async () => true,
+        getActions: () => [
+          {
+            name: 'createWordDoc',
+            description: '',
+            dangerous,
+            parameters: [{ name: 'filePath', type: 'string', description: '', required: true }],
+          },
+        ],
+        execute: async () => ({ success: true }),
+        verify: async () => true,
+      });
+      const execute = vi
+        .spyOn(computerOperator, 'executeSkillAction')
+        .mockResolvedValue({ success: true });
+      const verify = vi
+        .spyOn(computerOperator.registry, 'verifyActionResult')
+        .mockResolvedValue(true);
+      service.updateSettings({ autoApprove: false });
+      let payload: any;
+      (service as any).socket = {
+        readyState: 1,
+        send: (str: string) => {
+          payload = JSON.parse(str);
+        },
+      };
+      try {
+        await (service as any).handleToolCalls([
+          {
+            id: 'skill_1',
+            name: 'execute_application_skill',
+            args: { skillId: 'office', action: 'createWordDoc', paramsJson },
+          },
+        ]);
+        expect(payload.toolResponse.functionResponses[0].response.result.success).toBe(expected);
+        expect(execute.mock.calls.length).toBe(expected ? 1 : 0);
+        if (expected)
+          expect(payload.toolResponse.functionResponses[0].response.result.verified).toBe(true);
+      } finally {
+        initialize.mockRestore();
+        getSkill.mockRestore();
+        execute.mockRestore();
+        verify.mockRestore();
+      }
+    },
+  );
 
   it('formats realtimeInput with audio and video keys', () => {
     let sentPayload: any = null;
@@ -534,6 +616,9 @@ describe('GeminiLiveService', () => {
   });
 
   it('handles manage_browser_tabs and plan_autonomous_task', async () => {
+    const run = vi
+      .spyOn(autonomousAgent, 'startSession')
+      .mockResolvedValue({ id: 'fixture-session', status: 'completed' } as any);
     let sentPayload: any = null;
     (service as any).socket = {
       readyState: 1,
@@ -573,7 +658,9 @@ describe('GeminiLiveService', () => {
     expect(responses[0].name).toBe('manage_browser_tabs');
     expect(responses[1].name).toBe('plan_autonomous_task');
     expect(responses[1].response.result.success).toBe(true);
-    expect(responses[1].response.result.taskId).toBeDefined();
+    expect(responses[1].response.result.sessionId).toBe('fixture-session');
+    expect(run).toHaveBeenCalledWith('Open Notepad and type test summary', { autoApprove: false });
+    run.mockRestore();
     expect(responses[2].name).toBe('get_desktop_state');
     expect(responses[2].response.result.cursor).toBeDefined();
   });
@@ -934,5 +1021,140 @@ describe('GeminiLiveService', () => {
       expect(res.response.result.tiledWindows[0]?.bounds.x).toBe(1920);
       expect(res.response.result.tiledWindows[1]?.bounds.x).toBe(2880);
     });
+  });
+
+  it('executes smooth move, horizontal scroll, and key-state tools', async () => {
+    let sentPayload: any = null;
+    (service as any).socket = {
+      readyState: 1,
+      send: (str: string) => {
+        sentPayload = JSON.parse(str);
+      },
+    };
+    const input = (service as any).nativeInput as NativeInputService;
+    const smooth = vi.spyOn(input, 'mouseMoveSmooth').mockResolvedValue(true);
+    const hscroll = vi.spyOn(input, 'mouseHorizontalScrollAt').mockResolvedValue(true);
+    const keyState = vi.spyOn(input, 'setKeyState').mockResolvedValue(true);
+
+    const handler = (service as any).handleServerMessage.bind(service);
+    await handler(
+      JSON.stringify({
+        toolCall: {
+          functionCalls: [
+            {
+              id: 'call_smooth',
+              name: 'computer_use_mouse_move_smooth',
+              args: { x: 100, y: 120, duration_ms: 400 },
+            },
+            {
+              id: 'call_hscroll',
+              name: 'computer_use_horizontal_scroll',
+              args: { x: 50, y: 60, delta_x: 120 },
+            },
+            {
+              id: 'call_key_state',
+              name: 'computer_use_key_state',
+              args: { key: 'Shift', down: true },
+            },
+          ],
+        },
+      }),
+    );
+
+    const responses = sentPayload.toolResponse.functionResponses;
+    expect(responses.map((r: any) => r.name)).toEqual([
+      'computer_use_mouse_move_smooth',
+      'computer_use_horizontal_scroll',
+      'computer_use_key_state',
+    ]);
+    expect(smooth).toHaveBeenCalledWith(100, 120, 400);
+    expect(hscroll).toHaveBeenCalledWith(50, 60, 120);
+    expect(keyState).toHaveBeenCalledWith('Shift', true);
+    expect(responses.every((r: any) => r.response.result.success)).toBe(true);
+  });
+
+  it('maps model frame coordinates to the physical desktop before clicking', async () => {
+    let sentPayload: any = null;
+    (service as any).socket = {
+      readyState: 1,
+      send: (str: string) => {
+        sentPayload = JSON.parse(str);
+      },
+    };
+    const input = (service as any).nativeInput as NativeInputService;
+    const click = vi.spyOn(input, 'mouseClick').mockResolvedValue(true);
+
+    (service as any).frameMapper.recordFrame({
+      imageWidth: 1024,
+      imageHeight: 576,
+      displayBounds: { x: 0, y: 0, width: 2400, height: 1350 },
+    });
+
+    const handler = (service as any).handleServerMessage.bind(service);
+    await handler(
+      JSON.stringify({
+        toolCall: {
+          functionCalls: [
+            {
+              id: 'call_click_mapped',
+              name: 'computer_use_click',
+              args: { x: 512, y: 288 },
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(click).toHaveBeenCalledWith(1200, 675, { button: 'left', double: false });
+    const result = sentPayload.toolResponse.functionResponses[0].response.result;
+    expect(result.x).toBe(1200);
+    expect(result.y).toBe(675);
+    expect(result.mappedFromFrame).toEqual({ x: 512, y: 288 });
+  });
+
+  it('stores resumption handles and re-uses them in the next setup', async () => {
+    const sent: any[] = [];
+    (service as any).socket = {
+      readyState: 1,
+      send: (str: string) => sent.push(JSON.parse(str)),
+    };
+
+    await (service as any).handleServerMessage(
+      JSON.stringify({ sessionResumptionUpdate: { newHandle: 'handle-abc', resumable: true } }),
+    );
+    expect((service as any).resumeHandle).toBe('handle-abc');
+
+    (service as any).sendSetup();
+    const setup = sent[0].setup;
+    expect(setup.sessionResumption).toEqual({ handle: 'handle-abc' });
+    expect(setup.contextWindowCompression).toEqual({ slidingWindow: {} });
+  });
+
+  it('does not schedule reconnects after an explicit disconnect', () => {
+    vi.useFakeTimers();
+    try {
+      (service as any).manualDisconnect = true;
+      (service as any).scheduleReconnect();
+      expect((service as any).reconnectTimer).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('backs off when the connection drops unexpectedly', () => {
+    vi.useFakeTimers();
+    try {
+      (service as any).manualDisconnect = false;
+      const connectSpy = vi.spyOn(service, 'connect').mockResolvedValue(false);
+
+      (service as any).scheduleReconnect();
+      expect((service as any).reconnectTimer).not.toBeNull();
+      expect((service as any).reconnectAttempts).toBe(1);
+
+      vi.advanceTimersByTime(1_000);
+      expect(connectSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
