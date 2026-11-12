@@ -9,12 +9,11 @@ import type {
   TextMatch,
 } from './types.js';
 import type { AppManagerService } from './app-manager.js';
-import type { CDPClient } from './cdp-client.js';
+import { recognizeScreenshot } from './windows-ocr.js';
 
 export interface ComputerVisionOptions {
   mockMode?: boolean;
   appManager?: AppManagerService;
-  cdpClient?: CDPClient;
 }
 
 export interface MockScreenElement {
@@ -93,21 +92,15 @@ const DEFAULT_MOCK_ELEMENTS: MockScreenElement[] = [
 export class ComputerVisionService {
   private mockMode: boolean;
   private appManager?: AppManagerService;
-  private cdpClient?: CDPClient;
 
   constructor(options: ComputerVisionOptions = {}) {
     // Auto-detect mock mode if running in Vitest or non-Electron test runner
     this.mockMode = options.mockMode ?? typeof desktopCapturer === 'undefined';
     this.appManager = options.appManager;
-    this.cdpClient = options.cdpClient;
   }
 
   public setAppManager(appManager: AppManagerService): void {
     this.appManager = appManager;
-  }
-
-  public setCDPClient(cdpClient: CDPClient): void {
-    this.cdpClient = cdpClient;
   }
 
   /**
@@ -189,7 +182,9 @@ export class ComputerVisionService {
       thumbnailSize: { width: targetWidth, height: targetHeight },
     });
 
-    const target = (sourceId && sources.find((s) => s.id === sourceId)) || sources[0];
+    const target = sourceId
+      ? sources.find((s) => s.id === sourceId)
+      : sources.find((s) => s.display_id === String(screen.getPrimaryDisplay().id)) || sources[0];
     if (!target) {
       throw new Error('No desktop screen sources found to capture.');
     }
@@ -206,6 +201,9 @@ export class ComputerVisionService {
       height: size.height,
       sourceId: target.id,
       sourceName: target.name,
+      screenBounds: this.getDisplayMetrics().allDisplays?.find(
+        (display) => String(display.id) === target.display_id,
+      )?.physicalBounds,
       timestamp: Date.now(),
     };
   }
@@ -305,6 +303,11 @@ export class ComputerVisionService {
           bounds: { ...d.bounds },
           scaleFactor: d.scaleFactor,
           isPrimary: d.id === primary.id,
+          physicalBounds: {
+            ...screen.dipToScreenPoint({ x: d.bounds.x, y: d.bounds.y }),
+            width: Math.round(d.bounds.width * d.scaleFactor),
+            height: Math.round(d.bounds.height * d.scaleFactor),
+          },
         };
       });
 
@@ -338,6 +341,59 @@ export class ComputerVisionService {
         virtualBounds: { x: 0, y: 0, width: 1920, height: 1080 },
       };
     }
+  }
+
+  public async readScreenOcr(): Promise<{ text: string; matches: TextMatch[] }> {
+    if (this.mockMode) {
+      return {
+        text: DEFAULT_MOCK_ELEMENTS.map((entry) => entry.text).join('\n'),
+        matches: DEFAULT_MOCK_ELEMENTS.map((entry) => ({
+          ...entry,
+          x: entry.bounds.x + entry.bounds.width / 2,
+          y: entry.bounds.y + entry.bounds.height / 2,
+          confidence: 0.75,
+          source: 'mock',
+        })),
+      };
+    }
+    const shot = await this.captureScreen(undefined, {
+      maxWidth: 2560,
+      maxHeight: 1440,
+      quality: 95,
+    });
+    if (!shot.screenBounds) throw new Error('Screenshot display coordinates are unavailable.');
+    const ocr = await recognizeScreenshot(shot);
+    const display = shot.screenBounds;
+    const entries = ocr.lines.flatMap((line) => {
+      if (line.words.length <= 1) return line.words;
+      const left = Math.min(...line.words.map((w) => w.bounds.x));
+      const top = Math.min(...line.words.map((w) => w.bounds.y));
+      const right = Math.max(...line.words.map((w) => w.bounds.x + w.bounds.width));
+      const bottom = Math.max(...line.words.map((w) => w.bounds.y + w.bounds.height));
+      return [
+        ...line.words,
+        { text: line.text, bounds: { x: left, y: top, width: right - left, height: bottom - top } },
+      ];
+    });
+    return {
+      text: ocr.text,
+      matches: entries.map((entry) => {
+        const bounds = {
+          x: display.x + (entry.bounds.x * display.width) / shot.width,
+          y: display.y + (entry.bounds.y * display.height) / shot.height,
+          width: (entry.bounds.width * display.width) / shot.width,
+          height: (entry.bounds.height * display.height) / shot.height,
+        };
+        return {
+          text: entry.text,
+          bounds,
+          x: Math.round(bounds.x + bounds.width / 2),
+          y: Math.round(bounds.y + bounds.height / 2),
+          confidence: 0.75,
+          source: 'ocr' as const,
+        };
+      }),
+    };
   }
 
   /**
@@ -502,23 +558,27 @@ export class ComputerVisionService {
       }
     }
 
-    // 3. Check active Chrome tab via CDP if connected
-    if (matches.length === 0 && this.cdpClient) {
+    if (matches.length === 0) {
       try {
-        const pageData = await this.cdpClient.readPage();
-        if (pageData && pageData.text && isMatch(pageData.text)) {
-          matches.push({
-            text: pageData.title || q,
-            x: 960,
-            y: 540,
-            bounds: { x: 200, y: 150, width: 1520, height: 800 },
-            confidence: 0.88,
-            source: 'browser_dom',
-            containerTitle: pageData.title,
-          });
-        }
-      } catch {
-        /* ignore */
+        const ocr = await this.readScreenOcr();
+        const container =
+          options.windowTitle && this.appManager
+            ? await this.appManager.getWindowBounds(options.windowTitle)
+            : undefined;
+        if (options.windowTitle && !container) return { found: false, query, matches: [] };
+        matches.push(
+          ...ocr.matches.filter(
+            (match) =>
+              isMatch(match.text) &&
+              (!container ||
+                (match.x >= container.x &&
+                  match.y >= container.y &&
+                  match.x <= container.x + container.width &&
+                  match.y <= container.y + container.height)),
+          ),
+        );
+      } catch (err) {
+        console.warn('[ComputerVision] OCR unavailable:', (err as Error).message);
       }
     }
 

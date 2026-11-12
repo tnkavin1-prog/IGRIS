@@ -7,6 +7,12 @@
 !**/.env.example
 *.pem
 *.key
+# Control API token (runtime secret, generated per install)
+control-token
+**/control-token
+
+# Editor agent scratch
+.qoder/
 
 # Dependencies
 node_modules/
@@ -21,6 +27,9 @@ build/
 release/chrome-extension/
 release/*.zip
 release/SHA256SUMS.txt
+release/desktop/
+*.pfx
+*.p12
 *.tsbuildinfo
 
 # Test artifacts
@@ -53,6 +62,9 @@ npm-debug.log*
 logs/
 # Captured evidence logs are intentional
 !docs/evidence/*.log
+
+# Runtime agent state (memory store, audit dossiers)
+notes/
 
 # Generated API docs (typedoc)
 docs/api/

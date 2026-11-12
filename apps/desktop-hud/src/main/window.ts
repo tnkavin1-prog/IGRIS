@@ -1,5 +1,9 @@
 import { BrowserWindow, screen } from 'electron';
 import { appendFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { LOGS_DIR } from './runtime-paths.js';
+
+const RENDERER_LOG = join(LOGS_DIR, 'renderer.log');
 import type { HudDisplayMode } from './types.js';
 
 let mainWindow: BrowserWindow | null = null;
@@ -63,7 +67,7 @@ export function createMainWindow(preloadPath: string, htmlPath: string): Browser
   mainWindow.webContents.on('console-message', (_, level, message, line, sourceId) => {
     const lineStr = `[${new Date().toISOString()}] [Renderer] [lvl ${level}] ${message} (${sourceId}:${line})\n`;
     try {
-      appendFileSync('E:\\Gematron\\logs\\renderer.log', lineStr);
+      appendFileSync(RENDERER_LOG, lineStr);
     } catch {}
     console.log(`[Renderer Console] [${level}] ${message} (${sourceId}:${line})`);
   });
@@ -71,7 +75,7 @@ export function createMainWindow(preloadPath: string, htmlPath: string): Browser
   mainWindow.webContents.on('did-fail-load', (_, errorCode, errorDescription) => {
     const errStr = `[${new Date().toISOString()}] [DesktopHUD] Failed to load HTML: ${errorCode} - ${errorDescription}\n`;
     try {
-      appendFileSync('E:\\Gematron\\logs\\renderer.log', errStr);
+      appendFileSync(RENDERER_LOG, errStr);
     } catch {}
     console.error(`[DesktopHUD] Failed to load HTML: ${errorCode} - ${errorDescription}`);
   });
@@ -79,7 +83,7 @@ export function createMainWindow(preloadPath: string, htmlPath: string): Browser
   mainWindow.webContents.on('render-process-gone', (_, details) => {
     const goneStr = `[${new Date().toISOString()}] [DesktopHUD] Render process gone: ${JSON.stringify(details)}\n`;
     try {
-      appendFileSync('E:\\Gematron\\logs\\renderer.log', goneStr);
+      appendFileSync(RENDERER_LOG, goneStr);
     } catch {}
     console.error(`[DesktopHUD] Render process gone:`, details);
   });

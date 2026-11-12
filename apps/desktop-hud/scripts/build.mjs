@@ -22,7 +22,7 @@ async function main() {
     platform: 'node',
     target: 'node20',
     format: 'cjs',
-    external: ['electron', 'ws'],
+    external: ['electron', 'ws', 'electron-updater'],
     logLevel: 'warning',
   });
 
@@ -52,7 +52,18 @@ async function main() {
     },
   });
 
-  // 4. Copy HTML & CSS assets
+  // 4. Bundle mic capture AudioWorklet (separate file: CSP forbids blob: worklets)
+  await build({
+    entryPoints: [join(root, 'src', 'renderer', 'capture-worklet.ts')],
+    outfile: join(dist, 'capture-worklet.js'),
+    bundle: true,
+    platform: 'browser',
+    target: 'chrome120',
+    format: 'iife',
+    logLevel: 'warning',
+  });
+
+  // 5. Copy HTML & CSS assets
   cpSync(join(root, 'src', 'renderer', 'index.html'), join(dist, 'index.html'));
   cpSync(join(root, 'src', 'renderer', 'styles'), join(dist, 'styles'), { recursive: true });
 

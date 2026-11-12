@@ -1,0 +1,35 @@
+module.exports = {
+  appId: 'com.gemetron.desktop',
+  productName: 'Gemetron',
+  electronVersion: '34.0.0',
+  electronDist: '../../node_modules/electron/dist',
+  asar: true,
+  npmRebuild: false,
+  directories: { output: '../../release/desktop' },
+  files: ['dist/**/*', 'package.json', '!**/*.map'],
+  extraResources: [
+    {
+      from: '../../temp/package-native',
+      to: 'scripts',
+      filter: ['Win32Input.exe', 'Win32Input.dll', 'Win32Pin.dll'],
+    },
+    { from: '../../scripts', to: 'scripts', filter: ['ocr-screen.ps1', 'wake-word.ps1'] },
+    { from: '../../assets/icons', to: 'assets/icons', filter: ['jarvis.ico'] },
+  ],
+  win: {
+    target: [{ target: 'nsis', arch: ['x64'] }],
+    icon: '../../assets/icons/jarvis.ico',
+    artifactName: 'Gemetron-Setup-${version}-${arch}.${ext}',
+  },
+  nsis: {
+    oneClick: false,
+    perMachine: false,
+    allowToChangeInstallationDirectory: true,
+    createDesktopShortcut: true,
+    createStartMenuShortcut: true,
+    runAfterFinish: false,
+    deleteAppDataOnUninstall: false,
+  },
+  protocols: [{ name: 'Gemetron summon', schemes: ['gemetron', 'gematron'] }],
+  publish: [{ provider: 'github', owner: 'tnkavin1-prog', repo: 'IGRIS', releaseType: 'release' }],
+};

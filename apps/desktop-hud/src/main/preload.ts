@@ -105,6 +105,11 @@ const api = {
     updateSettings: (settings: Partial<HUDSettings>): Promise<void> =>
       ipcRenderer.invoke('gemini:update-settings', settings),
 
+    onWakeWord: (callback: () => void): (() => void) => {
+      const handler = () => callback();
+      ipcRenderer.on('gemini:wake-word', handler);
+      return () => ipcRenderer.removeListener('gemini:wake-word', handler);
+    },
     onStatusChanged: (callback: (status: LiveHUDStatus) => void): (() => void) => {
       const handler = (_: unknown, status: LiveHUDStatus) => callback(status);
       ipcRenderer.on('gemini:status-changed', handler);

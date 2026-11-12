@@ -1,8 +1,10 @@
 import { app, ipcMain, globalShortcut, shell } from 'electron';
 import { join } from 'node:path';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import { CDPClient } from './cdp-client.js';
-import { LOGS_DIR, NOTES_DIR } from './runtime-paths.js';
+import { DATA_ROOT, ICON_PATH, IS_PACKAGED, LOGS_DIR, NOTES_DIR } from './runtime-paths.js';
+import { WakeWordService } from './wake-word.js';
+import { startAutoUpdates } from './auto-update.js';
 
 function logLine(file: 'hud-startup' | 'electron-error', msg: string): void {
   try {
@@ -25,6 +27,8 @@ process.on('unhandledRejection', (reason) => {
 import { ChromeLauncher } from './chrome-launcher.js';
 import { GeminiLiveService } from './gemini-live.js';
 import { ControlServer } from './control-server.js';
+import { ControlAuthService } from './control-auth.js';
+import { SecurityAuditor } from './security-auditor.js';
 import { exportAuditSession } from './audit-exporter.js';
 import { TrayManager } from './tray-manager.js';
 import {
@@ -44,6 +48,12 @@ import type {
   WindowTilingLayout,
 } from './types.js';
 import { screenGrounding } from './screen-grounding.js';
+
+if (IS_PACKAGED) {
+  const userData = join(DATA_ROOT, 'electron');
+  mkdirSync(userData, { recursive: true });
+  app.setPath('userData', userData);
+}
 
 // Register custom Windows URI protocol (e.g. gematron://summon)
 for (const protocol of ['gematron', 'gemetron']) {
@@ -77,10 +87,14 @@ if (!gotLock) {
   let isQuitting = false;
   let trayManager: TrayManager | null = null;
   let liveService: GeminiLiveService;
+  const wakeWord = new WakeWordService();
+  let stopAutoUpdates = () => {};
 
   app.on('before-quit', () => {
     logLine('hud-startup', `app before-quit fired (isQuitting: ${isQuitting})`);
     isQuitting = true;
+    stopAutoUpdates();
+    void wakeWord.dispose();
     liveService?.input.dispose();
     trayManager?.destroy();
   });
@@ -101,7 +115,15 @@ if (!gotLock) {
       logLine('hud-startup', 'app.whenReady started');
       liveService = new GeminiLiveService(cdpClient);
       logLine('hud-startup', 'GeminiLiveService created');
-      controlServer = new ControlServer(9228, '127.0.0.1');
+      const controlAuth = new ControlAuthService();
+      controlServer = new ControlServer(
+        Number(process.env.GEMATRON_CONTROL_PORT ?? 9228),
+        '127.0.0.1',
+        {
+          auth: controlAuth,
+          audit: new SecurityAuditor({ mockMode: false }),
+        },
+      );
       logLine('hud-startup', 'ControlServer created');
 
       const preloadPath = join(__dirname, 'preload.cjs');
@@ -109,6 +131,7 @@ if (!gotLock) {
 
       const win = createMainWindow(preloadPath, htmlPath);
       logLine('hud-startup', 'MainWindow created');
+      stopAutoUpdates = startAutoUpdates();
       try {
         liveService.input.setDisplayMetrics(liveService.vision.getDisplayMetrics());
       } catch {
@@ -151,7 +174,7 @@ if (!gotLock) {
 
       // Initialize System Tray & Background Daemon
       trayManager = new TrayManager({
-        iconPath: join(__dirname, '../../../../assets/icons/jarvis.ico'),
+        iconPath: ICON_PATH,
         callbacks: {
           onSummon: () => summonHUD(),
           onKillswitch: () => {
@@ -246,6 +269,29 @@ if (!gotLock) {
           }
         }
       };
+
+      wakeWord.on('wake', () => {
+        void wakeWord.setPaused(true).then(() => {
+          summonHUD();
+          safeSend('gemini:wake-word');
+        });
+      });
+      wakeWord.on('unavailable', (message: string) => {
+        safeSend('gemini:conversation-message', {
+          id: `wake_${Date.now()}`,
+          kind: 'system',
+          title: 'Wake word unavailable',
+          text: message,
+          at: Date.now(),
+        });
+      });
+      liveService.on('settings-updated', (settings) => {
+        void wakeWord.setEnabled(settings.wakeWordEnabled === true);
+      });
+      liveService.on('status-changed', (status) => {
+        void wakeWord.setPaused(!['idle', 'closed', 'error'].includes(status));
+      });
+      void wakeWord.setEnabled(liveService.currentSettings.wakeWordEnabled === true);
 
       // Forward CDP events to Renderer
       cdpClient.on('active-tab-changed', (tab) => {
@@ -420,7 +466,12 @@ if (!gotLock) {
   });
 
   // Gemini Live IPC Handlers
-  ipcMain.handle('gemini:connect', async () => await liveService.connect());
+  ipcMain.handle('gemini:connect', async () => {
+    await wakeWord.setPaused(true);
+    const connected = await liveService.connect();
+    if (!connected) await wakeWord.setPaused(false);
+    return connected;
+  });
   ipcMain.handle('gemini:disconnect', () => liveService.disconnect());
   ipcMain.handle('gemini:send-text', (_, text: string) => liveService.sendText(text));
   ipcMain.handle('gemini:send-audio-chunk', (_, base64: string) =>

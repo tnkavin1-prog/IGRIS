@@ -7,10 +7,12 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "node scripts/package.mjs"
   },
   "dependencies": {
     "@gbl/shared": "*",
+    "electron-updater": "^6.8.11",
     "ws": "^8.22.1"
   }
 }

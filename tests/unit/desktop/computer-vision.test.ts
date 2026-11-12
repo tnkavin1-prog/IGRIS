@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import * as ocr from '../../../apps/desktop-hud/src/main/windows-ocr.js';
 import { ComputerVisionService } from '../../../apps/desktop-hud/src/main/computer-vision.js';
 
 describe('ComputerVisionService', () => {
@@ -43,6 +44,41 @@ describe('ComputerVisionService', () => {
     expect(metrics.allDisplays).toBeDefined();
     expect(metrics.allDisplays?.length).toBeGreaterThan(0);
     expect(metrics.virtualBounds).toEqual({ x: 0, y: 0, width: 1920, height: 1080 });
+  });
+
+  it('maps OCR word and phrase boxes to physical display pixels', async () => {
+    vision.setMockMode(false);
+    const capture = vi.spyOn(vision, 'captureScreen').mockResolvedValue({
+      data: '',
+      mimeType: 'image/jpeg',
+      width: 1000,
+      height: 500,
+      timestamp: 0,
+      screenBounds: { x: -2000, y: 100, width: 2000, height: 1000 },
+    });
+    const recognize = vi.spyOn(ocr, 'recognizeScreenshot').mockResolvedValue({
+      text: 'Save file',
+      lines: [
+        {
+          text: 'Save file',
+          words: [
+            { text: 'Save', bounds: { x: 100, y: 50, width: 40, height: 20 } },
+            { text: 'file', bounds: { x: 150, y: 50, width: 30, height: 20 } },
+          ],
+        },
+      ],
+    });
+    try {
+      const result = await vision.readScreenOcr();
+      expect(result.matches[0]).toMatchObject({ x: -1760, y: 220, source: 'ocr' });
+      expect(result.matches[2]).toMatchObject({
+        text: 'Save file',
+        bounds: { x: -1800, y: 200, width: 160, height: 40 },
+      });
+    } finally {
+      capture.mockRestore();
+      recognize.mockRestore();
+    }
   });
 
   it('supports toggling mock mode', () => {

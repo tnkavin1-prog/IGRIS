@@ -10,7 +10,6 @@
  *   1. findTextOnScreen (existing) — text-based element location
  *   2. AppManager window enumeration — window titles and bounds
  *   3. CDP DOM inspection — browser elements (when Chrome is controlled)
- *   4. Visual template matching — placeholder for image-based matching
  */
 
 import type { CaptureResult, FindTextOptions, TextLocationResult } from './types.js';
@@ -28,7 +27,9 @@ export interface ScreenElement {
   width: number;
   height: number;
   confidence: number;
-  source: 'text' | 'window' | 'dom' | 'template';
+  source: 'text' | 'window' | 'dom' | 'ocr';
+  coordinateSpace?: 'physical_desktop_pixels' | 'css_viewport';
+  tabId?: string;
   container?: string;
 }
 
@@ -100,7 +101,8 @@ export class ScreenGroundingService {
             width: m.bounds.width,
             height: m.bounds.height,
             confidence: m.confidence,
-            source: m.source === 'browser_dom' ? 'dom' : (m.source as ScreenElement['source']),
+            source: m.source === 'ocr' ? 'ocr' : 'text',
+            coordinateSpace: 'physical_desktop_pixels',
             container: m.containerTitle,
           };
         }
@@ -116,7 +118,8 @@ export class ScreenGroundingService {
         const match = windows.find((w) => {
           const t = w.title.toLowerCase();
           const d = description.toLowerCase();
-          return exact ? t === d : t.includes(d) || d.includes(t);
+          if (containerTitle && !t.includes(containerTitle.toLowerCase())) return false;
+          return t.length > 0 && (exact ? t === d : t.includes(d) || d.includes(t));
         });
         if (match) {
           const bounds = await this.appManager.getWindowBounds(match.hwnd || match.title);
@@ -136,25 +139,13 @@ export class ScreenGroundingService {
       }
     }
 
-    // Strategy 3: CDP DOM element search (browser only)
-    if (this.cdpClient) {
-      try {
-        // Try to click element by text via CDP first
-        const clicked = await this.cdpClient.clickElementByText(description).catch(() => false);
-        if (clicked) {
-          // We don't have coordinates from CDP click, use center of viewport
-          return {
-            description,
-            x: 960,
-            y: 540,
-            width: 100,
-            height: 40,
-            confidence: 0.85,
-            source: 'dom',
-          };
-        }
-      } catch {
-        /* fall through */
+    if (this.cdpClient && !containerTitle) {
+      const element = await this.cdpClient.findElementByText(description).catch(() => null);
+      if (
+        element &&
+        (!exact || element.text.trim().toLowerCase() === description.trim().toLowerCase())
+      ) {
+        return { ...element, description, confidence: 0.85, source: 'dom' };
       }
     }
 
@@ -204,11 +195,13 @@ export class ScreenGroundingService {
       return { ok: false, error: `Element not found on screen: "${description}"` };
     }
 
-    const ok = await ni.mouseClick(el.x, el.y, {
-      button: options.button || 'left',
-      double: options.double ?? false,
-      scaleWithDpi: true,
-    });
+    const ok =
+      el.coordinateSpace === 'css_viewport'
+        ? await this.cdpClient!.clickAt(el.x, el.y, el.tabId, options)
+        : await ni.mouseClick(el.x, el.y, {
+            button: options.button || 'left',
+            double: options.double ?? false,
+          });
 
     if (!ok) {
       return { ok: false, element: el, error: `Failed to click element: "${description}"` };

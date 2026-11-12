@@ -57,6 +57,7 @@ export interface HUDSettings {
   soundEffectsEnabled?: boolean;
   soundVolume?: number;
   minimizeToTray?: boolean;
+  wakeWordEnabled?: boolean;
 }
 
 export interface WorkflowAuditScreenshot {
@@ -99,6 +100,7 @@ export interface CaptureResult {
   height: number;
   sourceId?: string;
   sourceName?: string;
+  screenBounds?: { x: number; y: number; width: number; height: number };
   timestamp: number;
 }
 
@@ -154,7 +156,7 @@ export interface TextMatch {
     height: number;
   };
   confidence: number;
-  source: 'window_title' | 'window_control' | 'ui_automation' | 'browser_dom' | 'mock';
+  source: 'window_title' | 'window_control' | 'ui_automation' | 'browser_dom' | 'ocr' | 'mock';
   containerTitle?: string;
 }
 
@@ -224,12 +226,20 @@ export type WorkflowActionType =
 
 export type StepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'needs_approval';
 
+/**
+ * Risk tier of a workflow step. `dangerous` and `blocked` steps always
+ * require an explicit human decision, regardless of the global auto-approve
+ * setting; `blocked` steps are rejected outright by the command policy.
+ */
+export type StepRisk = 'safe' | 'caution' | 'dangerous' | 'blocked';
+
 export interface WorkflowStepInput {
   id?: string;
   description: string;
   actionType: WorkflowActionType | string;
   params: Record<string, any>;
   requiresApproval?: boolean;
+  riskLevel?: StepRisk;
 }
 
 export interface WorkflowStep {
@@ -240,6 +250,10 @@ export interface WorkflowStep {
   params: Record<string, any>;
   status: StepStatus;
   requiresApproval: boolean;
+  /** Risk tier, computed at plan time for command-executing steps. */
+  riskLevel?: StepRisk;
+  /** Set only after the user explicitly approved this step in the HUD. */
+  approvedByUser?: boolean;
   result?: any;
   error?: string;
   startedAt?: number;
