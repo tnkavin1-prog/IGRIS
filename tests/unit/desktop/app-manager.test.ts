@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AppManagerService } from '../../../apps/desktop-hud/src/main/app-manager.js';
 
 describe('AppManagerService', () => {
@@ -24,6 +24,71 @@ describe('AppManagerService', () => {
     const windows = await appManager.listRunningWindows();
     const launched = windows.find((w) => w.title.includes('notepad'));
     expect(launched).toBeDefined();
+  });
+
+  it('routes a browser through the gateway even when a memory alias exists', async () => {
+    // The default memory store maps "chrome" to a bare "chrome.exe" that is
+    // not on PATH. That alias must never shadow the browser gateway.
+    const memoryStore = {
+      getAlias: (name: string) =>
+        name === 'chrome' ? { alias: 'chrome', targetApp: 'chrome.exe', useCount: 1 } : undefined,
+      recordAliasUsage: vi.fn(),
+    };
+    appManager.setMemoryStore(memoryStore as never);
+
+    const gateway = {
+      focusOrLaunch: vi.fn().mockResolvedValue({ success: true, windowTitle: 'Google Chrome' }),
+      openTab: vi.fn().mockResolvedValue({ success: true, windowTitle: 'Google Chrome' }),
+    };
+    appManager.setBrowserGateway(gateway as never);
+
+    const res = await appManager.launchApplication('chrome');
+
+    expect(gateway.focusOrLaunch).toHaveBeenCalledTimes(1);
+    expect(res.ok).toBe(true);
+    expect(res.verified).toBe(true);
+  });
+
+  it('honours a memory alias that carries intent', async () => {
+    const memoryStore = {
+      getAlias: (name: string) =>
+        name === 'chrome-dev'
+          ? {
+              alias: 'chrome-dev',
+              targetApp: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+              arguments: ['--profile-directory=Dev'],
+              useCount: 1,
+            }
+          : undefined,
+      recordAliasUsage: vi.fn(),
+    };
+    appManager.setMemoryStore(memoryStore as never);
+
+    const gateway = {
+      focusOrLaunch: vi.fn().mockResolvedValue({ success: true, windowTitle: 'Google Chrome' }),
+      openTab: vi.fn(),
+    };
+    appManager.setBrowserGateway(gateway as never);
+
+    const res = await appManager.launchApplication('chrome-dev');
+
+    // An explicit alias wins over the gateway.
+    expect(gateway.focusOrLaunch).not.toHaveBeenCalled();
+    expect(res.ok).toBe(true);
+  });
+
+  it('reports the real cause when the executable cannot be started', async () => {
+    const real = new AppManagerService({ mockMode: false });
+    // Skip the Start-Menu fallback so the test stays hermetic and fast.
+    (real as unknown as { resolveStartApp: () => Promise<null> }).resolveStartApp = async () =>
+      null;
+
+    const res = await real.launchApplication('zzz-definitely-not-an-installed-app');
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain('not found');
+    // The old behaviour burned ten seconds and blamed the window lookup.
+    expect(res.error).not.toContain('no matching window appeared');
   });
 
   it('focuses, minimizes, maximizes, and closes windows', async () => {

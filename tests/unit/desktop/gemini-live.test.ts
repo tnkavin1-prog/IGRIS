@@ -1112,6 +1112,47 @@ describe('GeminiLiveService', () => {
     expect(responses.every((r: any) => r.response.result.success)).toBe(true);
   });
 
+  it('reports an unacknowledged keystroke instead of claiming success', async () => {
+    let sentPayload: any = null;
+    (service as any).socket = {
+      readyState: 1,
+      send: (str: string) => {
+        sentPayload = JSON.parse(str);
+      },
+    };
+    const input = (service as any).nativeInput as NativeInputService;
+    vi.spyOn(input, 'typeText').mockResolvedValue(false);
+    vi.spyOn(input, 'sendHotkey').mockResolvedValue(false);
+
+    const handler = (service as any).handleServerMessage.bind(service);
+    await handler(
+      JSON.stringify({
+        toolCall: {
+          functionCalls: [
+            {
+              id: 'call_type_failed',
+              name: 'computer_use_type',
+              args: { text: 'hello', press_enter: true },
+            },
+            {
+              id: 'call_hotkey_failed',
+              name: 'computer_use_hotkey',
+              args: { keys: 'Ctrl+S' },
+            },
+          ],
+        },
+      }),
+    );
+
+    const responses = sentPayload.toolResponse.functionResponses;
+    // The native layer refused the input: the tool must not report success.
+    expect(responses[0].response.result.success).toBe(false);
+    expect(responses[0].response.result.acknowledged).toBe(false);
+    expect(responses[0].response.result.error).toContain('did not acknowledge');
+    expect(responses[1].response.result.success).toBe(false);
+    expect(responses[1].response.result.acknowledged).toBe(false);
+  });
+
   it('maps model frame coordinates to the physical desktop before clicking', async () => {
     let sentPayload: any = null;
     (service as any).socket = {

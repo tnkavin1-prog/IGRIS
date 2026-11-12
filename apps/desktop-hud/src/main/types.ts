@@ -190,6 +190,11 @@ export interface LaunchResult {
   pid?: number;
   appName: string;
   windowTitle?: string;
+  /**
+   * True when the launched window was confirmed to be the foreground window.
+   * `ok` only proves that a matching window appeared.
+   */
+  verified?: boolean;
   error?: string;
 }
 

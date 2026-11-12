@@ -23,6 +23,9 @@ export default tseslint.config(
       'temp/**',
       'runtime/**',
       'workspace/**',
+      // Vendored agent skills (third-party, not project source).
+      '.opencode/skills/**',
+      '.opencode/vendor/**',
     ],
   },
   js.configs.recommended,

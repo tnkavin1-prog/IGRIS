@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import type {
   CommandResult,
   LaunchResult,
@@ -38,6 +38,18 @@ const APP_ALIASES: Record<string, { cmd: string; defaultArgs?: string[] }> = {
   vscode: { cmd: 'code.cmd' },
   pdf: { cmd: 'msedge.exe' },
 };
+
+/** Names that should be handed to the browser gateway rather than spawned. */
+function isBrowserName(raw: string): boolean {
+  return (
+    raw.includes('chrome') ||
+    raw.includes('edge') ||
+    raw.includes('msedge') ||
+    raw === 'browser' ||
+    raw === 'google' ||
+    raw === 'google chrome'
+  );
+}
 
 function findExecutableForApp(appName: string): { exe: string; defaultArgs: string[] } | null {
   const raw = appName.trim().toLowerCase();
@@ -234,44 +246,49 @@ export class AppManagerService {
   }
 
   /**
-   * Launch a desktop application by name or path
+   * Launch a desktop application by name or path.
+   *
+   * The resolution order is deliberate and single-sourced:
+   *   1. a memory alias that carries intent (arguments or an absolute path)
+   *   2. the browser gateway for browser names
+   *   3. the known-executable table, which yields a real absolute path
+   *   4. the static alias table
+   *   5. the raw name
+   *
+   * A default memory alias such as "chrome" holds a bare "chrome.exe" that is
+   * usually not on PATH, so it must never shadow steps 2 and 3.
    */
   public async launchApplication(appName: string, args: string[] = []): Promise<LaunchResult> {
     const raw = appName.trim().toLowerCase();
     const memAlias = this.memoryStore?.getAlias(raw);
+    const aliasCarriesIntent =
+      Boolean(memAlias) &&
+      (Boolean(memAlias?.arguments?.length) || isAbsolute(memAlias?.targetApp ?? ''));
 
-    if (!memAlias && (raw.includes('chrome') || raw === 'browser' || raw === 'google')) {
-      if (this.browserGateway) {
-        const url = args.find((a) => /^https?:\/\//i.test(a));
-        const res = url
-          ? await this.browserGateway.openTab(url)
-          : await this.browserGateway.focusOrLaunch();
-        return {
-          ok: res.success,
-          appName,
-          windowTitle: res.windowTitle ?? (res.success ? 'Google Chrome' : undefined),
-          error: res.error,
-        };
-      }
-    }
-
-    let executable: string;
-    let finalArgs: string[];
-    if (memAlias) {
-      executable = memAlias.targetApp;
-      finalArgs = memAlias.arguments ? [...memAlias.arguments, ...args] : args;
+    if (aliasCarriesIntent) {
       this.memoryStore?.recordAliasUsage(raw);
-    } else {
-      const resolved = findExecutableForApp(raw);
-      if (resolved) {
-        executable = resolved.exe;
-        finalArgs = args.length > 0 ? args : resolved.defaultArgs;
-      } else {
-        const alias = APP_ALIASES[raw];
-        executable = alias ? alias.cmd : appName;
-        finalArgs = alias?.defaultArgs ? [...alias.defaultArgs, ...args] : args;
-      }
     }
+
+    // A browser is handled by the gateway: it attaches to the running
+    // instance or launches it with a resolved path, and it never spawns a
+    // second Chrome.
+    if (!aliasCarriesIntent && this.browserGateway && isBrowserName(raw)) {
+      const url = args.find((a) => /^https?:\/\//i.test(a));
+      const res = url
+        ? await this.browserGateway.openTab(url)
+        : await this.browserGateway.focusOrLaunch();
+      return {
+        ok: res.success,
+        appName,
+        windowTitle: res.windowTitle ?? (res.success ? 'Google Chrome' : undefined),
+        verified: res.success,
+        error: res.error,
+      };
+    }
+
+    const target = this.resolveLaunchTarget(raw, args, memAlias);
+    const executable = target.executable;
+    const finalArgs = target.args;
 
     if (this.mockMode) {
       const mockPid = Math.floor(1000 + Math.random() * 9000);
@@ -283,14 +300,17 @@ export class AppManagerService {
         isVisible: true,
         isIconic: false,
       });
-      return { ok: true, appName, pid: mockPid };
+      return { ok: true, appName, pid: mockPid, verified: true };
     }
 
     // Real launch: no shell for .exe (shell swallows "not found" errors).
     const useShell = /\.(cmd|bat)$/i.test(executable);
     let spawnError: string | null = null;
+    let spawnErrorCode: string | null = null;
     let exitCode: number | null = null;
     let child: ChildProcess | null = null;
+    let started: boolean;
+
     try {
       child = spawn(executable, finalArgs, {
         detached: true,
@@ -298,22 +318,33 @@ export class AppManagerService {
         shell: useShell,
         windowsHide: false,
       });
-      child.on('error', (err) => {
-        spawnError = err.message;
+      // spawn() reports a missing executable asynchronously through the
+      // 'error' event. Reading the flag synchronously lost the real cause and
+      // turned "file not found" into a ten second "no window appeared" timeout.
+      started = await new Promise<boolean>((resolve) => {
+        const grace = setTimeout(() => resolve(true), 2000);
+        child?.on('error', (err: NodeJS.ErrnoException) => {
+          clearTimeout(grace);
+          spawnError = err.message;
+          spawnErrorCode = err.code ?? null;
+          resolve(false);
+        });
+        child?.on('exit', (code) => {
+          exitCode = code;
+        });
+        child?.unref();
       });
-      child.on('exit', (code) => {
-        exitCode = code;
-      });
-      child.unref();
     } catch (err) {
       spawnError = (err as Error).message;
+      started = false;
     }
 
     // Fallback: find ANY installed app via the Start Menu index (UWP + Win32).
-    if (spawnError && !memAlias) {
+    if (!started && spawnErrorCode === 'ENOENT' && !isAbsolute(executable)) {
       const startApp = await this.resolveStartApp(raw);
       if (startApp) {
         spawnError = null;
+        spawnErrorCode = null;
         exitCode = null;
         try {
           const shellChild = spawn('explorer.exe', [`shell:AppsFolder\\${startApp.appId}`], {
@@ -327,7 +358,11 @@ export class AppManagerService {
       }
     }
     if (spawnError) {
-      return { ok: false, appName, error: `Could not start "${appName}": ${spawnError}` };
+      const detail =
+        spawnErrorCode === 'ENOENT'
+          ? `"${executable}" was not found: it is not on PATH and not installed where it was expected.`
+          : spawnError;
+      return { ok: false, appName, error: `Could not start "${appName}": ${detail}` };
     }
 
     // VERIFY a real window appears (up to 10 s), then focus it. No fake success.
@@ -345,8 +380,15 @@ export class AppManagerService {
       const windows = await this.listRunningWindows().catch(() => [] as WindowItem[]);
       const found = this.resolveAppWindow(raw, windows) ?? this.resolveAppWindow(exeBase, windows);
       if (found) {
-        await this.focusWindow(found.hwnd).catch(() => undefined);
-        return { ok: true, appName, pid: child?.pid, windowTitle: found.title };
+        // The window exists; now confirm it actually came to the foreground.
+        const focused = await this.focusWindow(found.hwnd).catch(() => false);
+        return {
+          ok: true,
+          appName,
+          pid: child?.pid,
+          windowTitle: found.title,
+          verified: focused,
+        };
       }
     }
     return {
@@ -354,6 +396,46 @@ export class AppManagerService {
       appName,
       error: `Started "${executable}" but no matching window appeared within 10 seconds.`,
     };
+  }
+
+  /**
+   * Resolve a launch target from the known sources, in priority order.
+   *
+   * Kept separate from {@link launchApplication} so the same rules apply to
+   * every entry point (voice tool, skill, workflow step).
+   */
+  private resolveLaunchTarget(
+    raw: string,
+    args: string[],
+    memAlias: { targetApp: string; arguments?: string[] } | undefined,
+  ): { executable: string; args: string[] } {
+    if (memAlias && (memAlias.arguments?.length || isAbsolute(memAlias.targetApp))) {
+      return {
+        executable: memAlias.targetApp,
+        args: memAlias.arguments ? [...memAlias.arguments, ...args] : args,
+      };
+    }
+    const resolved = findExecutableForApp(raw);
+    if (resolved) {
+      return {
+        executable: resolved.exe,
+        args: args.length > 0 ? args : resolved.defaultArgs,
+      };
+    }
+    const alias = APP_ALIASES[raw];
+    if (alias) {
+      return {
+        executable: alias.cmd,
+        args: alias.defaultArgs ? [...alias.defaultArgs, ...args] : args,
+      };
+    }
+    if (memAlias) {
+      return {
+        executable: memAlias.targetApp,
+        args: memAlias.arguments ? [...memAlias.arguments, ...args] : args,
+      };
+    }
+    return { executable: raw, args };
   }
 
   private startAppsCache: { at: number; apps: Array<{ name: string; appId: string }> } | null =
@@ -1173,8 +1255,10 @@ export class AppManagerService {
 
   private async invokeWin32(cmd: string): Promise<boolean> {
     try {
-      await this.evalWin32(cmd);
-      return true;
+      // The helper prints the operation's real result. Treating a zero exit
+      // code as success reported "focused" for windows that were never found.
+      const output = await this.evalWin32(cmd);
+      return /(^|\W)true(\W|$)/i.test(output);
     } catch {
       return false;
     }

@@ -1,0 +1,103 @@
+# Implementation Plan & Phase Progress
+
+**Project:** Gemetron desktop assistant (`E:\Gemetron`)
+**Plan source:** [PHASE1_ARCHITECTURE_AUDIT.md](PHASE1_ARCHITECTURE_AUDIT.md)
+**Baseline tag:** `phase1-baseline` (`88fca4c`)
+**Updated:** 2026-11-12
+
+> Status is recorded against real, executed evidence. "Done" means the change is in the tree and the
+> named verification passes. Nothing here is marked done on the basis of an intention.
+
+---
+
+## Phase status
+
+| Phase | Scope                               | Status                  | Evidence                                                     |
+| ----- | ----------------------------------- | ----------------------- | ------------------------------------------------------------ |
+| 1     | Architecture audit + gap analysis   | **Done**                | `docs/PHASE1_ARCHITECTURE_AUDIT.md` (published at `dba6a5a`) |
+| 2     | Core execution foundation           | **In progress**         | F1–F3 landed; F6–F8 pending                                  |
+| 3     | Windows computer-use engine         | Pending (F4, F5, F9)    | —                                                            |
+| 4     | Browser-use engine                  | Pending (F14)           | deep-DOM + single-scroll work already in the tree            |
+| 5     | File & document engine              | Pending (F11, F12)      | —                                                            |
+| 6     | Multimodal capabilities             | Pending (F13)           | —                                                            |
+| 7     | Creative application adapters       | Pending (F9)            | Blender skill exists; adapter contract pending               |
+| 8     | Voice intelligence                  | Pending (F17)           | —                                                            |
+| 9     | Resource & security engineering     | Pending (F10, F16, F18) | —                                                            |
+| 10    | Integration & flagship benchmarking | Pending                 | benchmark plan in the audit, §7                              |
+
+---
+
+## P0 — items that unblock the acceptance criteria
+
+| ID     | Item                                                                                                                                                               | Status   | Verification                                                                                                                                                                                                                                                                       |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **F1** | One application resolver; a memory alias must not shadow the executable table or the browser gateway; the asynchronous spawn failure must be captured and reported | **Done** | `app-manager.test.ts`: "routes a browser through the gateway even when a memory alias exists", "honours a memory alias that carries intent", "reports the real cause when the executable cannot be started" (asserts `not found`, and _not_ the old "no matching window appeared") |
+| **F2** | Foreground verification propagated instead of discarded; the PowerShell fallback must not report success on a zero exit code                                       | **Done** | `LaunchResult.verified` is now set from the real focus result; `invokeWin32` parses the helper's printed result                                                                                                                                                                    |
+| **F3** | Honest action results — no tool may hard-code `success: true`                                                                                                      | **Done** | `gemini-live.test.ts`: "reports an unacknowledged keystroke instead of claiming success" (type + hotkey both assert `success:false`, `acknowledged:false` and an explanatory error)                                                                                                |
+| **F4** | Known folders + shell-association document opening                                                                                                                 | Pending  | Benchmark A                                                                                                                                                                                                                                                                        |
+| **F5** | Foreground-window observation in the agent loop                                                                                                                    | Pending  | —                                                                                                                                                                                                                                                                                  |
+| **F6** | Bounded retry + alternative strategy                                                                                                                               | Pending  | Benchmark E                                                                                                                                                                                                                                                                        |
+
+## P1 — foundation
+
+| ID  | Item                                                                                   | Status  |
+| --- | -------------------------------------------------------------------------------------- | ------- |
+| F7  | Typed error hierarchy + structured logging, no silent `catch {}`                       | Pending |
+| F8  | Task checkpointing and resume                                                          | Pending |
+| F9  | Application-adapter registry (identify/launch/find/focus/observe/verify)               | Pending |
+| F10 | Storage configuration (non-C data root, `userData`/`temp`, download path, tool caches) | Pending |
+
+## P2/P3 — capability depth and hardening
+
+| ID  | Item                                                                                 | Status  |
+| --- | ------------------------------------------------------------------------------------ | ------- |
+| F11 | PDF text extraction (`pdfjs-dist`, OCR as fallback)                                  | Pending |
+| F12 | Document generation pipelines (`minimax-pdf` / `-docx` / `-xlsx` / `pptx-generator`) | Pending |
+| F13 | Video understanding (frame sampling, scene detection, audio extraction)              | Pending |
+| F14 | Extension tool parity (4 declared tools have no handler)                             | Pending |
+| F15 | Provider-independent model interface + documented fallback                           | Pending |
+| F16 | Log rotation, quotas, dossier caps, secret hygiene                                   | Pending |
+| F17 | Voice barge-in that pauses the running task                                          | Pending |
+| F18 | Adaptive monitoring (screen stream + tab polling)                                    | Pending |
+
+---
+
+## Engineering notes
+
+### Skills in use
+
+The MiniMax skill collection was installed to `E:\Gemetron\.opencode\skills` (vendored clone in
+`.opencode/vendor/minimax-skills`, both git-ignored so third-party code never lands in the repository):
+
+| Skill                                                           | Used for                                                                                                            |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `fullstack-dev`                                                 | Phase 2 architecture: layered services, typed errors, centralised config, structured logging, test-and-verify gates |
+| `minimax-pdf`, `minimax-docx`, `minimax-xlsx`, `pptx-generator` | Phase 5 document generation (F12)                                                                                   |
+| `vision-analysis`, `minimax-multimodal-toolkit`                 | Phase 6 multimodal understanding (F13)                                                                              |
+| `frontend-dev`                                                  | reference only — the HUD design is frozen by the project constraints                                                |
+| `pr-review`                                                     | self-review rubric for each change                                                                                  |
+
+### Verification gates applied to every change
+
+1. `npm run typecheck` — five projects including the test suite.
+2. `npm run lint` — clean.
+3. `npm run format:check` — clean (Prettier, LF via `.gitattributes`).
+4. `npm test` — unit suite (597 → **601** tests).
+5. `npm run test:e2e` — end-to-end suite (**23** tests).
+
+### Defects found by the audit and fixed immediately
+
+| Defect                                                                                                     | Fix                                                                |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| A default memory alias (`chrome → chrome.exe`) made "Open Chrome" fail with a misleading 10-second timeout | F1                                                                 |
+| `spawn()`'s asynchronous `ENOENT` was read synchronously, so the real cause was lost                       | F1                                                                 |
+| The native foreground check was computed and then discarded                                                | F2                                                                 |
+| The PowerShell fallback reported success for windows that were never found                                 | F2                                                                 |
+| `computer_use_type` / `computer_use_hotkey` reported success even when the native layer refused            | F3                                                                 |
+| A unit assertion was wrong in 1 of 16 runs (it mutated a random token into itself)                         | `control-auth.test.ts` now picks a replacement that always differs |
+
+### Known flake history
+
+The unit suite occasionally failed in `control-auth.test.ts` (probability-based assertion) and,
+before the worker cap, in `control-server.test.ts` (file-descriptor exhaustion with 53 workers).
+Both are fixed: the assertion is now deterministic and the pool is capped at eight workers.

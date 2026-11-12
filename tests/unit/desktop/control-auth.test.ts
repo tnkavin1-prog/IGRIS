@@ -69,7 +69,11 @@ describe('ControlAuthService', () => {
     const auth = new ControlAuthService({ tokenPath });
     const token = auth.getToken();
     expect(auth.validate(token)).toBe(true);
-    expect(auth.validate(`${token.slice(0, -1)}0`)).toBe(false);
+    // Flip the last character to something that is definitely different:
+    // a random hex token ends in "0" one time in sixteen, which would make
+    // this assertion depend on the generated token.
+    const replacement = token.endsWith('0') ? '1' : '0';
+    expect(auth.validate(`${token.slice(0, -1)}${replacement}`)).toBe(false);
     expect(auth.validate('x'.repeat(64))).toBe(false);
     expect(auth.validate('')).toBe(false);
     expect(auth.validate(undefined)).toBe(false);

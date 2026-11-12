@@ -2047,11 +2047,25 @@ export class GeminiLiveService extends EventEmitter {
 
             case 'computer_use_type': {
               const text = String(call.args.text || '');
-              await this.nativeInput.typeText(text);
+              // Report what the native layer actually acknowledged. A queued
+              // keystroke is not proof that the text landed in the field.
+              const typed = await this.nativeInput.typeText(text);
+              let entered = true;
               if (call.args.press_enter) {
-                await this.nativeInput.sendHotkey('Enter');
+                entered = await this.nativeInput.sendHotkey('Enter');
               }
-              result = { success: true, charactersTyped: text.length };
+              result = {
+                success: typed && entered,
+                charactersTyped: typed ? text.length : 0,
+                acknowledged: typed,
+                enterAcknowledged: call.args.press_enter ? entered : undefined,
+                ...(typed && entered
+                  ? {}
+                  : {
+                      error:
+                        'The native input layer did not acknowledge the keystrokes. The text may not have reached the focused window.',
+                    }),
+              };
               break;
             }
 
@@ -2059,8 +2073,18 @@ export class GeminiLiveService extends EventEmitter {
               const rawKeys =
                 call.args.keys || call.args.key || call.args.hotkey || call.args.chord;
               const keys = Array.isArray(rawKeys) ? rawKeys.join('+') : String(rawKeys || 'Enter');
-              await this.nativeInput.sendHotkey(keys);
-              result = { success: true, keysSent: keys };
+              const sent = await this.nativeInput.sendHotkey(keys);
+              result = {
+                success: sent,
+                keysSent: keys,
+                acknowledged: sent,
+                ...(sent
+                  ? {}
+                  : {
+                      error:
+                        'The native input layer did not acknowledge the key chord. The shortcut may not have reached the focused window.',
+                    }),
+              };
               break;
             }
 
