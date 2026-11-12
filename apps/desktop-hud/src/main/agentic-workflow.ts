@@ -7,9 +7,13 @@ import type { BrowserGateway } from './browser-gateway.js';
 import type { ClipboardService } from './clipboard-manager.js';
 import type { JarvisMemoryStore } from './jarvis-memory.js';
 import { computerOperator } from './computer-operator.js';
+import { assessCommand } from './command-policy.js';
+import { join } from 'node:path';
+import { TEMP_DIR } from './runtime-paths.js';
 import type {
   AgenticTask,
   BoundingBoxTarget,
+  StepRisk,
   TaskStatus,
   WorkflowStep,
   WorkflowStepInput,
@@ -26,6 +30,13 @@ export interface WorkflowEngineDependencies {
   autoApprove?: boolean;
 }
 
+/** Risk tier of a `run_command` step, derived from the command policy. */
+function commandRisk(params: Record<string, any> | undefined): StepRisk {
+  const command = typeof params?.command === 'string' ? params.command : '';
+  if (!command.trim()) return 'caution';
+  return assessCommand(command).risk;
+}
+
 export class AgenticWorkflowEngine extends EventEmitter {
   private cdpClient: CDPClient;
   private nativeInput: NativeInputService;
@@ -37,7 +48,12 @@ export class AgenticWorkflowEngine extends EventEmitter {
 
   private currentTask: AgenticTask | null = null;
   private isExecuting = false;
-  private autoApprove = true;
+  /**
+   * Automatic approval is *off* by default. Enabling it only removes the
+   * prompt for ordinary steps; dangerous command steps still require an
+   * explicit human decision (see `riskLevel` handling in `executeLoop`).
+   */
+  private autoApprove = false;
 
   constructor(deps: WorkflowEngineDependencies) {
     super();
@@ -274,7 +290,7 @@ export class AgenticWorkflowEngine extends EventEmitter {
             skillId: 'office',
             action: 'createWordDoc',
             params: {
-              filePath: 'E:\\Gematron\\temp\\doc.docx',
+              filePath: join(TEMP_DIR, 'doc.docx'),
               title: 'Gematron Autonomous Doc',
               content: goal,
             },
@@ -297,7 +313,7 @@ export class AgenticWorkflowEngine extends EventEmitter {
             skillId: 'office',
             action: 'createExcelSheet',
             params: {
-              filePath: 'E:\\Gematron\\temp\\sheet.xlsx',
+              filePath: join(TEMP_DIR, 'sheet.xlsx'),
               headers: ['ID', 'Task', 'Date'],
               rows: [[1, goal, new Date().toISOString()]],
             },
@@ -319,7 +335,7 @@ export class AgenticWorkflowEngine extends EventEmitter {
             skillId: 'office',
             action: 'createPowerPoint',
             params: {
-              filePath: 'E:\\Gematron\\temp\\slides.pptx',
+              filePath: join(TEMP_DIR, 'slides.pptx'),
               slides: [{ title: 'Autonomous Slide', bullets: [goal] }],
             },
           },
@@ -336,8 +352,8 @@ export class AgenticWorkflowEngine extends EventEmitter {
             skillId: 'blender',
             action: 'renderScene',
             params: {
-              blendFile: 'E:\\Gematron\\temp\\scene.blend',
-              outputImg: 'E:\\Gematron\\temp\\scene.png',
+              blendFile: join(TEMP_DIR, 'scene.blend'),
+              outputImg: join(TEMP_DIR, 'scene.png'),
             },
           },
         },
@@ -426,15 +442,23 @@ export class AgenticWorkflowEngine extends EventEmitter {
   public createTask(goal: string, stepsInput?: WorkflowStepInput[]): AgenticTask {
     const rawSteps = stepsInput && stepsInput.length > 0 ? stepsInput : this.decomposeGoal(goal);
 
-    const steps: WorkflowStep[] = rawSteps.map((s, idx) => ({
-      id: s.id || `step_${Date.now()}_${idx}`,
-      order: idx + 1,
-      description: s.description,
-      actionType: s.actionType,
-      params: s.params || {},
-      status: 'pending',
-      requiresApproval: s.requiresApproval ?? s.actionType === 'run_command',
-    }));
+    const steps: WorkflowStep[] = rawSteps.map((s, idx) => {
+      const riskLevel: StepRisk | undefined =
+        s.riskLevel ?? (s.actionType === 'run_command' ? commandRisk(s.params) : undefined);
+      const runsCommand = s.actionType === 'run_command';
+      return {
+        id: s.id || `step_${Date.now()}_${idx}`,
+        order: idx + 1,
+        description: s.description,
+        actionType: s.actionType,
+        params: s.params || {},
+        status: 'pending',
+        // Commands are sensitive by nature: even a "caution" command is shown
+        // to the user unless automatic approval is explicitly enabled.
+        requiresApproval: s.requiresApproval ?? runsCommand,
+        riskLevel,
+      };
+    });
 
     const task: AgenticTask = {
       id: `task_${Date.now()}`,
@@ -584,6 +608,7 @@ export class AgenticWorkflowEngine extends EventEmitter {
     if (!step || step.status !== 'needs_approval') return false;
 
     step.requiresApproval = false;
+    step.approvedByUser = true;
     step.status = 'pending';
     this.currentTask.status = 'running';
     this.emit('task:updated', this.currentTask);
@@ -630,8 +655,32 @@ export class AgenticWorkflowEngine extends EventEmitter {
         const step = this.currentTask.steps[this.currentTask.activeStepIndex];
         if (!step) break;
 
-        // Check if approval is required
-        if (step.requiresApproval && !this.autoApprove && step.status !== 'running') {
+        // Approval enforcement. Dangerous/blocked steps *always* need a human
+        // decision; blocked steps are rejected without any execution path.
+        const risk: StepRisk = step.riskLevel ?? 'safe';
+        if (risk === 'blocked') {
+          step.status = 'failed';
+          step.completedAt = Date.now();
+          step.error =
+            'Blocked by command policy: this action can destroy data, disable security, or persist code.';
+          this.currentTask.status = 'failed';
+          this.currentTask.error = step.error;
+          this.currentTask.completedAt = Date.now();
+          this.emit('task:step-failed', {
+            task: this.currentTask,
+            step,
+            error: step.error,
+          });
+          this.emit('task:updated', this.currentTask);
+          break;
+        }
+
+        const needsHuman = risk === 'dangerous';
+        const approvalRequired =
+          step.status !== 'running' &&
+          (needsHuman ? step.approvedByUser !== true : step.requiresApproval && !this.autoApprove);
+
+        if (approvalRequired) {
           step.status = 'needs_approval';
           this.currentTask.status = 'waiting_approval';
           this.emit('task:needs-approval', { task: this.currentTask, step });
@@ -804,6 +853,20 @@ export class AgenticWorkflowEngine extends EventEmitter {
       case 'run_command': {
         const res = await this.appManager.runSystemCommand(p.command, {
           timeoutMs: p.timeoutMs,
+          // Re-assessed at execution time so a command that changes between
+          // planning and running cannot dodge the policy.
+          approved: step.approvedByUser === true,
+          audit: (event, details) => {
+            this.memoryStore?.addRecentContext({
+              category: 'workflow',
+              summary: `Command ${event}: ${String(details?.command ?? p.command)}`,
+              metadata: {
+                ...details,
+                taskId: this.currentTask?.id,
+                stepId: step.id,
+              },
+            });
+          },
         });
         if (!res.ok || res.blocked) {
           throw new Error(

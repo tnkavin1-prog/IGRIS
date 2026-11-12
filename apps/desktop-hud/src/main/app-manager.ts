@@ -13,6 +13,7 @@ import type {
 import type { JarvisMemoryStore } from './jarvis-memory.js';
 import type { BrowserGateway } from './browser-gateway.js';
 import { SCRIPTS_DIR } from './runtime-paths.js';
+import { assessCommand } from './command-policy.js';
 
 export interface AppManagerOptions {
   mockMode?: boolean;
@@ -37,17 +38,6 @@ const APP_ALIASES: Record<string, { cmd: string; defaultArgs?: string[] }> = {
   vscode: { cmd: 'code.cmd' },
   pdf: { cmd: 'msedge.exe' },
 };
-
-const BLOCKED_COMMAND_PATTERNS = [
-  /\bformat\s+[a-z]:/i,
-  /\bdiskpart\b/i,
-  /\brmdir\s+(\/[sq]\s+)+[a-z]:\\?$/i,
-  /\bdel\s+(\/[sqf]\s+)+[a-z]:\\/i,
-  /\b(stop-computer|restart-computer)\b/i,
-  /\bshutdown\s+[/-][st]/i,
-  /\bremove-item\s+.*-recurse\s+c:\\?$/i,
-  /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;/i, // fork bomb
-];
 
 function findExecutableForApp(appName: string): { exe: string; defaultArgs: string[] } | null {
   const raw = appName.trim().toLowerCase();
@@ -965,30 +955,77 @@ export class AppManagerService {
     return [];
   }
 
-  /**
-   * Run a system shell command with safety guardrails
-   */
+/**
+ * Run a system shell command with a capability/risk policy.
+ *
+ * Blocked commands never execute. Dangerous commands require an explicit
+ * `approved: true` from a human decision (workflow approval step), so the
+ * agent cannot silently escalate from a read-only query to a destructive
+ * operation even when automatic approval is enabled for ordinary steps.
+ */
   public async runSystemCommand(
     command: string,
-    options: { timeoutMs?: number; requiresApproval?: boolean } = {},
+    options: {
+      timeoutMs?: number;
+      requiresApproval?: boolean;
+      /** Set only after a human approved this specific command. */
+      approved?: boolean;
+      /** Trusted internal callers that must bypass the approval gate. */
+      allowDangerous?: boolean;
+      audit?: (event: string, details?: Record<string, unknown>) => void;
+    } = {},
   ): Promise<CommandResult> {
     const started = Date.now();
     const cmd = command.trim();
+    const assessment = assessCommand(cmd);
 
-    // 1. Safety check
-    for (const pattern of BLOCKED_COMMAND_PATTERNS) {
-      if (pattern.test(cmd)) {
-        return {
-          ok: false,
-          exitCode: -1,
-          stdout: '',
-          stderr: 'Command blocked by safety policy: destructive system operation prohibited.',
-          command: cmd,
-          durationMs: Date.now() - started,
-          blocked: true,
-          reason: 'Command matched catastrophic deletion/formatting rule',
-        };
-      }
+    // 1. Hard policy: blocked commands never run.
+    if (assessment.blocked) {
+      options.audit?.('command:blocked', {
+        command: cmd,
+        risk: assessment.risk,
+        rules: assessment.matchedRules,
+      });
+      return {
+        ok: false,
+        exitCode: -1,
+        stdout: '',
+        stderr: `Command blocked by safety policy: ${assessment.reasons.join(' ')}`,
+        command: cmd,
+        durationMs: Date.now() - started,
+        blocked: true,
+        reason: assessment.reasons.join(' '),
+      };
+    }
+
+    // 2. Dangerous commands need a human decision.
+    const needsApproval =
+      assessment.risk === 'dangerous' || options.requiresApproval === true;
+    if (needsApproval && options.approved !== true && options.allowDangerous !== true) {
+      options.audit?.('command:approval-required', {
+        command: cmd,
+        risk: assessment.risk,
+        rules: assessment.matchedRules,
+      });
+      return {
+        ok: false,
+        exitCode: -1,
+        stdout: '',
+        stderr: `Command requires explicit approval (risk: ${assessment.risk}). ${assessment.reasons.join(' ')}`,
+        command: cmd,
+        durationMs: Date.now() - started,
+        blocked: true,
+        reason: `approval-required:${assessment.risk}`,
+      };
+    }
+
+    if (assessment.risk !== 'safe') {
+      options.audit?.('command:executed', {
+        command: cmd,
+        risk: assessment.risk,
+        rules: assessment.matchedRules,
+        approved: options.approved === true || options.allowDangerous === true,
+      });
     }
 
     if (this.mockMode) {

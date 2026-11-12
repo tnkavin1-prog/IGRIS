@@ -13,6 +13,8 @@ import { openCodeSkill, OpenCodeSkill } from './skills/opencode.skill.js';
 import type { AppManagerService } from './app-manager.js';
 import type { CDPClient } from './cdp-client.js';
 import { autonomousAgent } from './autonomous-agent.js';
+import { join } from 'node:path';
+import { REPO_ROOT, TEMP_DIR } from './runtime-paths.js';
 
 export interface ComputerOperatorOptions {
   mockMode?: boolean;
@@ -124,7 +126,7 @@ export class UniversalComputerOperator {
     ) {
       targetSkill = 'office';
       targetAction = /\bread\b/i.test(normalized) ? 'readWordDoc' : 'createWordDoc';
-      if (!params.filePath) params.filePath = 'E:\\Gematron\\temp\\document.docx';
+      if (!params.filePath) params.filePath = join(TEMP_DIR, 'document.docx');
       if (!params.title) params.title = 'Gematron Generated Document';
       if (!params.content) params.content = goal;
     } else if (
@@ -135,7 +137,7 @@ export class UniversalComputerOperator {
     ) {
       targetSkill = 'office';
       targetAction = /\bread\b/i.test(normalized) ? 'readExcelSheet' : 'createExcelSheet';
-      if (!params.filePath) params.filePath = 'E:\\Gematron\\temp\\data.xlsx';
+      if (!params.filePath) params.filePath = join(TEMP_DIR, 'data.xlsx');
       if (!params.headers) params.headers = ['Item', 'Value', 'Timestamp'];
       if (!params.rows) params.rows = [['Goal', goal, Date.now()]];
     } else if (
@@ -146,7 +148,7 @@ export class UniversalComputerOperator {
     ) {
       targetSkill = 'office';
       targetAction = 'createPowerPoint';
-      if (!params.filePath) params.filePath = 'E:\\Gematron\\temp\\presentation.pptx';
+      if (!params.filePath) params.filePath = join(TEMP_DIR, 'presentation.pptx');
       if (!params.slides) params.slides = [{ title: 'Gematron Autonomous Slide', bullets: [goal] }];
     } else if (
       normalized.includes('blender') ||
@@ -204,12 +206,12 @@ export class UniversalComputerOperator {
     } else if (normalized.includes('search file') || normalized.includes('find file')) {
       targetSkill = 'windows';
       targetAction = 'searchFiles';
-      params.directory = params.directory || 'E:\\Gematron';
+      params.directory = params.directory || REPO_ROOT;
       params.query = params.query || normalized.replace(/.*(search|find)\s+files?\s+/i, '').trim();
     } else if (normalized.includes('organize') || normalized.includes('organise')) {
       targetSkill = 'windows';
       targetAction = 'organizeFiles';
-      params.sourceDir = params.sourceDir || 'E:\\Gematron\\temp';
+      params.sourceDir = params.sourceDir || TEMP_DIR;
     } else if (normalized.includes('window') || normalized.includes('active windows')) {
       targetSkill = 'windows';
       targetAction = 'listWindows';
@@ -240,7 +242,6 @@ export class UniversalComputerOperator {
     goal: string,
     options?: {
       maxIterations?: number;
-      maxStepAttempts?: number;
       stepTimeoutMs?: number;
       onObservation?: (obs: any) => void;
       onStepStart?: (step: any) => void;
@@ -260,10 +261,10 @@ export class UniversalComputerOperator {
     try {
       const session = await autonomousAgent.startSession(goal, {
         maxIterations: options?.maxIterations,
-        maxStepAttempts: options?.maxStepAttempts,
         stepTimeoutMs: options?.stepTimeoutMs,
-        autoApprove: true,
-        voiceEnabled: true,
+        // Dangerous skill actions are refused by the autonomous loop itself,
+        // so this flag cannot escalate them.
+        autoApprove: false,
         onObservation: options?.onObservation,
         onStepStart: options?.onStepStart,
         onStepComplete: options?.onStepComplete,

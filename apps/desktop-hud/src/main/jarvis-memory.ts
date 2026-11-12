@@ -6,7 +6,8 @@ import {
   renameSync,
   unlinkSync,
 } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
+import { NOTES_DIR } from './runtime-paths.js';
 import type { WorkflowStepInput } from './types.js';
 
 export interface AppAlias {
@@ -37,6 +38,7 @@ export interface UserPreferences {
   customHotkeys: Record<string, string>;
   soundEffectsEnabled?: boolean;
   soundVolume?: number;
+  wakeWordEnabled?: boolean;
 }
 
 export interface RecentContextEntry {
@@ -62,7 +64,7 @@ export const DEFAULT_JARVIS_MEMORY: JarvisMemoryData = {
   preferences: {
     theme: 'dark',
     voice: 'Kore',
-    autoApprove: true,
+    autoApprove: false,
     alwaysOnTop: true,
     defaultBrowser: 'chrome',
     favoriteApps: ['chrome', 'notepad', 'calc', 'terminal', 'explorer'],
@@ -181,7 +183,7 @@ export class JarvisMemoryStore {
   private filePath: string;
   private memoryData: JarvisMemoryData;
 
-  constructor(filePath = 'E:\\Gematron\\notes\\jarvis_memory.json') {
+  constructor(filePath = join(NOTES_DIR, 'jarvis_memory.json')) {
     this.filePath = filePath;
     this.memoryData = this.load();
   }

@@ -6,6 +6,8 @@ import { ComputerVisionService } from '../../../apps/desktop-hud/src/main/comput
 import { AppManagerService } from '../../../apps/desktop-hud/src/main/app-manager.js';
 import { ClipboardService } from '../../../apps/desktop-hud/src/main/clipboard-manager.js';
 import { computerOperator } from '../../../apps/desktop-hud/src/main/computer-operator.js';
+import { join } from 'node:path';
+import { TEMP_DIR } from '../../../apps/desktop-hud/src/main/runtime-paths.js';
 
 describe('AgenticWorkflowEngine', () => {
   let cdpClient: CDPClient;
@@ -131,6 +133,60 @@ describe('AgenticWorkflowEngine', () => {
     expect(engine.getCurrentTask()?.status).toBe('completed');
   });
 
+  it('requires human approval for dangerous commands even when auto-approve is on', async () => {
+    engine.setAutoApprove(true);
+    let approvalPayload: any = null;
+    engine.on('task:needs-approval', (data) => {
+      approvalPayload = data;
+    });
+
+    const task = engine.createTask('Destructive cleanup', [
+      {
+        description: 'Delete a temp file',
+        actionType: 'run_command',
+        params: { command: 'Remove-Item C:\\temp\\stale.txt' },
+      },
+    ]);
+
+    expect(task.steps[0]?.riskLevel).toBe('dangerous');
+    await engine.startTask(task.id);
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(approvalPayload).toBeDefined();
+    expect(engine.getCurrentTask()?.status).toBe('waiting_approval');
+
+    // Re-running the loop without approval must not execute the command.
+    const runSpy = vi.spyOn(appManager, 'runSystemCommand');
+    await engine.approveStep(task.id, task.steps[0]?.id || '');
+    await new Promise((r) => setTimeout(r, 100));
+    expect(runSpy).toHaveBeenCalledWith(
+      'Remove-Item C:\\temp\\stale.txt',
+      expect.objectContaining({ approved: true }),
+    );
+  });
+
+  it('fails a task without executing a policy-blocked command', async () => {
+    engine.setAutoApprove(true);
+    const runSpy = vi.spyOn(appManager, 'runSystemCommand');
+
+    const task = engine.createTask('Wipe the disk', [
+      {
+        description: 'Format drive C',
+        actionType: 'run_command',
+        params: { command: 'format C: /q' },
+      },
+    ]);
+
+    expect(task.steps[0]?.riskLevel).toBe('blocked');
+    await engine.startTask(task.id);
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(runSpy).not.toHaveBeenCalled();
+    const current = engine.getCurrentTask();
+    expect(current?.status).toBe('failed');
+    expect(current?.error).toContain('Blocked by command policy');
+  });
+
   it('cancels task and marks status', () => {
     const task = engine.createTask('Long running task');
     const cancelled = engine.cancelTask(task.id);
@@ -254,7 +310,7 @@ describe('AgenticWorkflowEngine', () => {
         action: 'createWordDoc',
       });
       expect(steps[0]?.params.params).toMatchObject({
-        filePath: 'E:\\Gematron\\temp\\doc.docx',
+        filePath: join(TEMP_DIR, 'doc.docx'),
         title: 'Gematron Autonomous Doc',
         content: goal,
       });
@@ -272,7 +328,7 @@ describe('AgenticWorkflowEngine', () => {
         action: 'createExcelSheet',
       });
       expect(steps[0]?.params.params).toMatchObject({
-        filePath: 'E:\\Gematron\\temp\\sheet.xlsx',
+        filePath: join(TEMP_DIR, 'sheet.xlsx'),
         headers: ['ID', 'Task', 'Date'],
       });
       const rows = steps[0]?.params.params?.rows as unknown[][];
@@ -289,8 +345,8 @@ describe('AgenticWorkflowEngine', () => {
         skillId: 'blender',
         action: 'renderScene',
         params: {
-          blendFile: 'E:\\Gematron\\temp\\scene.blend',
-          outputImg: 'E:\\Gematron\\temp\\scene.png',
+          blendFile: join(TEMP_DIR, 'scene.blend'),
+          outputImg: join(TEMP_DIR, 'scene.png'),
         },
       });
     });
@@ -324,7 +380,7 @@ describe('AgenticWorkflowEngine', () => {
     it('executes an execute_skill step in mock mode', async () => {
       const skillSpy = vi.spyOn(computerOperator, 'executeSkillAction').mockResolvedValue({
         success: true,
-        data: { created: true, filePath: 'E:\\Gematron\\temp\\doc.docx' },
+        data: { created: true, filePath: join(TEMP_DIR, 'doc.docx') },
       });
 
       engine.setAutoApprove(true);
@@ -336,7 +392,7 @@ describe('AgenticWorkflowEngine', () => {
             skillId: 'office',
             action: 'createWordDoc',
             params: {
-              filePath: 'E:\\Gematron\\temp\\doc.docx',
+              filePath: join(TEMP_DIR, 'doc.docx'),
               title: 'Gematron Autonomous Doc',
               content: 'Autonomous skill execution',
             },
@@ -353,7 +409,7 @@ describe('AgenticWorkflowEngine', () => {
       expect(skillSpy).toHaveBeenCalledWith(
         'office',
         'createWordDoc',
-        expect.objectContaining({ filePath: 'E:\\Gematron\\temp\\doc.docx' }),
+        expect.objectContaining({ filePath: join(TEMP_DIR, 'doc.docx') }),
       );
     });
 

@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { existsSync, unlinkSync, mkdirSync, writeFileSync } from 'node:fs';
+import { describe, it, expect, afterAll, afterEach } from 'vitest';
+import { existsSync, unlinkSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   JarvisMemoryStore,
@@ -7,15 +8,10 @@ import {
 } from '../../../apps/desktop-hud/src/main/jarvis-memory.js';
 
 describe('JarvisMemoryStore', () => {
-  // Use E:\Gematron\notes directory or a test notes subfolder to guarantee work is on E:
-  const testDir = 'E:\\Gematron\\notes\\test_memory';
-  const testFile = join(testDir, `test_jarvis_memory_${Date.now()}.json`);
+  const testDir = mkdtempSync(join(tmpdir(), 'gemetron-memory-test-'));
+  const testFile = join(testDir, 'memory.json');
 
-  beforeEach(() => {
-    if (!existsSync(testDir)) {
-      mkdirSync(testDir, { recursive: true });
-    }
-  });
+  afterAll(() => rmSync(testDir, { recursive: true, force: true }));
 
   afterEach(() => {
     if (existsSync(testFile)) {
@@ -32,7 +28,7 @@ describe('JarvisMemoryStore', () => {
     const prefs = memory.getPreferences();
     expect(prefs.theme).toBe('dark');
     expect(prefs.voice).toBe('Kore');
-    expect(prefs.autoApprove).toBe(true);
+    expect(prefs.autoApprove).toBe(false);
     expect(prefs.alwaysOnTop).toBe(true);
     expect(prefs.defaultBrowser).toBe('chrome');
 
@@ -177,7 +173,7 @@ describe('JarvisMemoryStore', () => {
 
     const prompt = memory.buildSystemContextPrompt();
     expect(prompt).toContain('[JARVIS PERSISTENT MEMORY CONTEXT]');
-    expect(prompt).toContain('Auto-Approve: true');
+    expect(prompt).toContain('Auto-Approve: false');
     expect(prompt).toContain('notepad');
     expect(prompt).toContain('Launched Notepad and verified text output');
   });
