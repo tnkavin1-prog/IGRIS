@@ -1,6 +1,41 @@
 # Installation
 
-This guide takes you from a clean checkout to a working voice session.
+This guide covers the Windows desktop HUD and the separate Chrome extension. Hardware microphone/playback, installer installation, and hosted updates still require supervised verification.
+
+## Desktop HUD
+
+From the checkout root:
+
+```powershell
+npm install
+powershell -ExecutionPolicy Bypass -File scripts/setup-windows.ps1
+npm run build:desktop
+npm run desktop
+```
+
+The desktop reads `GEMINI_API_KEY` from `apps/local-bridge/.env` or the process environment; it does not require the token bridge to run. Disable automatic approval in settings and use non-sensitive fixtures: the desktop control API is currently unauthenticated and shell restrictions are limited.
+
+### Installed build
+
+```powershell
+npm run dist:desktop
+```
+
+Requires Windows and .NET Framework 4.x. Output is `release/desktop/Gemetron-Setup-1.0.0-x64.exe`, currently unsigned. Packaging compiles native helpers from source and excludes credentials/runtime notes. A valid signing certificate can be supplied with `CSC_LINK` and `CSC_KEY_PASSWORD`; never commit these secrets.
+
+Installed state defaults to `%LOCALAPPDATA%\Gemetron`. Create a private `.env` there containing `GEMINI_API_KEY=your-key`, or supply the process environment variable. `GEMATRON_DATA_DIR` overrides the data directory. Electron UI state is stored under its `electron` subdirectory. Uninstall deliberately retains app data, including credentials and notes; remove those manually when no longer needed.
+
+Updates are off unless the installed app is launched with `GEMATRON_CHECK_UPDATES=true`. Download and restart/install each require confirmation. The configured GitHub feed's release availability/access is unverified; packaging does not publish.
+
+### Wake word and browser control
+
+Enable “Hey Jarvis” in settings only if idle microphone listening is wanted. Install an English Windows speech-recognition language pack and allow microphone access for desktop applications. Recognition and OCR run locally; Live audio and vision are sent to Google. The wake helper pauses before foreground capture. Physical-microphone handoff remains untested.
+
+Desktop Chrome control uses its own debugging profile; it does not attach automatically to all normal Chrome windows or inherit their signed-in profiles. Office/creative/coding skills also require their advertised external applications/services.
+
+The unsigned installer build and packaged-archive bootstrap smoke passed, but direct executable launch, installation/uninstallation, signing, and real update delivery have not been tested. See [implementation status](IMPLEMENTATION_STATUS.md).
+
+## Chrome extension setup
 
 ---
 
@@ -25,13 +60,13 @@ npm --version
 
 ## 2. Install dependencies
 
-From the repository root (`E:\Gemetron`):
+From the repository root (the checkout can live on any drive):
 
 ```powershell
 npm install
 ```
 
-This installs three workspaces: `packages/shared`, `apps/chrome-extension`, `apps/local-bridge`.
+This installs four workspaces: `packages/shared`, `apps/chrome-extension`, `apps/local-bridge`, and `apps/desktop-hud`.
 
 ---
 
@@ -68,7 +103,7 @@ powershell -ExecutionPolicy Bypass -File scripts/setup-windows.ps1 -Force
 
 > **Why ASCII-only?** Windows PowerShell 5.1 parses files without a BOM as ANSI. Non-ASCII characters in the script would corrupt. The script is intentionally ASCII-only, and writes `.env` with an explicit UTF-8 no-BOM encoder.
 
-### macOS / Linux (manual)
+### Manual configuration (Windows only; other platforms unsupported)
 
 ```bash
 cp apps/local-bridge/.env.example apps/local-bridge/.env
@@ -165,7 +200,7 @@ Expected: `{"ok":true,"service":"Gemini Browser Live local bridge","version":"1.
 1. Open `chrome://extensions`.
 2. Turn on **Developer mode** (top right).
 3. Click **Load unpacked**.
-4. Select `E:\Gemetron\release\chrome-extension`.
+4. Select the checkout's `release/chrome-extension` folder.
 5. Confirm the extension card shows ID `hhbdkheccnmpbdadhhppbemcjkaimlob`.
 6. Pin the extension if you want one-click access.
 
@@ -175,7 +210,7 @@ Do not load the repository root — Chrome needs `manifest.json` at the folder r
 
 ## 7. Pair the extension
 
-1. Click the extension icon (or press `Alt+Shift+O`). The floating overlay appears on the current tab; on `chrome://` and other protected pages the side panel opens instead.
+1. Click the extension icon to open the side panel. Overlay commands operate on scriptable tabs; protected pages use the side panel.
 2. Open **Settings → Connection**.
 3. Confirm **Bridge URL** is `http://127.0.0.1:47821` (or your custom port).
 4. Paste the gate secret printed by the setup script.
@@ -355,8 +390,8 @@ The ID is derived from the manifest `key`. If you edit or remove `key`, the ID c
 
 - [ ] `npm run typecheck` passes
 - [ ] `npm run lint` passes
-- [ ] `npm test` passes (156 tests)
-- [ ] `npm run test:e2e` passes (5 tests)
+- [ ] `npm test` passes
+- [ ] `npm run test:e2e` passes
 - [ ] `npm run build` produces all artifacts
 - [ ] Bridge starts and `/api/health` returns `ok: true`
 - [ ] Extension loads with the expected ID

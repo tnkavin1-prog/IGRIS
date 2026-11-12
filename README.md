@@ -1,274 +1,95 @@
-# Gemini Browser Live
+# Gemetron
 
-**Talk to your browser.** A real-time Gemini Live voice agent that floats over the page as an orb, sees what you see, and operates Chrome through 52 typed tools — with a code-enforced approval gate for anything consequential.
+A Windows voice assistant with two separate surfaces: an Electron desktop HUD with native computer control, and a Chrome extension with its own browser agent and local token bridge.
 
-![Gemini Browser Live panel](docs/assets/panel.png)
+**The desktop is not hardened for unattended sensitive use.** Its loopback control API lacks authentication, shell execution has limited restrictions, and automatic approval defaults to enabled. Extension safeguards do not automatically apply to the desktop.
 
-> Screenshot captured from the automated Chrome E2E run. The bridge is intentionally offline in that run, so the header shows **Bridge offline**.
+## Desktop HUD
 
-The default surface is a **floating overlay**: press `Alt+Shift+S` and a pill-shaped assistant is injected into the current tab, over the page, with no side panel and no separate app window. Collapse it to a 64×64 orb when it is in the way. On pages where Chrome forbids injection (`chrome://`, the Web Store, `devtools:`), the same UI opens in the side panel instead.
+- Floating bar, orb, full voice view, advanced console, tray integration, and emergency-stop shortcuts.
+- Gemini Live: PCM16 mono input at 16 kHz, output at 24 kHz, AudioWorklet capture, and playback interruption.
+- Main-process API key sent through the `x-goog-api-key` WebSocket header, not the URL. Local credential storage is not an encrypted vault.
+- Native mouse, keyboard, window management, clipboard, and UI Automation helpers.
+- Offline Windows OCR with word/line rectangles. Capture currently targets the primary display; confidence is heuristic.
+- Separate-profile Chrome CDP control, visible text targeting, React-compatible form updates, and file uploads. Frame/shadow-DOM parity remains incomplete.
+- A real vision planner observes a screenshot, proposes one action, executes once, captures again, and independently verifies. Iteration limits, cancellation, and repeated-failure stopping are enforced.
+- Application skills advertised according to availability; office, creative, and coding integrations require external applications/services.
+- Opt-in local “Hey Jarvis” detection while idle. Wake detection and OCR run locally; foreground Live audio and vision go to Google.
+- Metadata-only, SHA-256 hash-chained audit records continue across restarts. This is tamper evidence, not immutable or authenticated storage against a privileged attacker.
 
----
+### Desktop quick start
 
-## What it is
-
-Gemini Browser Live is a Chrome Manifest V3 extension plus a small loopback bridge.
-
-- **You speak.** The microphone is captured at 16 kHz, streamed as raw PCM over a Gemini Live WebSocket.
-- **Gemini answers in native audio** at 24 kHz, with barge-in that flushes queued playback immediately.
-- **The agent acts** through a typed tool catalog: read the page, find elements, click, type, navigate, extract tables, compare page states, download a document it has verified, and more.
-- **Nothing consequential happens silently.** Spending money, submitting data, downloading files, closing tabs, and signing in always require an explicit click in the approval sheet.
-- **The model is given evidence, not assumptions.** Every action returns evidence; mutating tools are re-observed and verified before the model is told they worked.
-
-The permanent Gemini API key never enters the extension. Chrome only ever holds a short-lived, single-use ephemeral token minted by the local bridge.
-
----
-
-## Capabilities
-
-| Area                        | What is implemented                                                                                                                                                                                       |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Voice                       | 16 kHz PCM capture, 24 kHz PCM playback, AudioWorklet ring buffer, instant barge-in, mute, output volume, local VAD silence trimming                                                                      |
-| Session                     | Ephemeral token minting, proactive rotation ~60 s before expiry, reconnect with `sessionResumption` handle, exponential backoff, clean cancellation                                                       |
-| Browser control             | 52 tools across tabs, navigation, semantic DOM reading, interaction, forms, screenshots, vision-assisted clicking, page comparison, bookmarks, history, downloads                                         |
-| Grounding                   | Accessibility/role-aware element registry with stable handles, fingerprints, bounding boxes, visible-text snapshots, page-state hashing                                                                   |
-| Safety                      | Hard blocks on dangerous URL schemes and `chrome://` surfaces, risk classification, approval sheet, 120 s approval timeout, per-tool timeouts                                                             |
-| Verification                | Post-action observation, navigation settling, download completion checks, "changed" evidence returned to the model                                                                                        |
-| Prompt-injection resistance | Page text is framed as untrusted data, system instruction forbids following page instructions, approval consent cannot be granted by page content                                                         |
-| UI                          | Floating orb overlay injected into the page (collapse to orb, drag, close), with the side panel as fallback on restricted pages; onboarding, live card, transcript, composer, settings, toasts, approvals |
-| Access                      | Optional `downloads` / `bookmarks` / `history` permissions requested at the point of use, with runtime checks                                                                                             |
-| Privacy                     | Transcript retention is opt-in (session-only by default), URL query secrets stripped before reaching the model, no telemetry                                                                              |
-
----
-
-## Architecture
-
-```
-┌────────────────────────────── Chrome ──────────────────────────────┐
-│                                                                    │
-│  Overlay iframe (React) ── injected by a content script            │
-│   ├── controller.ts ── owns every side effect                      │
-│   ├── LiveSessionManager ── token → connect → setup → reconnect     │
-│   ├── AgentOrchestrator ── validate → approve → execute → verify    │
-│   └── ToolExecutor ── 52 browser capabilities                      │
-│         │ chrome.scripting / chrome.tabs / chrome.downloads        │
-│         ▼                                                          │
-│  Content script (on demand) ── DOM registry, snapshots, actions     │
-│                                                                    │
-│  Background service worker ── commands, overlay injection, panel    │
-│                                                                    │
-│  Side panel (React) ── same app, used where injection is blocked    │
-└───────────────┬────────────────────────────────────────────────────┘
-                │ HTTPS (ephemeral token + gate secret)
-                ▼
-┌──────────────────────── Local bridge (Node) ───────────────────────┐
-│  POST /api/token   ── validates gate secret + extension origin     │
-│  GET  /api/health  ── liveness without secrets                     │
-│  GET  /api/config  ── public limits, never the API key             │
-│  Holds GEMINI_API_KEY in process memory only                       │
-└───────────────┬────────────────────────────────────────────────────┘
-                │ WSS + ephemeral access_token
-                ▼
-     Gemini Live API (gemini-3.8-live)
-```
-
-Audio never passes through the bridge. The bridge only mints tokens and reports configuration; the overlay connects to Google directly. Only one surface can hold the microphone at a time: a `chrome.storage.session` lock with a 5 s heartbeat and a 15 s expiry makes a second surface report "already running in another window" instead of capturing twice.
-
-More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
----
-
-## Requirements
-
-| Requirement       | Version                                   |
-| ----------------- | ----------------------------------------- |
-| Chrome / Chromium | 116 or newer (side panel API)             |
-| Node.js           | 20.19 or newer (24.x tested)              |
-| npm               | 10 or newer                               |
-| Gemini API key    | A key with Live API access                |
-| OS                | Windows 10/11 (the only supported target) |
-
-A microphone and headphones are recommended. Headphones prevent the model from hearing its own voice.
-
----
-
-## Quick start (Windows)
+Run from the checkout root; no fixed drive letter is required.
 
 ```powershell
-# 1. Install dependencies
 npm install
-
-# 2. Create the bridge configuration (prompts for the API key without echoing it)
 powershell -ExecutionPolicy Bypass -File scripts/setup-windows.ps1
+npm run build:desktop
+npm run desktop
+```
 
-# 3. Build the extension and bridge
+The setup script writes `apps/local-bridge/.env`. The desktop reads its `GEMINI_API_KEY` directly and does not need the bridge for Live authentication. The extension does need the bridge.
+
+Test on non-sensitive material, disable automatic approval in settings, and keep a person present for native actions.
+
+| Shortcut                       | Desktop action             |
+| ------------------------------ | -------------------------- |
+| `Ctrl+Alt+Space`               | Summon/toggle HUD          |
+| `Ctrl+Alt+K`                   | Emergency stop             |
+| `Escape` three times           | HUD-focused emergency stop |
+| `Escape` once in compact modes | Stop active voice session  |
+
+Cancellation aborts pending model work and waits and releases inputs. It cannot undo completed actions or guarantee interruption midway through every native operation.
+
+### Runtime data and models
+
+Development state lives under the checkout. Installed builds use `%LOCALAPPDATA%\Gemetron`; `GEMATRON_DATA_DIR` overrides writable state. Installed credentials come from that directory's `.env` or the process's `GEMINI_API_KEY`; Electron UI state lives in its `electron` subdirectory. Uninstall preserves app data.
+
+Do not commit credentials, runtime notes, logs, downloads, or Chrome profiles. The planner defaults to `gemini-2.5-flash`, overridable with `GEMINI_AGENT_MODEL`. Its screenshot and verification calls incur API usage and can disclose visible content to Google.
+
+### Installer and updates
+
+```powershell
+npm run dist:desktop
+```
+
+Produces `release/desktop/Gemetron-Setup-1.0.0-x64.exe`, its blockmap, and `latest.yml`. Requires Windows, .NET Framework 4.x, and the installed Electron distribution. Native helpers compile freshly from source; runtime notes and secrets are excluded.
+
+The current installer is **unsigned**. Signing needs a certificate via `CSC_LINK` and, when needed, `CSC_KEY_PASSWORD`. Keep certificates/passwords outside version control. Windows may display an untrusted-publisher warning.
+
+Updates default to off. Installed builds check only with `GEMATRON_CHECK_UPDATES=true`; download and restart/install each require confirmation. The feed targets configured GitHub repository `tnkavin1-prog/IGRIS`, but hosted releases/access are unverified. Packaging uses `publish: never`; nothing is uploaded.
+
+## Chrome extension
+
+The MV3 extension has a separate 52-tool engine, semantic DOM grounding, approval sheets, and an ephemeral-token Live session manager with reconnect/resumption. Its permanent key stays in the local bridge; Chrome receives short-lived tokens.
+
+```powershell
 npm run build
-
-# 4. Start the bridge and leave the window open
 npm run bridge
 ```
 
-Then:
+Load `release/chrome-extension` using Chrome's **Load unpacked**, pair it with the setup script's gate secret, and allow microphone access when starting. The action icon opens the side panel; overlay commands operate on scriptable pages. Protected Chrome pages cannot be injected.
 
-1. Open `chrome://extensions`.
-2. Enable **Developer mode**.
-3. Choose **Load unpacked** and select `release/chrome-extension`.
-4. Click the extension icon (or press `Alt+Shift+S`) to drop the floating overlay onto the current tab.
-5. Click **Connect** on the pairing banner (or open **Settings → Connection**), paste the gate secret printed by the setup script, press **Test connection**, then **Save settings**.
-6. Press **Start live** and allow microphone access.
-
-The setup script derives the extension ID from the manifest `key`, generates a 43-character gate secret, writes `apps/local-bridge/.env` as UTF-8 without a BOM, and best-effort restricts the file ACL to your user.
-
-### macOS / Linux
-
-Not supported. This project targets Windows 10/11 only: the setup script, ACL hardening, and process handling are Windows-specific, and no other platform has been tested. The Node bridge would likely run, but it is untested and unsupported.
-
-The manifest ships a stable `key`, so the extension ID is `hhbdkheccnmpbdadhhppbemcjkaimlob` when loaded unpacked from this manifest. If you change the manifest, update the allowlist.
-
-Full instructions and troubleshooting: [docs/INSTALLATION.md](docs/INSTALLATION.md).
-
----
-
-## Using it
-
-Try:
-
-- “What does this page say? Summarise the main points.”
-- “Find the pricing table and read it out.”
-- “Open the docs in a new tab and compare the two versions.”
-- “Fill in the search box with ‘quarterly report’ and submit it.” _(approval required)_
-- “Download the official PDF from this page.” _(approval + verification)_
-- “Which tabs do I have open? Close the ones about the old project.” _(approval required)_
-
-### Keyboard shortcuts
-
-| Shortcut      | Action                                    |
-| ------------- | ----------------------------------------- |
-| `Alt+Shift+S` | Show the overlay and start a live session |
-| `Alt+Shift+X` | End the session                           |
-| `Alt+Shift+M` | Mute / unmute the microphone              |
-| `Alt+Shift+O` | Open settings                             |
-
-When the overlay is collapsed, click the orb to expand it. An approval always expands a collapsed orb so a pending action cannot time out unseen.
-
-### Approval gates
-
-These actions always ask, even when _Confirm risky actions_ is turned off:
-
-- Spending money, checkout, transfers, purchases
-- Submitting forms, sending messages, posting, publishing
-- Deleting, deactivating, unsubscribing
-- Signing in / registering / accepting terms
-- Downloads and installs
-- Closing tabs
-- Any coordinate-based visual click
-
-The approval sheet shows the exact tool, the target, and a human-readable summary. Page content can influence _what_ the agent proposes; it can never grant consent. Approvals expire after 120 seconds.
-
----
-
-## Security at a glance
-
-| Control           | Implementation                                                                                  |
-| ----------------- | ----------------------------------------------------------------------------------------------- |
-| API key isolation | Key lives only in the bridge process; never sent to Chrome, never logged                        |
-| Ephemeral tokens  | Single-use, ~30 min TTL, constrained to one model                                               |
-| Gate secret       | 32+ random characters, pasted once, stored in `chrome.storage.local`, compared in constant time |
-| Origin allowlist  | Bridge validates `Origin` against `chrome-extension://<id>` and an explicit extra-origin list   |
-| Host allowlist    | Requests must target loopback (`127.0.0.1` / `localhost`)                                       |
-| Rate limiting     | Sliding-window limiter on token minting                                                         |
-| Body limits       | 8 KB request cap, 25 s request timeout                                                          |
-| CSP               | Extension pages only load `self`, Google, and loopback bridge origins                           |
-| Dangerous schemes | `javascript:`, `data:`, `file:`, `chrome:`, `blob:` and friends are hard-blocked                |
-| Prompt injection  | Page text framed as data; system instruction forbids obeying it; consent is code-enforced       |
-| Secret leakage    | URL userinfo and sensitive query parameters stripped from tool output                           |
-
-Read the full threat model: [docs/SECURITY.md](docs/SECURITY.md).
-
----
-
-## Repository layout
-
-```
-apps/
-  chrome-extension/     Manifest V3 extension
-    overlay.html        Floating overlay page (chrome-extension:// iframe)
-    src/
-      overlay/          Overlay host content script, bridge, orb, window chrome
-      sidepanel/        React UI, controller, settings, approvals
-      live/             Live client, setup, session manager, bridge client
-      agent/            Orchestrator: approval, verification, cancellation
-      tools/            52-tool executor, page bridge, snapshots
-      content/          Content script, DOM registry, reader, interactions
-      audio/            Capture, playback, resampler, AudioWorklets
-  local-bridge/         Dependency-light Node token broker
-packages/
-  shared/               Tool catalog, schemas, safety policy, protocol types
-scripts/                Build, release, setup, probes, smoke test, icons, CI pre-flight
-tests/
-  unit/                 217 Vitest tests
-  e2e/                  23 Playwright tests against real Chrome
-  soak/                 Long-run stability test with heap sampling
-.github/
-  workflows/ci.yml      Checks, browser E2E, and release artifact jobs
-docs/                   Architecture, security, permissions, research, evidence
-release/                Built extension + deterministic ZIP (gitignored)
-```
-
----
+The bridge is loopback-only, single-user infrastructure, not a public service. See [installation](docs/INSTALLATION.md), [extension architecture](docs/ARCHITECTURE.md), [extension security](docs/SECURITY.md), and [tool reference](docs/TOOL_REFERENCE.md). Prompt framing reduces injection risk; it does not prove immunity.
 
 ## Commands
 
-| Command                   | Purpose                                                                |
-| ------------------------- | ---------------------------------------------------------------------- |
-| `npm run build`           | Production build of extension + bridge                                 |
-| `npm run build:extension` | Extension only                                                         |
-| `npm run bridge`          | Start the built bridge                                                 |
-| `npm run dev:bridge`      | Start the bridge with watch mode                                       |
-| `npm test`                | Run 217 unit tests                                                     |
-| `npm run test:e2e`        | Run 23 Playwright tests in Chrome                                      |
-| `npm run test:all`        | Typecheck + lint + unit + E2E                                          |
-| `npm run typecheck`       | TypeScript across all workspaces                                       |
-| `npm run lint`            | ESLint 10 flat config                                                  |
-| `npm run format`          | Prettier write                                                         |
-| `npm run check:ci`        | Validate `.github/workflows/ci.yml` against the package scripts        |
-| `npm run release`         | Build, validate manifest references, write deterministic ZIP + SHA-256 |
-| `npm run docs:api`        | Generate TypeDoc API reference into `docs/api/`                        |
-| `npm run test:soak`       | 5-round stability smoke; `SOAK_ROUNDS=N` scales to a multi-hour soak   |
-| `npm run smoke:live`      | Real Live API round trip through the built bridge                      |
+| Command                 | Purpose                                                   |
+| ----------------------- | --------------------------------------------------------- |
+| `npm run typecheck`     | Check all four workspaces                                 |
+| `npm run lint`          | ESLint                                                    |
+| `npm test`              | Unit tests                                                |
+| `npm run test:e2e`      | Chrome extension browser tests                            |
+| `npm run build`         | Extension, bridge, and desktop bundles                    |
+| `npm run build:desktop` | Desktop bundle only                                       |
+| `npm run dist:desktop`  | Local NSIS x64 installer; no publishing                   |
+| `npm run release`       | Extension ZIP and checksum                                |
+| `npm run smoke:live`    | Real extension/bridge Live round trip; consumes API quota |
 
----
+## Verification and remaining work
 
-## Evidence and status
+See [current implementation status](docs/IMPLEMENTATION_STATUS.md) and [desktop walkthrough](docs/JARVIS_SYSTEM_WALKTHROUGH.md). Older [extension test evidence](docs/TEST_REPORT.md) is historical, not a desktop certification.
 
-- [docs/TEST_REPORT.md](docs/TEST_REPORT.md) — commands, dates, results, and what is _not_ covered.
-- [.github/workflows/ci.yml](.github/workflows/ci.yml) — typecheck/lint/format/unit, headed-Chromium E2E under Xvfb, and release artifact jobs. Committed but not yet executed on GitHub (no remote configured); `npm run check:ci` validates its script references locally.
-- [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) - requirement-by-requirement PASS / PARTIAL / NOT TESTED matrix.
-- [docs/SCREEN_READER_CHECKLIST.md](docs/SCREEN_READER_CHECKLIST.md) — 25-item NVDA pass, plus the exported accessibility tree in `docs/evidence/ax-tree.json`.
-- [CHANGELOG.md](CHANGELOG.md) - development cycle history.
-- [docs/TECHNICAL_RESEARCH.md](docs/TECHNICAL_RESEARCH.md) — Live API protocol findings, including the dead ends.
-- [docs/PERMISSIONS.md](docs/PERMISSIONS.md) — every Chrome permission and why it exists.
+Executed desktop probes cover header-authenticated Live setup, oscillator-fed worklet throughput, local OCR, a read-only real vision-planner/verifier call, isolated Chrome forms/uploads, synthesized-speech wake recognition, settings toggles, and packaged-archive startup with native cursor reads and all HUD modes.
 
-### Known limitations
-
-- Automated E2E does not exercise a real microphone or a real Google session; that path is covered by unit tests, a protocol smoke test, and manual use.
-- The overlay cannot be injected into `chrome://`, the Chrome Web Store, `devtools:`, `view-source:`, or other protected pages. The side panel opens instead.
-- Only one surface can run the audio engine at a time; starting a second one shows "already running in another window".
-- `gemini-3.8-live-extended-thinking` cannot call tools in the current API version, so browser control is disabled in that mode.
-- The bridge is a local development component, not a multi-user server. Do not expose it to a network.
-
----
-
-## Documentation index
-
-| Document                                                           | Contents                                                         |
-| ------------------------------------------------------------------ | ---------------------------------------------------------------- |
-| [docs/INSTALLATION.md](docs/INSTALLATION.md)                       | Setup, loading, pairing, troubleshooting                         |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)                       | Components, data flow, lifecycle, design decisions               |
-| [docs/SECURITY.md](docs/SECURITY.md)                               | Threat model, secret handling, approval model, injection defence |
-| [docs/PERMISSIONS.md](docs/PERMISSIONS.md)                         | Chrome permission rationale and user impact                      |
-| [docs/TOOL_REFERENCE.md](docs/TOOL_REFERENCE.md)                   | All 52 tools, risk level, and evidence returned                  |
-| [docs/TECHNICAL_RESEARCH.md](docs/TECHNICAL_RESEARCH.md)           | Protocol probes, model capabilities, rejected approaches         |
-| [docs/TEST_REPORT.md](docs/TEST_REPORT.md)                         | Test evidence and coverage gaps                                  |
-| [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md)     | Acceptance criteria matrix                                       |
-| [docs/SCREEN_READER_CHECKLIST.md](docs/SCREEN_READER_CHECKLIST.md) | Manual NVDA verification checklist                               |
+Still unverified: physical-microphone wake/Live handoff, acoustic playback, complete real-model desktop action workflows, direct installed-executable launch, install/uninstall, signing, and hosted updates. Desktop reconnect/resumption/compression, approval/auth hardening, direct Live coordinate scaling, and full CDP frame/shadow/scroll handling remain backlog items.

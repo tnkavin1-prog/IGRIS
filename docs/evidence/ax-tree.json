@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T09:09:12.179Z",
+  "generatedAt": "2026-11-12T05:20:02.159Z",
   "surfaces": {
     "live panel": [
       {
@@ -69,6 +69,13 @@
         "role": "button",
         "name": "Bridge online",
         "description": "Check the loopback token bridge",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Float as in-page overlay",
+        "description": "Float as in-page overlay",
         "disabled": false,
         "focused": false
       },
@@ -363,7 +370,7 @@
       },
       {
         "role": "InlineTextBox",
-        "name": "Browser L",
+        "name": "Bro",
         "description": "",
         "disabled": false,
         "focused": false
@@ -377,7 +384,14 @@
       },
       {
         "role": "InlineTextBox",
-        "name": "VOICE · VISION · ",
+        "name": "VOICE · ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "VISION · ",
         "description": "",
         "disabled": false,
         "focused": false
@@ -904,6 +918,13 @@
       },
       {
         "role": "button",
+        "name": "Float as in-page overlay",
+        "description": "Float as in-page overlay",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
         "name": "Open settings",
         "description": "Open settings",
         "disabled": false,
@@ -1285,7 +1306,7 @@
       },
       {
         "role": "InlineTextBox",
-        "name": "Browser L",
+        "name": "Bro",
         "description": "",
         "disabled": false,
         "focused": false
@@ -1299,7 +1320,14 @@
       },
       {
         "role": "InlineTextBox",
-        "name": "VOICE · VISION · ",
+        "name": "VOICE · ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "VISION · ",
         "description": "",
         "disabled": false,
         "focused": false
@@ -1608,7 +1636,7 @@
       },
       {
         "role": "StaticText",
-        "name": "Gemini Browser Live token bridge",
+        "name": "Gemini Browser Live local bridge",
         "description": "",
         "disabled": false,
         "focused": false
@@ -1616,6 +1644,13 @@
       {
         "role": "StaticText",
         "name": " v",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "1.0.0",
         "description": "",
         "disabled": false,
         "focused": false
@@ -2002,7 +2037,7 @@
       },
       {
         "role": "InlineTextBox",
-        "name": "Gemini Browser Live token bridge",
+        "name": "Gemini Browser Live local bridge",
         "description": "",
         "disabled": false,
         "focused": false
@@ -2010,6 +2045,13 @@
       {
         "role": "InlineTextBox",
         "name": " v",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "1.0.0",
         "description": "",
         "disabled": false,
         "focused": false
