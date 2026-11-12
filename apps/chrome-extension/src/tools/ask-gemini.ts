@@ -212,10 +212,23 @@ export async function sendSummonRequest(
 ): Promise<boolean> {
   try {
     const targetUrl = endpoint || CONTROL_SERVER_SUMMON_URL;
+    // Defense in depth: attach the persistent control token when the user
+    // stored it via the extension options. The chrome-extension:// origin
+    // alone already passes the control API's first-party allowlist.
+    let controlToken: string | undefined;
+    try {
+      const stored = await chrome.storage.local.get(['gematronControlToken']);
+      if (typeof stored?.gematronControlToken === 'string' && stored.gematronControlToken) {
+        controlToken = stored.gematronControlToken;
+      }
+    } catch {
+      /* storage unavailable — proceed with origin-based identity */
+    }
     const res = await fetch(targetUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(controlToken ? { 'X-Gematron-Control-Token': controlToken } : {}),
       },
       body: JSON.stringify({ prompt: prompt ?? '' }),
       signal: AbortSignal.timeout(2000),

@@ -1,10 +1,24 @@
-import { createServer, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import type { BrowserWindow } from 'electron';
 import type { CDPClient } from './cdp-client.js';
+import {
+  classifyOrigin,
+  isLoopbackHost,
+  type ControlAuthService,
+  type OriginDecision,
+} from './control-auth.js';
 import { SCRIPTS_DIR, REPO_ROOT } from './runtime-paths.js';
 
+const CONTROL_ALLOW_HEADERS = 'Content-Type, Authorization, X-Gematron-Control-Token';
+
 export interface ControlServerOptions {
+  /** Shared-secret auth for native callers (extension uses origin allowlist). */
+  auth?: ControlAuthService;
+  /** Audit sink for rejected requests (wired to the persistent audit chain). */
+  audit?: {
+    logAudit(event: string, actor: string, details?: Record<string, unknown>): void;
+  };
   onKimiDispatch?: (payload: {
     prompt?: string;
     files?: string[];
@@ -32,7 +46,7 @@ export class ControlServer {
   private server: Server | null = null;
 
   constructor(
-    public readonly port = 9228,
+    public port = 9228,
     public readonly host = '127.0.0.1',
     private readonly options: ControlServerOptions = {},
   ) {}
@@ -41,9 +55,12 @@ export class ControlServer {
     return new Promise((resolve) => {
       const createAndListen = (retriesLeft = 10) => {
         this.server = createServer(async (req, res) => {
-          res.setHeader('Access-Control-Allow-Origin', '*');
+          const originDecision: OriginDecision = classifyOrigin(req.headers.origin);
+          const allowedOrigin = originDecision === 'allow' ? String(req.headers.origin) : undefined;
+          res.setHeader('Access-Control-Allow-Origin', allowedOrigin ?? 'null');
+          res.setHeader('Vary', 'Origin');
           res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-          res.setHeader('Access-Control-Allow-Headers', '*');
+          res.setHeader('Access-Control-Allow-Headers', CONTROL_ALLOW_HEADERS);
 
           if (req.method === 'OPTIONS') {
             res.writeHead(204);
@@ -51,7 +68,29 @@ export class ControlServer {
             return;
           }
 
+          // --- Host pin (DNS-rebinding defense) ---
+          if (!isLoopbackHost(req.headers.host, this.port)) {
+            this.reject(res, 403, 'Host header is not the loopback control endpoint.', 'control:host-rejected', req);
+            return;
+          }
+
+          // --- Origin policy: web origins are never served ---
+          if (originDecision === 'reject-web') {
+            this.reject(res, 403, 'Web origins may not call the desktop control API.', 'control:origin-rejected', req);
+            return;
+          }
+
           const url = new URL(req.url ?? '/', `http://${this.host}:${this.port}`);
+          const requiresIdentity =
+            url.pathname === '/summon' ||
+            url.pathname === '/focus' ||
+            url.pathname === '/kimi/dispatch';
+
+          // --- Identity: token (native) or first-party extension origin ---
+          if (requiresIdentity && !this.isAuthorized(req)) {
+            this.reject(res, 401, 'Missing or invalid control token.', 'control:unauthorized', req);
+            return;
+          }
 
           // --- In-Chrome summon / focus endpoints ---
           if (url.pathname === '/summon' || url.pathname === '/focus') {
@@ -299,6 +338,12 @@ export class ControlServer {
         });
 
         this.server.listen(this.port, this.host, () => {
+          // With port 0 the OS assigns a free port; expose it so tests and
+          // callers can address the server and Host pinning stays accurate.
+          const address = this.server?.address();
+          if (address && typeof address === 'object') {
+            this.port = address.port;
+          }
           console.log(
             `[ControlServer] In-Chrome summon endpoint active at http://${this.host}:${this.port}/summon`,
           );
@@ -320,5 +365,39 @@ export class ControlServer {
       } catch {}
       this.server = null;
     }
+  }
+
+  private isAuthorized(req: IncomingMessage): boolean {
+    const candidate = this.options.auth
+      ? this.options.auth.extract(req.headers as Record<string, string | string[] | undefined>)
+      : null;
+    if (this.options.auth?.validate(candidate)) {
+      return true;
+    }
+    // First-party extension surface: a web page cannot present a
+    // chrome-extension:// origin, so it doubles as an identity signal.
+    return classifyOrigin(req.headers.origin) === 'allow';
+  }
+
+  private reject(
+    res: ServerResponse,
+    status: number,
+    message: string,
+    event: string,
+    req: IncomingMessage,
+  ): void {
+    this.options.audit?.logAudit(event, 'control-server', {
+      origin: this.firstHeader(req.headers.origin),
+      path: req.url?.slice(0, 128),
+      status,
+    });
+    res.writeHead(status, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: message }));
+  }
+
+  private firstHeader(value: string | string[] | undefined): string | undefined {
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) return value[0];
+    return undefined;
   }
 }

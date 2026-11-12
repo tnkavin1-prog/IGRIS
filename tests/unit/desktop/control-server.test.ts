@@ -1,21 +1,30 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ControlServer } from '../../../apps/desktop-hud/src/main/control-server.js';
+import { ControlAuthService } from '../../../apps/desktop-hud/src/main/control-auth.js';
 import type { BrowserWindow } from 'electron';
 import type { CDPClient } from '../../../apps/desktop-hud/src/main/cdp-client.js';
 
+const EXTENSION_ORIGIN = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop';
+
 describe('ControlServer', () => {
   let server: ControlServer;
-  const TEST_PORT = 9228;
+  let auth: ControlAuthService;
+  let token: string;
+  const TEST_PORT = 0;
 
   beforeEach(() => {
-    server = new ControlServer(TEST_PORT, '127.0.0.1');
+    auth = new ControlAuthService({ tokenGenerator: () => 't'.repeat(64) });
+    token = auth.getToken();
+    server = new ControlServer(TEST_PORT, '127.0.0.1', { auth });
   });
 
   afterEach(() => {
     server.stop();
   });
 
-  it('starts and responds to OPTIONS preflight with CORS headers', async () => {
+  /** Native-caller fetch helper: attaches the control token. */
+
+  it('starts and responds to OPTIONS preflight reflecting only allowed origins', async () => {
     const mockWin = {
       isMinimized: vi.fn().mockReturnValue(false),
       restore: vi.fn(),
@@ -31,9 +40,115 @@ describe('ControlServer', () => {
 
     await server.start(() => mockWin, mockCdp);
 
-    const res = await fetch(`http://127.0.0.1:${TEST_PORT}/summon`, { method: 'OPTIONS' });
-    expect(res.status).toBe(204);
-    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
+    const ext = await fetch(`http://127.0.0.1:${server.port}/summon`, {
+      method: 'OPTIONS',
+      headers: { Origin: EXTENSION_ORIGIN, Host: `127.0.0.1:${server.port}` },
+    });
+    expect(ext.status).toBe(204);
+    expect(ext.headers.get('Access-Control-Allow-Origin')).toBe(EXTENSION_ORIGIN);
+
+    const native = await fetch(`http://127.0.0.1:${server.port}/summon`, {
+      method: 'OPTIONS',
+      headers: { Host: `127.0.0.1:${server.port}` },
+    });
+    expect(native.headers.get('Access-Control-Allow-Origin')).toBe('null');
+  });
+
+  it('rejects web origins outright regardless of token', async () => {
+    const mockCdp = {} as unknown as CDPClient;
+    await server.start(() => null, mockCdp);
+
+    const res = await fetch(`http://127.0.0.1:${server.port}/summon`, {
+      method: 'POST',
+      headers: {
+        Origin: 'https://evil.example',
+        'X-Gematron-Control-Token': token,
+        Host: `127.0.0.1:${server.port}`,
+      },
+      body: JSON.stringify({ prompt: 'x' }),
+    });
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.ok).toBe(false);
+  });
+
+  it('rejects non-loopback Host headers (DNS rebinding)', async () => {
+    const mockCdp = {} as unknown as CDPClient;
+    await server.start(() => null, mockCdp);
+
+    // Node fetch pins the real host; use raw http to forge the Host header.
+    const http = await import('node:http');
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = http.request(
+        `http://127.0.0.1:${server.port}/summon`,
+        { method: 'POST', headers: { Host: 'evil.example:9228' } },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode ?? 0);
+        },
+      );
+      req.on('error', reject);
+      req.end();
+    });
+    expect(status).toBe(403);
+  });
+
+  it('requires a token for /summon from native (no-origin) callers', async () => {
+    const mockCdp = {} as unknown as CDPClient;
+    await server.start(() => null, mockCdp);
+
+    const noToken = await fetch(`http://127.0.0.1:${server.port}/summon`, {
+      method: 'POST',
+      headers: { Host: `127.0.0.1:${server.port}` },
+      body: JSON.stringify({ prompt: 'x' }),
+    });
+    expect(noToken.status).toBe(401);
+
+    const badToken = await fetch(`http://127.0.0.1:${server.port}/summon`, {
+      method: 'POST',
+      headers: {
+        'X-Gematron-Control-Token': 'w'.repeat(64),
+        Host: `127.0.0.1:${server.port}`,
+      },
+      body: JSON.stringify({ prompt: 'x' }),
+    });
+    expect(badToken.status).toBe(401);
+  });
+
+  it('allows extension-origin /summon without a token (first-party allowlist)', async () => {
+    const mockWin = {
+      isMinimized: vi.fn().mockReturnValue(false),
+      restore: vi.fn(),
+      show: vi.fn(),
+      focus: vi.fn(),
+      setAlwaysOnTop: vi.fn(),
+      webContents: { send: vi.fn() },
+    } as unknown as BrowserWindow;
+    const mockCdp = {
+      getActiveTab: vi.fn().mockResolvedValue(null),
+      getStatus: vi.fn(),
+    } as unknown as CDPClient;
+    await server.start(() => mockWin, mockCdp);
+
+    const res = await fetch(`http://127.0.0.1:${server.port}/summon`, {
+      method: 'POST',
+      headers: { Origin: EXTENSION_ORIGIN, Host: `127.0.0.1:${server.port}` },
+      body: JSON.stringify({ prompt: 'hi' }),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('keeps read-only GET /status open to native callers without a token', async () => {
+    const mockCdp = {
+      getActiveTab: vi.fn().mockResolvedValue(null),
+      getStatus: vi.fn().mockResolvedValue({ connected: true }),
+    } as unknown as CDPClient;
+    await server.start(() => null, mockCdp);
+
+    const res = await fetch(`http://127.0.0.1:${server.port}/status`, {
+      headers: { Host: `127.0.0.1:${server.port}` },
+    });
+    expect(res.status).toBe(200);
   });
 
   it('un-minimizes, raises, focuses window and returns active tab on POST /summon', async () => {
@@ -52,7 +167,10 @@ describe('ControlServer', () => {
 
     await server.start(() => mockWin, mockCdp);
 
-    const res = await fetch(`http://127.0.0.1:${TEST_PORT}/summon`, { method: 'POST' });
+    const res = await fetch(`http://127.0.0.1:${server.port}/summon`, {
+      method: 'POST',
+      headers: { 'X-Gematron-Control-Token': token, Host: `127.0.0.1:${server.port}` },
+    });
     expect(res.status).toBe(200);
 
     const body = (await res.json()) as { ok: boolean; activeTab: { id: string; title: string } };
@@ -93,9 +211,13 @@ describe('ControlServer', () => {
     await server.start(() => mockWin, mockCdp);
 
     const promptText = 'Explain this selected paragraph in detail';
-    const res = await fetch(`http://127.0.0.1:${TEST_PORT}/summon`, {
+    const res = await fetch(`http://127.0.0.1:${server.port}/summon`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Gematron-Control-Token': token,
+        Host: `127.0.0.1:${server.port}`,
+      },
       body: JSON.stringify({ prompt: promptText }),
     });
 
@@ -118,7 +240,7 @@ describe('ControlServer', () => {
 
     await server.start(() => mockWin, mockCdp);
 
-    const res = await fetch(`http://127.0.0.1:${TEST_PORT}/unknown-endpoint`);
+    const res = await fetch(`http://127.0.0.1:${server.port}/unknown-endpoint`);
     expect(res.status).toBe(404);
   });
 
@@ -139,9 +261,13 @@ describe('ControlServer', () => {
 
     await server.start(() => mockWin, mockCdp);
 
-    const res = await fetch(`http://127.0.0.1:${TEST_PORT}/summon`, {
+    const res = await fetch(`http://127.0.0.1:${server.port}/summon`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Gematron-Control-Token': token,
+        Host: `127.0.0.1:${server.port}`,
+      },
       body: JSON.stringify({ prompt: 'Test during CDP outage' }),
     });
 
@@ -169,7 +295,10 @@ describe('ControlServer', () => {
 
     await server.start(() => mockWin, mockCdp);
 
-    const res = await fetch(`http://127.0.0.1:${TEST_PORT}/summon`, { method: 'POST' });
+    const res = await fetch(`http://127.0.0.1:${server.port}/summon`, {
+      method: 'POST',
+      headers: { 'X-Gematron-Control-Token': token, Host: `127.0.0.1:${server.port}` },
+    });
     expect(res.status).toBe(200);
     expect(mockWin.show).not.toHaveBeenCalled();
     expect(mockWin.focus).not.toHaveBeenCalled();
@@ -192,8 +321,11 @@ describe('ControlServer', () => {
     await server.start(() => mockWin, mockCdp);
 
     const res = await fetch(
-      `http://127.0.0.1:${TEST_PORT}/summon?prompt=${encodeURIComponent('Query Param Prompt')}`,
-      { method: 'POST' },
+      `http://127.0.0.1:${server.port}/summon?prompt=${encodeURIComponent('Query Param Prompt')}`,
+      {
+        method: 'POST',
+        headers: { 'X-Gematron-Control-Token': token, Host: `127.0.0.1:${server.port}` },
+      },
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { ok: boolean; prompt: string };
@@ -229,12 +361,14 @@ describe('ControlServer', () => {
     const http = await import('node:http');
     await new Promise<void>((resolve, reject) => {
       const req = http.request(
-        `http://127.0.0.1:${TEST_PORT}/summon`,
+        `http://127.0.0.1:${server.port}/summon`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Content-Length': fullBuffer.length,
+            'X-Gematron-Control-Token': token,
+            Host: `127.0.0.1:${server.port}`,
           },
         },
         (res) => {

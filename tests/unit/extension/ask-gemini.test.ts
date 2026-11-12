@@ -16,6 +16,7 @@ import {
   handleAskGemini,
 } from '../../../apps/chrome-extension/src/tools/ask-gemini.js';
 import { ControlServer } from '../../../apps/desktop-hud/src/main/control-server.js';
+import { ControlAuthService } from '../../../apps/desktop-hud/src/main/control-auth.js';
 import type { BrowserWindow } from 'electron';
 import type { CDPClient } from '../../../apps/desktop-hud/src/main/cdp-client.js';
 
@@ -681,15 +682,19 @@ describe('Ask Gemini Tool & Context Extraction', () => {
   });
 
   describe('End-to-End ControlServer summon with real HTTP server', () => {
+    const EXTENSION_ORIGIN = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop';
     let server: ControlServer;
+    let auth: ControlAuthService;
     const TEST_PORT = 9239;
 
     beforeEach(() => {
-      server = new ControlServer(TEST_PORT, '127.0.0.1');
+      auth = new ControlAuthService({ tokenGenerator: () => 't'.repeat(64) });
+      server = new ControlServer(TEST_PORT, '127.0.0.1', { auth });
     });
 
     afterEach(() => {
       server.stop();
+      vi.unstubAllGlobals();
     });
 
     it('receives summon request from handleAskGemini and raises/focuses HUD window', async () => {
@@ -710,6 +715,51 @@ describe('Ask Gemini Tool & Context Extraction', () => {
       } as unknown as CDPClient;
 
       await server.start(() => mockWin, mockCdp);
+
+      // The extension stores the control token via its options page. Scripts
+      // cannot forge a chrome-extension:// Origin, and Node fetch does not set
+      // one, so the token is the identity proof here.
+      (globalThis as any).chrome = {
+        storage: {
+          local: {
+            get: vi.fn().mockResolvedValue({ gematronControlToken: auth.getToken() }),
+          },
+        },
+      };
+
+      // happy-dom enforces browser CORS on cross-origin fetch, but a Chrome
+      // extension service worker bypasses it via host permissions. Drive the
+      // real server through node:http so the test exercises the same stack.
+      vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+        const http = await import('node:http');
+        return new Promise((resolve, reject) => {
+          const req = http.request(
+            url,
+            {
+              method: init.method ?? 'GET',
+              headers: {
+                ...(init.headers as Record<string, string>),
+                Origin: EXTENSION_ORIGIN,
+              },
+            },
+            (res) => {
+              let body = '';
+              res.on('data', (chunk) => (body += chunk));
+              res.on('end', () =>
+                resolve({
+                  ok: (res.statusCode ?? 0) >= 200 && (res.statusCode ?? 0) < 300,
+                  status: res.statusCode,
+                  text: async () => body,
+                  json: async () => JSON.parse(body),
+                } as Response),
+              );
+            },
+          );
+          req.on('error', reject);
+          if (init.body) req.write(init.body);
+          req.end();
+        });
+      });
 
       const tab = {
         id: 10,
