@@ -69,6 +69,52 @@ describe('AppManagerService', () => {
     }
   });
 
+  it('refuses a dangerous command until a human approves it', async () => {
+    const res = await appManager.runSystemCommand('Remove-Item C:\\temp\\stale.txt');
+
+    expect(res.ok).toBe(false);
+    expect(res.blocked).toBe(true);
+    expect(res.reason).toContain('approval-required');
+    expect(res.stderr).toContain('requires explicit approval');
+  });
+
+  it('runs a dangerous command once it is approved', async () => {
+    const res = await appManager.runSystemCommand('Remove-Item C:\\temp\\stale.txt', {
+      approved: true,
+    });
+
+    expect(res.ok).toBe(true);
+    expect(res.blocked).toBeUndefined();
+    expect(res.stdout).toContain('Mock Command Output');
+  });
+
+  it('never lets an approval unlock a blocked command', async () => {
+    const res = await appManager.runSystemCommand('format C: /q', { approved: true });
+
+    expect(res.ok).toBe(false);
+    expect(res.blocked).toBe(true);
+    expect(res.stderr).toContain('blocked by safety policy');
+  });
+
+  it('audits blocked, approval-gated and executed commands', async () => {
+    const events: Array<{ event: string; details?: Record<string, unknown> }> = [];
+    const audit = (event: string, details?: Record<string, unknown>) => {
+      events.push({ event, details });
+    };
+
+    await appManager.runSystemCommand('format C: /q', { audit });
+    await appManager.runSystemCommand('Remove-Item C:\\temp\\a.txt', { audit });
+    await appManager.runSystemCommand('Remove-Item C:\\temp\\a.txt', { approved: true, audit });
+
+    expect(events.map((entry) => entry.event)).toEqual([
+      'command:blocked',
+      'command:approval-required',
+      'command:executed',
+    ]);
+    expect(events[1]?.details?.risk).toBe('dangerous');
+    expect(events[2]?.details?.approved).toBe(true);
+  });
+
   it('handles unknown window query gracefully without throwing', async () => {
     const focused = await appManager.focusWindow('Completely NonExistent App Window Title 9999');
     expect(focused).toBe(false);

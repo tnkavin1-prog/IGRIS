@@ -31,7 +31,10 @@ export function App() {
     apiKey: '',
     modelId: 'gemini-3.8-live',
     voice: 'Kore',
-    autoApprove: true,
+    // The renderer must mirror the secure default of the main process: the
+    // HUD may briefly show its own state before the real settings arrive,
+    // and it must never claim that actions are auto-approved.
+    autoApprove: false,
     alwaysOnTop: true,
     soundEffectsEnabled: true,
     soundVolume: 0.5,

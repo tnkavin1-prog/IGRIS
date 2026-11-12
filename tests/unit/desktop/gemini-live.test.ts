@@ -514,6 +514,42 @@ describe('GeminiLiveService', () => {
     expect(responses[2].response.result.ok).toBe(true);
   });
 
+  it('refuses a blocked command and gates a dangerous one on the approval setting', async () => {
+    let sentPayload: any = null;
+    (service as any).socket = {
+      readyState: 1,
+      send: (str: string) => {
+        sentPayload = JSON.parse(str);
+      },
+    };
+
+    const handler = (service as any).handleServerMessage.bind(service);
+    await handler(
+      JSON.stringify({
+        toolCall: {
+          functionCalls: [
+            {
+              id: 'call_blocked_cmd',
+              name: 'run_system_command',
+              args: { command: 'format C: /q' },
+            },
+            {
+              id: 'call_dangerous_cmd',
+              name: 'run_system_command',
+              args: { command: 'Remove-Item C:\\temp\\a.txt' },
+            },
+          ],
+        },
+      }),
+    );
+
+    const responses = sentPayload.toolResponse.functionResponses;
+    expect(responses[0].response.result.blocked).toBe(true);
+    expect(responses[0].response.result.success).toBe(false);
+    expect(responses[1].response.result.blocked).toBe(true);
+    expect(responses[1].response.result.reason).toContain('approval-required');
+  });
+
   it('handles tool parameter aliases seamlessly (appName, query, hotkey, cmd)', async () => {
     let sentPayload: any = null;
     (service as any).socket = {
