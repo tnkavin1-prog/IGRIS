@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, type AppSettings } from '@gbl/shared';
 import {
+  CONTROL_TOKEN_KEY,
+  loadControlToken,
   loadSettings,
   normalizeBridgeUrl,
   sanitizeSettings,
+  saveControlToken,
 } from '../../../apps/chrome-extension/src/sidepanel/storage.js';
 
 describe('normalizeBridgeUrl', () => {
@@ -144,5 +147,37 @@ describe('loadSettings', () => {
     // still hand back the secure defaults.
     const settings = await loadSettings();
     expect(settings.autoApprove).toBe(false);
+  });
+});
+
+describe('control token storage', () => {
+  it('stores the desktop control token under the shared key', async () => {
+    const store = new Map<string, unknown>();
+    (globalThis as any).chrome = {
+      storage: {
+        local: {
+          get: async (key: string) => (store.has(key) ? { [key]: store.get(key) } : {}),
+          set: async (values: Record<string, unknown>) => {
+            for (const [key, value] of Object.entries(values)) store.set(key, value);
+          },
+          remove: async (key: string) => {
+            store.delete(key);
+          },
+        },
+      },
+    };
+
+    try {
+      await saveControlToken('  abc123  ');
+      expect(store.get(CONTROL_TOKEN_KEY)).toBe('abc123');
+      expect(await loadControlToken()).toBe('abc123');
+
+      // An empty value clears the token again.
+      await saveControlToken('   ');
+      expect(store.has(CONTROL_TOKEN_KEY)).toBe(false);
+      expect(await loadControlToken()).toBe('');
+    } finally {
+      delete (globalThis as any).chrome;
+    }
   });
 });

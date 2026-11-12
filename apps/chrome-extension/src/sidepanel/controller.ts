@@ -42,12 +42,14 @@ import {
   type PermissionState,
 } from './permissions.js';
 import {
+  loadControlToken,
   loadConversation,
   loadOnboarding,
   loadSecret,
   loadSettings,
   normalizeBridgeUrl,
   removeConversation,
+  saveControlToken,
   saveConversation,
   saveOnboarding,
   saveSecret,
@@ -608,6 +610,21 @@ export class AgentController {
     } else {
       this.toast('Bridge secret removed.', 'info');
     }
+  }
+
+  /** The stored native desktop control token, if the user configured one. */
+  async loadControlToken(): Promise<string> {
+    return loadControlToken();
+  }
+
+  /** Store (or clear) the native desktop control token. */
+  async saveControlToken(token: string): Promise<void> {
+    const value = token.trim();
+    await saveControlToken(value);
+    this.toast(
+      value ? 'Desktop control token saved.' : 'Desktop control token removed.',
+      value ? 'success' : 'info',
+    );
   }
 
   /* ───────────────────────────── settings ───────────────────────────── */

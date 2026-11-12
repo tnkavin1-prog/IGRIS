@@ -113,6 +113,9 @@ test('settings expose connection, access, and privacy controls', async () => {
   await panel.getByRole('button', { name: 'Open settings' }).click();
   await expect(panel.getByRole('dialog', { name: 'Settings' })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Test connection' })).toBeVisible();
+  // The native desktop HUD control token is configurable from the same tab.
+  await expect(panel.getByText('Desktop control token')).toBeVisible();
+  await expect(panel.getByPlaceholder('Paste the control token')).toBeVisible();
 
   await panel.getByRole('button', { name: 'Access' }).click();
   await expect(panel.getByText('Optional capabilities')).toBeVisible();

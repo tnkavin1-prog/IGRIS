@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-12T06:33:21.961Z",
+  "generatedAt": "2026-11-12T07:29:17.523Z",
   "surfaces": {
     "live panel": [
       {
@@ -1193,6 +1193,13 @@
         "focused": false
       },
       {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
         "role": "code",
         "name": "",
         "description": "",
@@ -1590,6 +1597,49 @@
         "role": "button",
         "name": "Show secret",
         "description": "Show secret",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Save",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "heading",
+        "name": "Desktop control token",
+        "description": "",
+        "disabled": false,
+        "focused": false,
+        "level": 3
+      },
+      {
+        "role": "StaticText",
+        "name": "Optional",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "paragraph",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "textbox",
+        "name": "Paste the control token",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Show token",
+        "description": "Show token",
         "disabled": false,
         "focused": false
       },
@@ -2036,6 +2086,90 @@
         "focused": false
       },
       {
+        "role": "StaticText",
+        "name": "Desktop control token",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Optional",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "The native desktop HUD accepts a per-install token for its control API. Copy the",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": " ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "code",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": " file from the HUD data folder (",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "code",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": ") and paste it here. The extension is already trusted by its own origin, so this is only needed for locked-down installations. It is stored in ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "code",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": " and never synced.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Save",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
         "role": "InlineTextBox",
         "name": "Start the bridge",
         "description": "",
@@ -2260,6 +2394,90 @@
         "focused": false
       },
       {
+        "role": "InlineTextBox",
+        "name": "Desktop control token",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "The native desktop HUD accepts a per-install token for its control API. Copy the",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "control-token",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": " file from the HUD data folder (",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "%LOCALAPPDATA%\\Gemetron",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": ") ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "and paste it here. The extension is already trusted by its own origin, so this is only ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "needed for locked-down installations. It is stored in ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "chrome.storage.local",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": " and ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "never synced.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Save",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
         "role": "StaticText",
         "name": "http://127.0.0.1:47821",
         "description": "",
@@ -2276,6 +2494,27 @@
       {
         "role": "InlineTextBox",
         "name": "apps/local-bridge/.env",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "chrome.storage.local",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "control-token",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "%LOCALAPPDATA%\\Gemetron",
         "description": "",
         "disabled": false,
         "focused": false

@@ -151,10 +151,23 @@ export async function openDesktopPopup(prompt?: string): Promise<boolean> {
   try {
     // 1. First, attempt to summon the Native Desktop HUD (Electron) via loopback port 9228
     try {
+      // The desktop control API accepts a per-install token. The extension
+      // origin is trusted on its own, but an installation that requires the
+      // token still needs it attached.
+      let controlToken: string | undefined;
+      try {
+        const stored = await chrome.storage.local.get(['gematronControlToken']);
+        if (typeof stored?.gematronControlToken === 'string' && stored.gematronControlToken) {
+          controlToken = stored.gematronControlToken;
+        }
+      } catch {
+        /* storage unavailable - proceed with origin-based identity */
+      }
       const res = await fetch(CONTROL_SERVER_SUMMON_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(controlToken ? { 'X-Gematron-Control-Token': controlToken } : {}),
         },
         body: JSON.stringify({ prompt: prompt ?? '' }),
         signal: AbortSignal.timeout(600),

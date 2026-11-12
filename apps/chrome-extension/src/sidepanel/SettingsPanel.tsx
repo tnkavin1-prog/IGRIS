@@ -37,6 +37,9 @@ export function SettingsPanel({
   const [draft, setDraft] = useState<AppSettings>(snapshot.settings);
   const [secret, setSecret] = useState('');
   const [showSecret, setShowSecret] = useState(false);
+  const [controlToken, setControlToken] = useState('');
+  const [showControlToken, setShowControlToken] = useState(false);
+  const [controlTokenSaved, setControlTokenSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -57,6 +60,19 @@ export function SettingsPanel({
 
   useEffect(() => {
     void controller.refreshDevices();
+  }, [controller]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void controller
+      .loadControlToken()
+      .then((token) => {
+        if (!cancelled) setControlTokenSaved(Boolean(token));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, [controller]);
 
   const model = useMemo(
@@ -94,6 +110,16 @@ export function SettingsPanel({
     }
     await controller.saveBridgeSecret(secret);
     setSecret('');
+  };
+
+  const saveControlToken = async (): Promise<void> => {
+    if (!controlToken.trim()) {
+      controller.toast('Paste the control token first.', 'warn');
+      return;
+    }
+    await controller.saveControlToken(controlToken);
+    setControlToken('');
+    setControlTokenSaved(true);
   };
 
   const reset = async (): Promise<void> => {
@@ -236,6 +262,55 @@ export function SettingsPanel({
                 </div>
               </section>
 
+              <section className="settings-section">
+                <div className="settings-section-head">
+                  <h3>Desktop control token</h3>
+                  {controlTokenSaved ? (
+                    <Badge tone="green" icon="check">
+                      Saved
+                    </Badge>
+                  ) : (
+                    <Badge tone="neutral" icon="info">
+                      Optional
+                    </Badge>
+                  )}
+                </div>
+                <p className="section-help">
+                  The native desktop HUD accepts a per-install token for its control API. Copy the{' '}
+                  <code>control-token</code> file from the HUD data folder (
+                  <code>%LOCALAPPDATA%\Gemetron</code>) and paste it here. The extension is already
+                  trusted by its own origin, so this is only needed for locked-down installations. It
+                  is stored in <code>chrome.storage.local</code> and never synced.
+                </p>
+                <div className="secret-row">
+                  <input
+                    type={showControlToken ? 'text' : 'password'}
+                    value={controlToken}
+                    onChange={(event) => setControlToken(event.target.value)}
+                    placeholder={
+                      controlTokenSaved
+                        ? 'Saved — enter a new token to replace'
+                        : 'Paste the control token'
+                    }
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  <IconButton
+                    label={showControlToken ? 'Hide token' : 'Show token'}
+                    onClick={() => setShowControlToken((value) => !value)}
+                  >
+                    <Icon name={showControlToken ? 'eyeOff' : 'eye'} size={16} />
+                  </IconButton>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => void saveControlToken()}
+                  >
+                    Save
+                  </button>
+                </div>
+              </section>
+
               <div className="info-card">
                 <Icon name="terminal" size={16} />
                 <div>
@@ -249,7 +324,6 @@ export function SettingsPanel({
               </div>
             </>
           ) : null}
-
           {tab === 'voice' ? (
             <>
               <section className="settings-section">

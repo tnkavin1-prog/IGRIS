@@ -19,6 +19,9 @@ export interface StoredOnboarding {
   completedAt?: number;
 }
 
+/** Storage key for the optional native desktop control token. */
+export const CONTROL_TOKEN_KEY = 'gematronControlToken';
+
 function clamp(value: number, min: number, max: number, fallback: number): number {
   return Number.isFinite(value) ? Math.min(Math.max(value, min), max) : fallback;
 }
@@ -115,6 +118,32 @@ export async function saveSecret(secret: string): Promise<void> {
     return;
   }
   await chrome.storage.local.set({ [STORAGE_KEYS.bridgeSecret]: value });
+}
+
+/**
+ * Control token for the native desktop HUD.
+ *
+ * The desktop control API accepts a per-install shared secret. The desktop
+ * app is normally recognised by its first-party extension origin, so the
+ * token is optional, but a locked-down installation can require it.
+ */
+export async function loadControlToken(): Promise<string> {
+  try {
+    const value = await chrome.storage.local.get(CONTROL_TOKEN_KEY);
+    const token = value?.[CONTROL_TOKEN_KEY];
+    return typeof token === 'string' ? token.trim() : '';
+  } catch {
+    return '';
+  }
+}
+
+export async function saveControlToken(token: string): Promise<void> {
+  const value = token.trim();
+  if (!value) {
+    await chrome.storage.local.remove(CONTROL_TOKEN_KEY);
+    return;
+  }
+  await chrome.storage.local.set({ [CONTROL_TOKEN_KEY]: value });
 }
 
 export async function loadConversation(): Promise<ConversationEntry[]> {
