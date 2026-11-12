@@ -749,7 +749,13 @@ export function CompactHUD({
                         </span>
                         <div className="at">
                           <b>{step.description}</b>
-                          <span>{step.actionType}</span>
+                          <span>
+                            {step.actionType}
+                            {step.riskLevel && step.riskLevel !== 'safe' ? (
+                              <span className={`apr apr-${step.riskLevel}`}>{step.riskLevel}</span>
+                            ) : null}
+                          </span>
+                          {step.error ? <em className="wfe">{step.error}</em> : null}
                         </div>
                         <i className="st" />
                       </li>

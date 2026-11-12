@@ -5084,6 +5084,22 @@ button.chip:hover {
   font-size: 11px;
   color: var(--mu);
 }
+.wfl .at span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wfl .apr {
+  margin-left: 0;
+}
+.wfe {
+  margin-top: 3px;
+  font-size: 11px;
+  font-style: normal;
+  color: #fca5a5;
+  line-height: 1.35;
+  word-break: break-word;
+}
 .st {
   width: 17px;
   height: 17px;
