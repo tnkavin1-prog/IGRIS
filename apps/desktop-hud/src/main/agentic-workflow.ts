@@ -122,7 +122,7 @@ export class AgenticWorkflowEngine extends EventEmitter {
           description: 'Write summary data to OS system clipboard',
           actionType: 'clipboard_write',
           params: {
-            text: `[JARVIS Agent Summary]\nTask: ${goal}\nTimestamp: ${new Date().toISOString()}\nStatus: Verified Nominal.\n`,
+            text: `[Assistant Agent Summary]\nTask: ${goal}\nTimestamp: ${new Date().toISOString()}\nStatus: Verified Nominal.\n`,
           },
         },
         {
@@ -168,7 +168,7 @@ export class AgenticWorkflowEngine extends EventEmitter {
           description: 'Type autonomous agent notes into Notepad',
           actionType: 'computer_type',
           params: {
-            text: `[Jarvis Autonomous Agent Log]\nGoal: ${goal}\nExecuted at: ${new Date().toLocaleString()}\nSystem status: Nominal.\n`,
+            text: `[Assistant Autonomous Agent Log]\nGoal: ${goal}\nExecuted at: ${new Date().toLocaleString()}\nSystem status: Nominal.\n`,
           },
         },
         {

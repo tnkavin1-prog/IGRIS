@@ -114,7 +114,7 @@ export const DEFAULT_JARVIS_MEMORY: JarvisMemoryData = {
         {
           description: 'Type autonomous agent notes into Notepad',
           actionType: 'computer_type',
-          params: { text: '[Jarvis Session Log]\nStatus: Complete.\n' },
+          params: { text: '[Assistant Session Log]\nStatus: Complete.\n' },
         },
         {
           description: 'Capture screenshot of active Notepad window for verification',
@@ -417,7 +417,7 @@ export class JarvisMemoryStore {
       .join('\n');
 
     return `
-[JARVIS PERSISTENT MEMORY CONTEXT]
+[ASSISTANT PERSISTENT MEMORY CONTEXT]
 User Preferences: Auto-Approve: ${prefs.autoApprove}, AlwaysOnTop: ${prefs.alwaysOnTop}, Default Browser: ${prefs.defaultBrowser}
 Frequent App Aliases: ${topAliases || 'None'}
 Available Pre-configured Recipes: ${topRecipes || 'None'}

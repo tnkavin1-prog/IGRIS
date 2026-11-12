@@ -48,7 +48,7 @@ describe('TrayManager - Windows System Tray & Background Daemon', () => {
 
     // 1. Summon HUD
     expect(
-      labels.some((l) => l?.includes('Summon JARVIS HUD') && l.includes('Ctrl+Alt+Space')),
+      labels.some((l) => l?.includes('Summon Gematron HUD') && l.includes('Ctrl+Alt+Space')),
     ).toBe(true);
 
     // 2. Dynamic status
@@ -80,7 +80,7 @@ describe('TrayManager - Windows System Tray & Background Daemon', () => {
     const items = trayManager.menuItems;
 
     // Click Summon
-    const summonItem = items.find((i) => i.label?.includes('Summon JARVIS HUD'));
+    const summonItem = items.find((i) => i.label?.includes('Summon Gematron HUD'));
     summonItem?.click?.();
     expect(callbacks.onSummon).toHaveBeenCalledTimes(1);
 

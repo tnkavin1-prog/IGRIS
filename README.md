@@ -14,7 +14,7 @@ A Windows voice assistant with two separate surfaces: an Electron desktop HUD wi
 - Separate-profile Chrome CDP control, visible text targeting, React-compatible form updates, and file uploads. Frame/shadow-DOM parity remains incomplete.
 - A real vision planner observes a screenshot, proposes one action, executes once, captures again, and independently verifies. Iteration limits, cancellation, and repeated-failure stopping are enforced.
 - Application skills advertised according to availability; office, creative, and coding integrations require external applications/services.
-- Opt-in local “Hey Jarvis” detection while idle. Wake detection and OCR run locally; foreground Live audio and vision go to Google.
+- Opt-in local "Hey Gematron" detection while idle. Wake detection and OCR run locally; foreground Live audio and vision go to Google.
 - Metadata-only, SHA-256 hash-chained audit records continue across restarts. This is tamper evidence, not immutable or authenticated storage against a privileged attacker.
 
 ### Desktop quick start
@@ -88,7 +88,7 @@ The bridge is loopback-only, single-user infrastructure, not a public service. S
 
 ## Verification and remaining work
 
-See [current implementation status](docs/IMPLEMENTATION_STATUS.md) and [desktop walkthrough](docs/JARVIS_SYSTEM_WALKTHROUGH.md). Older [extension test evidence](docs/TEST_REPORT.md) is historical, not a desktop certification.
+See [current implementation status](docs/IMPLEMENTATION_STATUS.md) and [desktop walkthrough](docs/GEMATRON_SYSTEM_WALKTHROUGH.md). Older [extension test evidence](docs/TEST_REPORT.md) is historical, not a desktop certification.
 
 Executed desktop probes cover header-authenticated Live setup, oscillator-fed worklet throughput, local OCR, a read-only real vision-planner/verifier call, isolated Chrome forms/uploads, synthesized-speech wake recognition, settings toggles, and packaged-archive startup with native cursor reads and all HUD modes.
 

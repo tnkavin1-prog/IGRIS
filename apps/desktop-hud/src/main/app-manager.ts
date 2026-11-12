@@ -846,6 +846,7 @@ export class AppManagerService {
               !w.processName.toLowerCase().includes('shellexperience') &&
               !w.title.toLowerCase().includes('hud') &&
               !w.title.toLowerCase().includes('gemini floating') &&
+              !w.title.toLowerCase().includes('gemetron') &&
               !w.title.toLowerCase().includes('jarvis'),
           );
           targetCandidates = filtered

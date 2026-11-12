@@ -54,7 +54,7 @@ export function App() {
   const [soundVolume, setSoundVolume] = useState(0.5);
   const [appearance, setAppearance] = useState<HudAppearance>(() => loadAppearance());
 
-  // Autonomous Jarvis Agent state
+  // Autonomous agent state
   const [currentTask, setCurrentTask] = useState<AgenticTask | null>(null);
   const [pendingApproval, setPendingApproval] = useState<{
     task: AgenticTask;

@@ -34,8 +34,8 @@ export function generateAuditMarkdown(payload: SessionExportPayload): string {
   const totalDuration =
     task?.startedAt && task?.completedAt ? task.completedAt - task.startedAt : undefined;
 
-  let md = `# 🛡️ JARVIS Autonomous Workflow Audit Dossier\n\n`;
-  md += `> **System:** Gematron JARVIS OS Autonomous Agent v3.8  \n`;
+  let md = `# 🛡️ Gematron Assistant Audit Dossier\n\n`;
+  md += `> **System:** Gematron Assistant - Autonomous Agent v3.8  \n`;
   md += `> **Timestamp:** ${new Date().toLocaleString()}  \n`;
   md += `> **Context Window:** \`${payload.activeTabTitle || 'Desktop Workspace'}\`  \n\n`;
 
@@ -126,7 +126,7 @@ export function generateAuditMarkdown(payload: SessionExportPayload): string {
     if (msg.kind === 'user') {
       md += `### 👤 User${timeStr}:\n${msg.text}\n\n`;
     } else if (msg.kind === 'assistant') {
-      md += `### ✦ JARVIS${timeStr}:\n${msg.text}\n\n`;
+      md += `### ✦ Assistant${timeStr}:\n${msg.text}\n\n`;
     } else if (msg.kind === 'tool') {
       md += `*⚙️ Action Executed${timeStr}:* **${msg.title || msg.name || 'Tool'}**  \n`;
       if (msg.detail) md += `> \`${msg.detail}\`\n\n`;
@@ -156,7 +156,7 @@ export function generateAuditHtml(payload: SessionExportPayload): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>JARVIS Dossier: ${escapeHtml(task?.goal || payload.blackboard?.title || 'Execution Audit')}</title>
+  <title>Gematron Dossier: ${escapeHtml(task?.goal || payload.blackboard?.title || 'Execution Audit')}</title>
   <style>
     :root {
       --bg: #07090e;
@@ -353,7 +353,7 @@ export function generateAuditHtml(payload: SessionExportPayload): string {
   <div class="dossier-header">
     <div class="dossier-title">
       <h1>${escapeHtml(task?.goal || payload.blackboard?.title || 'Autonomous Mission Audit')}</h1>
-      <div class="sub">JARVIS Autonomous Agent Audit Dossier</div>
+      <div class="sub">Gematron Assistant Audit Dossier</div>
     </div>
     <span class="status-badge ${missionStatus}">${missionStatus}</span>
   </div>
@@ -458,7 +458,7 @@ export function generateAuditHtml(payload: SessionExportPayload): string {
   ${(payload.conversation || [])
     .map((m) => {
       let cardClass = 'dialogue-card';
-      let prefix = '✦ JARVIS';
+      let prefix = '✦ Assistant';
       if (m.kind === 'user') {
         cardClass += ' user';
         prefix = '👤 User';
@@ -503,7 +503,7 @@ export function exportAuditSession(
         .slice(0, 40)
         .replace(/^_+|_+$/g, '') || 'session';
 
-    const baseFilename = `jarvis_dossier_${safeTitle}_${timestamp}`;
+    const baseFilename = `gematron_dossier_${safeTitle}_${timestamp}`;
     const mdPath = join(notesDir, `${baseFilename}.md`);
     const htmlPath = join(notesDir, `${baseFilename}.html`);
 

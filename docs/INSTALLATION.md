@@ -29,7 +29,7 @@ Updates are off unless the installed app is launched with `GEMATRON_CHECK_UPDATE
 
 ### Wake word and browser control
 
-Enable “Hey Jarvis” in settings only if idle microphone listening is wanted. Install an English Windows speech-recognition language pack and allow microphone access for desktop applications. Recognition and OCR run locally; Live audio and vision are sent to Google. The wake helper pauses before foreground capture. Physical-microphone handoff remains untested.
+Enable "Hey Gematron" in settings only if idle microphone listening is wanted. Install an English Windows speech-recognition language pack and allow microphone access for desktop applications. Recognition and OCR run locally; Live audio and vision are sent to Google. The wake helper pauses before foreground capture. Physical-microphone handoff remains untested.
 
 Desktop Chrome control uses its own debugging profile; it does not attach automatically to all normal Chrome windows or inherit their signed-in profiles. Office/creative/coding skills also require their advertised external applications/services.
 

@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
-  Automated Windows Desktop Shortcut Generator for JARVIS AI Assistant.
+  Automated Windows Desktop Shortcut Generator for Gematron Assistant.
 
 .DESCRIPTION
   Creates a high-resolution Windows shortcut (.lnk) pointing to E:\Gematron\start-gemini-hud.bat
   configured with global summon hotkey Ctrl+Alt+J and custom brand iconography.
 
 .PARAMETER Destination
-  Target file path or directory for the shortcut. Defaults to E:\Gematron\JARVIS AI Assistant.lnk,
+  Target file path or directory for the shortcut. Defaults to E:\Gematron\Gematron Assistant.lnk,
   or the user's Desktop if -Desktop switch is supplied.
 
 .PARAMETER Desktop
@@ -40,7 +40,7 @@ param(
   [string]$WorkingDirectory,
   [string]$Hotkey = 'Ctrl+Alt+J',
   [string]$IconPath,
-  [string]$Description = 'JARVIS AI Assistant - Autonomous Real-time Desktop HUD',
+  [string]$Description = 'Gematron Assistant - Autonomous Real-time Desktop HUD',
   [switch]$Force
 )
 
@@ -76,7 +76,7 @@ if (-not $IconPath) {
 }
 
 # 4. Determine Destination File Path
-$shortcutName = 'JARVIS AI Assistant.lnk'
+$shortcutName = 'Gematron Assistant.lnk'
 $finalPath = ''
 
 if ($Desktop) {
@@ -131,7 +131,7 @@ try {
   }
 
   Write-Host "==========================================================" -ForegroundColor Cyan
-  Write-Host "  JARVIS AI Assistant - Desktop Shortcut Generated" -ForegroundColor Green
+  Write-Host "  Gematron Assistant - Desktop Shortcut Generated" -ForegroundColor Green
   Write-Host "==========================================================" -ForegroundColor Cyan
   Write-Host "  Shortcut Location : $($result.ShortcutPath)" -ForegroundColor White
   Write-Host "  Target Executable : $($result.TargetPath)" -ForegroundColor White

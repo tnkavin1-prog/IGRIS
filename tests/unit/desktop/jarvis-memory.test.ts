@@ -172,7 +172,7 @@ describe('JarvisMemoryStore', () => {
     });
 
     const prompt = memory.buildSystemContextPrompt();
-    expect(prompt).toContain('[JARVIS PERSISTENT MEMORY CONTEXT]');
+    expect(prompt).toContain('[ASSISTANT PERSISTENT MEMORY CONTEXT]');
     expect(prompt).toContain('Auto-Approve: false');
     expect(prompt).toContain('notepad');
     expect(prompt).toContain('Launched Notepad and verified text output');

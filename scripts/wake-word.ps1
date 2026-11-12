@@ -12,18 +12,18 @@ public static class GemetronWakeWord {
         var info = SpeechRecognitionEngine.InstalledRecognizers().FirstOrDefault(r => r.Culture.TwoLetterISOLanguageName == "en");
         if (info == null) throw new InvalidOperationException("Install an English Windows speech recognition language pack.");
         using (var engine = new SpeechRecognitionEngine(info)) {
-            var builder = new GrammarBuilder("hey jarvis") { Culture = info.Culture };
+            var builder = new GrammarBuilder("hey gematron") { Culture = info.Culture };
             engine.LoadGrammar(new Grammar(builder));
             if (selfTest) {
                 using (var stream = new MemoryStream()) {
                     using (var synth = new SpeechSynthesizer()) {
                         synth.SetOutputToWaveStream(stream);
-                        synth.Speak("hey jarvis");
+                        synth.Speak("hey gematron");
                     }
                     stream.Position = 0;
                     engine.SetInputToWaveStream(stream);
                     var result = engine.Recognize();
-                    if (result == null || result.Text != "hey jarvis") throw new InvalidOperationException("Synthetic wake-word recognition failed.");
+                    if (result == null || result.Text != "hey gematron") throw new InvalidOperationException("Synthetic wake-word recognition failed.");
                     Console.WriteLine("self-test:passed");
                 }
                 return;

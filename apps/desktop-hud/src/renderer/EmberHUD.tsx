@@ -340,7 +340,7 @@ export function EmberHUD({
                 </div>
                 <div className="em-row">
                   <div>
-                    Wake word “Hey Jarvis”
+                    Wake word "Hey Gematron"
                     <small>Windows speech, local while idle</small>
                   </div>
                   <button

@@ -19,7 +19,7 @@ The Chrome extension and token bridge are separate systems. The desktop uses its
 
 ## Voice and wake lifecycle
 
-Wake detection is disabled by default. When enabled while idle, a PowerShell helper uses Windows System.Speech with an English “hey jarvis” grammar, recognition confidence threshold, and cooldown. It emits only a wake event; it does not forward microphone audio to Google.
+Wake detection is disabled by default. When enabled while idle, a PowerShell helper uses Windows System.Speech with an English "hey gematron" grammar, recognition confidence threshold, and cooldown. It emits only a wake event; it does not forward microphone audio to Google.
 
 Before a foreground session connects, main waits for the wake helper to release the microphone. The renderer starts AudioWorklet capture after connection succeeds. Capture is resampled to mono PCM16 at 16 kHz; output is played at 24 kHz. A separate worklet file keeps capture compatible with the renderer's self-only script CSP.
 

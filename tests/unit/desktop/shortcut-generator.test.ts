@@ -13,9 +13,9 @@ describe('Desktop Shortcut Generator Script', () => {
     expect(existsSync(scriptPath)).toBe(true);
   });
 
-  it('contains expected configuration for JARVIS AI Assistant with Ctrl+Alt+J', () => {
+  it('contains expected configuration for Gematron Assistant with Ctrl+Alt+J', () => {
     const content = readFileSync(scriptPath, 'utf8');
-    expect(content).toContain('JARVIS AI Assistant.lnk');
+    expect(content).toContain('Gematron Assistant.lnk');
     expect(content).toContain('start-gemini-hud.bat');
     expect(content).toContain('Ctrl+Alt+J');
     expect(content).toContain('WScript.Shell');
@@ -26,7 +26,7 @@ describe('Desktop Shortcut Generator Script', () => {
     if (process.platform !== 'win32') return;
 
     const testDir = mkdtempSync(join(tmpdir(), 'gemetron-shortcut-test-'));
-    const targetLnk = join(testDir, 'JARVIS AI Assistant.lnk');
+    const targetLnk = join(testDir, 'Gematron Assistant.lnk');
 
     try {
       execSync(

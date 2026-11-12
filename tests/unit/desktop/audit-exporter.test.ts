@@ -121,7 +121,7 @@ describe('Audit Exporter', () => {
   it('generates rich Markdown dossier with executive summary and steps matrix', () => {
     const md = generateAuditMarkdown(mockPayload);
 
-    expect(md).toContain('# 🛡️ JARVIS Autonomous Workflow Audit Dossier');
+    expect(md).toContain('# 🛡️ Gematron Assistant Audit Dossier');
     expect(md).toContain('Autonomous Quantum Wavefunction Verification');
     expect(md).toContain('`task_exec_999`');
     expect(md).toContain('**COMPLETED**');
@@ -143,7 +143,7 @@ describe('Audit Exporter', () => {
 
     // Dialogue history
     expect(md).toContain('👤 User');
-    expect(md).toContain('✦ JARVIS');
+    expect(md).toContain('✦ Assistant');
     expect(md).toContain('⚙️ Action Executed');
     expect(md).toContain('System Security Notice');
   });
@@ -153,7 +153,7 @@ describe('Audit Exporter', () => {
 
     expect(html).toContain('<!DOCTYPE html>');
     expect(html).toContain('<html lang="en">');
-    expect(html).toContain('JARVIS Autonomous Agent Audit Dossier');
+    expect(html).toContain('Gematron Assistant Audit Dossier');
     expect(html).toContain('Autonomous Quantum Wavefunction Verification');
 
     // Status badge and metric cards
@@ -211,10 +211,10 @@ describe('Audit Exporter', () => {
     };
 
     const md = generateAuditMarkdown(minimalPayload);
-    expect(md).toContain('# 🛡️ JARVIS Autonomous Workflow Audit Dossier');
+    expect(md).toContain('# 🛡️ Gematron Assistant Audit Dossier');
 
     const html = generateAuditHtml(minimalPayload);
-    expect(html).toContain('JARVIS Autonomous Agent Audit Dossier');
+    expect(html).toContain('Gematron Assistant Audit Dossier');
 
     const exportRes = exportAuditSession(minimalPayload, testDir);
     expect(exportRes.ok).toBe(true);

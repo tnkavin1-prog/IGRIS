@@ -92,7 +92,7 @@ export class TrayManager {
       }
 
       this.tray = new Tray(icon);
-      this.tray.setToolTip(`JARVIS AI Assistant - [${this.getStatusLabel()}]`);
+      this.tray.setToolTip(`Gematron Assistant - [${this.getStatusLabel()}]`);
 
       this.applyNativeMenu();
 
@@ -119,7 +119,7 @@ export class TrayManager {
     this.updateContextMenu();
     if (!this.mockMode && this.tray) {
       try {
-        this.tray.setToolTip(`JARVIS AI Assistant - [${this.getStatusLabel()}]`);
+        this.tray.setToolTip(`Gematron Assistant - [${this.getStatusLabel()}]`);
         this.applyNativeMenu();
       } catch {}
     }
@@ -196,7 +196,7 @@ export class TrayManager {
 
     this.lastMenuItems = [
       {
-        label: '⚡ Summon JARVIS HUD (Ctrl+Alt+Space / Ctrl+Alt+J)',
+        label: '⚡ Summon Gematron HUD (Ctrl+Alt+Space / Ctrl+Alt+J)',
         click: () => this.handleSummon(),
       },
       {

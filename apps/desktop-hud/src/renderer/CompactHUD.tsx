@@ -1141,7 +1141,7 @@ export function CompactHUD({
             </div>
             <div className="row">
               <div>
-                Wake word “Hey Jarvis”
+                Wake word "Hey Gematron"
                 <small>Windows speech, local while idle</small>
               </div>
               <button
