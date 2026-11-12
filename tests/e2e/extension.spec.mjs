@@ -1,10 +1,10 @@
 import { test, expect, chromium } from '@playwright/test';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { cleanupProfileDir, createProfileDir } from './profile-dir.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const extensionDir = join(root, 'release', 'chrome-extension');
@@ -52,6 +52,7 @@ const FIXTURE = `<!doctype html>
 let context;
 let panel;
 let server;
+let userDataDir;
 let baseUrl;
 let fixturePage;
 
@@ -64,7 +65,7 @@ test.beforeAll(async () => {
   const address = server.address();
   baseUrl = `http://127.0.0.1:${address.port}/`;
 
-  const userDataDir = mkdtempSync(join(tmpdir(), 'gbl-e2e-'));
+  userDataDir = createProfileDir('gbl-e2e-');
   context = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
     viewport: { width: 440, height: 940 },
@@ -82,6 +83,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await context?.close();
+  cleanupProfileDir(userDataDir);
   await new Promise((resolveClose) => server?.close(resolveClose));
 });
 

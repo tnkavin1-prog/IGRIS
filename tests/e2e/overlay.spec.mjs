@@ -9,10 +9,10 @@
 import { test, expect, chromium } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { cleanupProfileDir, createProfileDir } from './profile-dir.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const extensionDir = join(root, 'release', 'chrome-extension');
@@ -40,6 +40,7 @@ let panel;
 let page;
 let server;
 let tabId;
+let profileDir;
 
 test.beforeAll(async () => {
   server = createServer((_request, response) => {
@@ -49,7 +50,8 @@ test.beforeAll(async () => {
   await new Promise((done) => server.listen(0, '127.0.0.1', done));
   const url = `http://127.0.0.1:${server.address().port}/`;
 
-  context = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'gbl-overlay-')), {
+  profileDir = createProfileDir('gbl-overlay-');
+  context = await chromium.launchPersistentContext(profileDir, {
     headless: false,
     viewport: { width: 1000, height: 900 },
     args: [
@@ -79,6 +81,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await context?.close();
+  cleanupProfileDir(profileDir);
   await new Promise((done) => server?.close(done));
 });
 

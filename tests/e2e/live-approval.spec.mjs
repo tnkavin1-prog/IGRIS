@@ -8,11 +8,11 @@
  */
 import { test, expect, chromium } from '@playwright/test';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { cleanupProfileDir, createProfileDir } from './profile-dir.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const extensionDir = join(root, 'release', 'chrome-extension');
@@ -58,6 +58,7 @@ function json(response, status, body) {
 
 let context;
 let panel;
+let profileDir;
 let bridgeServer;
 let bridgeUrl;
 let fixturePage;
@@ -173,7 +174,8 @@ test.beforeAll(async () => {
 
   live = { socket: null, setup: null, messages: [], waiters: [] };
 
-  context = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'gbl-live-e2e-')), {
+  profileDir = createProfileDir('gbl-live-e2e-');
+  context = await chromium.launchPersistentContext(profileDir, {
     headless: false,
     viewport: { width: 440, height: 940 },
     args: [
@@ -234,6 +236,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await context?.close();
+  cleanupProfileDir(profileDir);
   await new Promise((done) => bridgeServer?.close(done));
 });
 

@@ -1,14 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import {
-  copyFileSync,
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  rmSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build, Platform, Arch } from 'electron-builder';
@@ -56,7 +47,13 @@ const bundle = spawnSync(process.execPath, [join(desktop, 'scripts/build.mjs')],
 });
 if (bundle.status !== 0) throw new Error('Desktop bundle failed.');
 if (!process.env.CSC_LINK) process.env.CSC_IDENTITY_AUTO_DISCOVERY = 'false';
-const staging = mkdtempSync(join(tmpdir(), 'gemetron-package-'));
+// Stage inside the repository instead of the system temp directory: the
+// staging folder holds a full unpacked Electron build (~370 MB), and leaving
+// those behind in %TEMP% filled the system drive.
+const stagingRoot = join(root, 'temp', 'package-staging');
+rmSync(stagingRoot, { recursive: true, force: true });
+mkdirSync(stagingRoot, { recursive: true });
+const staging = join(stagingRoot, 'stage');
 await build({
   projectDir: desktop,
   targets: Platform.WINDOWS.createTarget('nsis', Arch.x64),
@@ -84,3 +81,6 @@ if (existsSync(unpackedSource)) {
 }
 console.log(`Installer output: ${release}`);
 console.log(`Unpacked application for verification: ${unpackedTarget}`);
+
+// The staging build has served its purpose once the artifacts are copied.
+rmSync(stagingRoot, { recursive: true, force: true });

@@ -8,10 +8,10 @@
  */
 import { test, expect, chromium } from '@playwright/test';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { cleanupProfileDir, createProfileDir } from './profile-dir.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const extensionDir = join(root, 'release', 'chrome-extension');
@@ -33,6 +33,7 @@ const extensionId = extensionIdFromKey(manifest.key);
 
 let context;
 let panel;
+let profileDir;
 
 // The accessibility tree is what NVDA/VoiceOver actually consume. axe checks
 // rules; this checks the computed name/role/state that reaches the synthesizer.
@@ -134,7 +135,8 @@ async function focusIsInsideDialog() {
 }
 
 test.beforeAll(async () => {
-  context = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'gbl-a11y-')), {
+  profileDir = createProfileDir('gbl-a11y-');
+  context = await chromium.launchPersistentContext(profileDir, {
     headless: false,
     viewport: { width: 440, height: 940 },
     args: [
@@ -161,6 +163,7 @@ test.afterAll(async () => {
     );
   }
   await context?.close();
+  cleanupProfileDir(profileDir);
 });
 
 test('onboarding has no WCAG A/AA violations', async () => {
