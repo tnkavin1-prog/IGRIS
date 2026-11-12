@@ -20,7 +20,7 @@
 [CmdletBinding()]
 param (
     [int]$Port = 9222,
-    [string]$UserDataDir = "E:\Gematron\.chrome-debug-profile",
+    [string]$UserDataDir = (Join-Path (Split-Path -Parent $PSScriptRoot) ".chrome-debug-profile"),
     [string]$Url = "https://arena.ai/c/01a1c009-84f1-7542-be3f-6d258f0bb652",
     [int]$TimeoutSec = 15
 )

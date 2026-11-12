@@ -10,7 +10,7 @@ echo ========================================================
 echo(
 
 cd /d "%~dp0.."
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "E:\Gematron\scripts\launch-all.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0launch-all.ps1"
 
 if errorlevel 1 goto :failed
 

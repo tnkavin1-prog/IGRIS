@@ -1,10 +1,10 @@
 import { EventEmitter } from 'node:events';
-import crypto from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { LOGS_DIR } from './runtime-paths.js';
 
 export type UserRole = 'viewer' | 'operator' | 'admin';
-
 export interface AuditEntry {
   sequence: number;
   timestamp: number;
@@ -14,127 +14,79 @@ export interface AuditEntry {
   prevHash: string;
   hash: string;
 }
-
-export interface SecurityCheckResult {
-  allowed: boolean;
-  reason?: string;
-}
-
 export interface SecurityAuditorOptions {
   mockMode?: boolean;
   auditFilePath?: string;
 }
+const GENESIS = '0'.repeat(64);
 
 export class SecurityAuditor extends EventEmitter {
-  private mockMode: boolean;
   private auditFilePath: string;
-  private lastHash = '0000000000000000000000000000000000000000000000000000000000000000';
-  private sequence = 0;
   private memoryLogs: AuditEntry[] = [];
+  private writable: boolean;
 
   constructor(options: SecurityAuditorOptions = {}) {
     super();
-    this.mockMode = Boolean(options.mockMode);
-    this.auditFilePath = options.auditFilePath || 'E:\\Gematron\\logs\\audit.jsonl';
+    this.writable = !options.mockMode;
+    this.auditFilePath = options.auditFilePath || join(LOGS_DIR, 'audit.jsonl');
+    if (this.writable && existsSync(this.auditFilePath)) {
+      this.memoryLogs = readFileSync(this.auditFilePath, 'utf8')
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      if (!this.verifyChainIntegrity())
+        throw new Error('Audit chain integrity failed; existing log was not modified.');
+    }
   }
 
-  /**
-   * Enforces the Non-Negotiable E: Drive Storage Restriction.
-   * Strictly forbids writing project files, logs, temp data, or outputs to C:.
-   */
-  public validateStoragePath(targetPath: string): SecurityCheckResult {
-    const normalized = path.normalize(targetPath).toLowerCase();
-    if (normalized.startsWith('c:') && !normalized.includes('windows\\temp')) {
-      return {
-        allowed: false,
-        reason:
-          'CRITICAL SECURITY VIOLATION: Absolute E: Drive Storage Restriction prohibits writing project data to C: Drive.',
-      };
-    }
-    return { allowed: true };
+  private hash(entry: Omit<AuditEntry, 'hash'>): string {
+    return createHash('sha256')
+      .update(
+        `${entry.sequence}|${entry.timestamp}|${entry.action}|${entry.role}|${JSON.stringify(entry.details)}|${entry.prevHash}`,
+      )
+      .digest('hex');
   }
 
-  /**
-   * Enforces Role-Based Access Control.
-   */
-  public checkPermission(
-    role: UserRole,
-    operation: 'read' | 'execute' | 'admin_override',
-  ): SecurityCheckResult {
-    if (operation === 'read') return { allowed: true };
-    if (operation === 'execute') {
-      if (role === 'operator' || role === 'admin') return { allowed: true };
-      return { allowed: false, reason: 'Execute permission requires operator or admin role.' };
-    }
-    if (operation === 'admin_override') {
-      if (role === 'admin') return { allowed: true };
-      return { allowed: false, reason: 'Admin override requires admin role.' };
-    }
-    return { allowed: false, reason: 'Unknown operation.' };
-  }
-
-  /**
-   * Records an immutable, cryptographically chained audit log entry.
-   */
   public logAudit(
     action: string,
     role: UserRole,
     details: Record<string, unknown> = {},
   ): AuditEntry {
-    this.sequence += 1;
-    const timestamp = Date.now();
-    const prevHash = this.lastHash;
-
-    const payload = `${this.sequence}|${timestamp}|${action}|${role}|${JSON.stringify(details)}|${prevHash}`;
-    const hash = crypto.createHash('sha256').update(payload).digest('hex');
-
-    const entry: AuditEntry = {
-      sequence: this.sequence,
-      timestamp,
+    const previous = this.memoryLogs.at(-1);
+    const unsigned = {
+      sequence: (previous?.sequence ?? 0) + 1,
+      timestamp: Date.now(),
       action,
       role,
-      details,
-      prevHash,
-      hash,
+      details: structuredClone(details),
+      prevHash: previous?.hash ?? GENESIS,
     };
-
-    this.lastHash = hash;
-    this.memoryLogs.push(entry);
-    this.emit('audit:logged', entry);
-
-    if (!this.mockMode) {
+    const entry: AuditEntry = { ...unsigned, hash: this.hash(unsigned) };
+    if (this.writable) {
       try {
-        const dir = path.dirname(this.auditFilePath);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.appendFileSync(this.auditFilePath, JSON.stringify(entry) + '\n', 'utf8');
+        mkdirSync(dirname(this.auditFilePath), { recursive: true });
+        appendFileSync(this.auditFilePath, JSON.stringify(entry) + '\n', 'utf8');
       } catch {
-        /* ignore write errors */
+        this.writable = false;
+        console.warn('[Audit] Disk logging unavailable; remaining records are in memory only.');
+        this.emit('audit:write-error');
       }
     }
-
-    return entry;
+    this.memoryLogs.push(entry);
+    this.emit('audit:logged', structuredClone(entry));
+    return structuredClone(entry);
   }
 
   public getAuditTrail(): AuditEntry[] {
-    return [...this.memoryLogs];
+    return structuredClone(this.memoryLogs);
   }
 
   public verifyChainIntegrity(): boolean {
-    for (let i = 0; i < this.memoryLogs.length; i++) {
-      const entry = this.memoryLogs[i];
-      if (!entry) continue;
-      const prevEntry = i > 0 ? this.memoryLogs[i - 1] : undefined;
-      const prevHash = prevEntry
-        ? prevEntry.hash
-        : '0000000000000000000000000000000000000000000000000000000000000000';
-      if (entry.prevHash !== prevHash) return false;
-
-      const payload = `${entry.sequence}|${entry.timestamp}|${entry.action}|${entry.role}|${JSON.stringify(entry.details)}|${prevHash}`;
-      const expected = crypto.createHash('sha256').update(payload).digest('hex');
-      if (entry.hash !== expected) return false;
-    }
-    return true;
+    return this.memoryLogs.every(
+      (entry, i) =>
+        entry.sequence === i + 1 &&
+        entry.prevHash === (this.memoryLogs[i - 1]?.hash ?? GENESIS) &&
+        entry.hash === this.hash(entry),
+    );
   }
 }
-
-export const securityAuditor = new SecurityAuditor();

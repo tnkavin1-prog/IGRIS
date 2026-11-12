@@ -1,4 +1,4 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-call "E:\Gematron\scripts\launch-gematron.bat"
+call "%~dp0scripts\launch-gematron.bat"

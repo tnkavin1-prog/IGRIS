@@ -1,13 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 
 describe('Desktop Shortcut Generator Script', () => {
-  const repoRoot = 'E:\\Gematron';
+  const repoRoot = fileURLToPath(new URL('../../../', import.meta.url)).replace(/[\\/]$/, '');
   const scriptPath = join(repoRoot, 'scripts', 'create-desktop-shortcut.ps1');
 
-  it('exists on E:\\Gematron\\scripts', () => {
+  it('exists in the checkout scripts directory', () => {
     expect(existsSync(scriptPath)).toBe(true);
   });
 
@@ -23,7 +25,7 @@ describe('Desktop Shortcut Generator Script', () => {
   it('generates a valid .lnk file when executed on Windows', () => {
     if (process.platform !== 'win32') return;
 
-    const testDir = join(repoRoot, 'notes', 'test_shortcut');
+    const testDir = mkdtempSync(join(tmpdir(), 'gemetron-shortcut-test-'));
     const targetLnk = join(testDir, 'JARVIS AI Assistant.lnk');
 
     try {

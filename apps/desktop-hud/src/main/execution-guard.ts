@@ -37,6 +37,10 @@ const EXACTLY_ONCE_WINDOWS_MS: Record<string, number> = {
 };
 
 const SERIALIZED_TOOLS = new Set([
+  'browser_click',
+  'browser_fill_form',
+  'browser_upload_files',
+  'execute_application_skill',
   'computer_uia_invoke',
   'computer_uia_set_value',
   'computer_use_click',

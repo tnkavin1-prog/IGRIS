@@ -1,9 +1,8 @@
-# E:\Gematron\scripts\launch-all.ps1
 # Master launcher for Project Gematron Autonomous AI System
 # Starts OpenCode Daemon (4096), Local Bridge Server (47821), and launches Electron Floating HUD.
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = "E:\Gematron"
+$repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
 if (-not (Test-Path "$repoRoot\logs")) {
@@ -12,7 +11,7 @@ if (-not (Test-Path "$repoRoot\logs")) {
 
 Write-Host "========================================================" -ForegroundColor Cyan
 Write-Host "  PROJECT GEMATRON - MASTER SYSTEM LAUNCHER             " -ForegroundColor White
-Write-Host "  Storage: $repoRoot (E: Drive Only)                   " -ForegroundColor Gray
+Write-Host "  Storage: $repoRoot                    " -ForegroundColor Gray
 Write-Host "========================================================" -ForegroundColor Cyan
 Write-Host ""
 

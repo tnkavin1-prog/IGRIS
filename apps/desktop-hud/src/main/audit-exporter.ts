@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { SessionExportPayload } from './types.js';
+import { NOTES_DIR } from './runtime-paths.js';
 
 function escapeHtml(str: string): string {
   return str
@@ -482,7 +483,7 @@ export function generateAuditHtml(payload: SessionExportPayload): string {
  */
 export function exportAuditSession(
   payload: SessionExportPayload,
-  notesDir = 'E:\\Gematron\\notes',
+  notesDir = NOTES_DIR,
 ): { ok: boolean; mdPath?: string; htmlPath?: string; filename?: string; error?: string } {
   try {
     if (!existsSync(notesDir)) {

@@ -1,8 +1,8 @@
-# E:\Gematron\scripts\start-opencode-server.ps1
 # Ensures OpenCode HTTP API Server is running on port 4096 with known credentials
 
 $Port = 4096
-$PasswordFile = "E:\Gematron\logs\opencode-server-password.txt"
+$RepoRoot = Split-Path -Parent $PSScriptRoot
+$PasswordFile = Join-Path $RepoRoot "logs\opencode-server-password.txt"
 
 # --- Resolve the OpenCode CLI executable -------------------------------
 # The CLI can live in several places depending on how OpenCode was
@@ -65,15 +65,15 @@ if (-not $CliPath) {
 Write-Host "[OpenCode Server] Starting daemon on port $Port..." -ForegroundColor Yellow
 Write-Host "[OpenCode Server] Using CLI: $CliPath" -ForegroundColor DarkGray
 
-if (-not (Test-Path -LiteralPath 'E:\Gematron')) {
-    Write-Host "[OpenCode Server] ERROR: Working directory E:\Gematron does not exist." -ForegroundColor Red
+if (-not (Test-Path -LiteralPath $RepoRoot)) {
+    Write-Host "[OpenCode Server] ERROR: Working directory $RepoRoot does not exist." -ForegroundColor Red
     exit 1
 }
 
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = $CliPath
 $psi.Arguments = "serve --port $Port"
-$psi.WorkingDirectory = "E:\Gematron"
+$psi.WorkingDirectory = $RepoRoot
 $psi.UseShellExecute = $false
 $psi.RedirectStandardOutput = $true
 $psi.RedirectStandardError = $true

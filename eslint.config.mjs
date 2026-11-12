@@ -95,6 +95,13 @@ export default tseslint.config(
     },
   },
   {
+    files: ['apps/desktop-hud/electron-builder.config.cjs'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: { ...globals.node },
+    },
+  },
+  {
     files: ['apps/desktop-hud/src/main/**/*.ts'],
     languageOptions: {
       globals: { ...globals.node },

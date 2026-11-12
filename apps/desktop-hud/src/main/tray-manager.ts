@@ -1,6 +1,7 @@
 import { Tray, Menu, app, shell, nativeImage } from 'electron';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { ICON_PATH, NOTES_DIR } from './runtime-paths.js';
 
 export interface TrayManagerCallbacks {
   onSummon?: () => void;
@@ -43,13 +44,13 @@ export class TrayManager {
 
   constructor(options: TrayManagerOptions = {}) {
     this.callbacks = options.callbacks || {};
-    this.iconPath = options.iconPath || resolve('E:\\Gematron\\assets\\icons\\jarvis.ico');
+    this.iconPath = options.iconPath || resolve(ICON_PATH);
     this.mockMode =
       options.mockMode ??
       (typeof Tray === 'undefined' ||
         typeof Menu === 'undefined' ||
         typeof Menu.buildFromTemplate !== 'function');
-    this.notesDir = options.notesDir || 'E:\\Gematron\\notes';
+    this.notesDir = options.notesDir || NOTES_DIR;
   }
 
   public setMockMode(enabled: boolean): void {

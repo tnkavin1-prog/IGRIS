@@ -22,6 +22,7 @@ import { NativeInputService } from '../native-input.js';
 import { screenGrounding } from '../screen-grounding.js';
 import { ComputerVisionService } from '../computer-vision.js';
 import { downloadManager } from '../download-manager.js';
+import { DOWNLOADS_DIR } from '../runtime-paths.js';
 
 const am = new AppManagerService();
 const ni = new NativeInputService();
@@ -705,9 +706,7 @@ export class BlenderGUISkill implements ApplicationSkill {
         }
 
         case 'renderScene': {
-          const outputPath = String(
-            params.outputPath || join('E:\\Gematron\\downloads', 'render.png'),
-          );
+          const outputPath = String(params.outputPath || join(DOWNLOADS_DIR, 'render.png'));
           const format = String(params.format || 'png');
 
           await this.focusBlender();
@@ -732,9 +731,7 @@ export class BlenderGUISkill implements ApplicationSkill {
         }
 
         case 'saveBlend': {
-          const filePath = String(
-            params.filePath || join('E:\\Gematron\\downloads', 'scene.blend'),
-          );
+          const filePath = String(params.filePath || join(DOWNLOADS_DIR, 'scene.blend'));
 
           await this.focusBlender();
           await this.settle(500);

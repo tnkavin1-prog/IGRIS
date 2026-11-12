@@ -10,6 +10,7 @@
 
 import crypto from 'node:crypto';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 import { ArenaCDPDriver } from './lib/arena-cdp-driver.mjs';
 import { CodeSyncer } from './lib/code-syncer.mjs';
@@ -20,7 +21,8 @@ import {
   formatToolResults,
 } from './lib/kimi-agent-core.mjs';
 
-const PROJECT_ROOT = 'E:\\Gematron';
+const PROJECT_ROOT =
+  process.env.GEMATRON_ROOT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function log(msg, color = '\x1b[36m') {
   const ts = new Date().toLocaleTimeString();

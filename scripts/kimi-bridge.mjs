@@ -13,13 +13,15 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import readline from 'node:readline';
 
 import { packContext, DEFAULT_MAX_CHARS } from './lib/context-packer.mjs';
 import { ArenaCDPDriver } from './lib/arena-cdp-driver.mjs';
 import { CodeSyncer } from './lib/code-syncer.mjs';
 
-export const PROJECT_ROOT = 'E:\\Gematron';
+export const PROJECT_ROOT =
+  process.env.GEMATRON_ROOT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DEFAULT_ARENA_URL = 'https://arena.ai/c/01a1c009-84f1-7542-be3f-6d258f0bb652';
 export const DEFAULT_CDP_PORT = 9222;
 export const DEFAULT_CDP_HOST = '127.0.0.1';

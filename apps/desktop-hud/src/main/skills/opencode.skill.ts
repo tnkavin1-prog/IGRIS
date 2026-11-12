@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { LOGS_DIR, REPO_ROOT } from '../runtime-paths.js';
 import type { ApplicationSkill, SkillActionDefinition, SkillResult } from '../skill-framework.js';
 
 export interface OpenCodeSkillOptions {
@@ -23,8 +24,7 @@ export class OpenCodeSkill implements ApplicationSkill {
     this.mockMode = Boolean(options.mockMode);
     this.serverUrl =
       options.serverUrl || process.env.OPENCODE_SERVER_URL || 'http://127.0.0.1:4096';
-    this.passwordFile =
-      options.passwordFile || join('E:\\Gematron', 'logs', 'opencode-server-password.txt');
+    this.passwordFile = options.passwordFile || join(LOGS_DIR, 'opencode-server-password.txt');
   }
 
   private getAuthHeader(): string {
@@ -168,7 +168,7 @@ export class OpenCodeSkill implements ApplicationSkill {
               title,
               agent: 'build',
               model: { id: model, providerID: 'opencode' },
-              location: { directory: 'E:\\Gematron' },
+              location: { directory: REPO_ROOT },
             }),
           });
           if (!sessRes.ok) throw new Error(`Failed to create session: HTTP ${sessRes.status}`);

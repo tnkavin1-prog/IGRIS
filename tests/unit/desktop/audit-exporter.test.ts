@@ -1,5 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { existsSync, unlinkSync, mkdirSync, readFileSync } from 'node:fs';
+import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest';
+import { existsSync, unlinkSync, mkdirSync, mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   generateAuditMarkdown,
   generateAuditHtml,
@@ -8,7 +10,8 @@ import {
 import type { SessionExportPayload } from '../../../apps/desktop-hud/src/main/types.js';
 
 describe('Audit Exporter', () => {
-  const testDir = 'E:\\Gematron\\notes\\test_audit';
+  const testDir = mkdtempSync(join(tmpdir(), 'gemetron-audit-test-'));
+  afterAll(() => rmSync(testDir, { recursive: true, force: true }));
 
   const mockPayload: SessionExportPayload = {
     conversation: [

@@ -1,40 +1,42 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { SecurityAuditor } from '../../../apps/desktop-hud/src/main/security-auditor.js';
-
-describe('SecurityAuditor & RBAC', () => {
-  let auditor: SecurityAuditor;
-
-  beforeEach(() => {
-    auditor = new SecurityAuditor({ mockMode: true });
-  });
-
-  it('strictly validates and rejects writes targeting C: drive', () => {
-    const invalid = auditor.validateStoragePath('C:\\Users\\tnkav\\project\\file.ts');
-    expect(invalid.allowed).toBe(false);
-    expect(invalid.reason).toContain('E: Drive Storage Restriction');
-
-    const valid = auditor.validateStoragePath('E:\\Gematron\\temp\\report.docx');
-    expect(valid.allowed).toBe(true);
-  });
-
-  it('enforces RBAC permissions based on user role', () => {
-    expect(auditor.checkPermission('viewer', 'read').allowed).toBe(true);
-    expect(auditor.checkPermission('viewer', 'execute').allowed).toBe(false);
-
-    expect(auditor.checkPermission('operator', 'execute').allowed).toBe(true);
-    expect(auditor.checkPermission('operator', 'admin_override').allowed).toBe(false);
-
-    expect(auditor.checkPermission('admin', 'admin_override').allowed).toBe(true);
-  });
-
-  it('records tamper-evident cryptographically chained audit entries', () => {
-    const e1 = auditor.logAudit('workflow:start', 'operator', { goal: 'Open Notepad' });
-    const e2 = auditor.logAudit('emergency:stop', 'admin', { reason: 'Killswitch' });
-
-    expect(e1.sequence).toBe(1);
-    expect(e2.sequence).toBe(2);
-    expect(e2.prevHash).toBe(e1.hash);
-
+const dirs: string[] = [];
+afterEach(() => {
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+function path() {
+  const dir = mkdtempSync(join(tmpdir(), 'gemetron-audit-'));
+  dirs.push(dir);
+  return join(dir, 'audit.jsonl');
+}
+describe('SecurityAuditor', () => {
+  it('chains records and protects them from external mutation', () => {
+    const auditor = new SecurityAuditor({ mockMode: true });
+    const first = auditor.logAudit('tool:started', 'operator', { tool: 'fixture' });
+    const second = auditor.logAudit('tool:completed', 'operator', { success: true });
+    expect(second.prevHash).toBe(first.hash);
+    first.details.tool = 'tampered';
+    auditor.getAuditTrail()[0]!.details.tool = 'changed';
     expect(auditor.verifyChainIntegrity()).toBe(true);
+  });
+  it('continues the disk chain across process restarts', () => {
+    const auditFilePath = path();
+    const first = new SecurityAuditor({ auditFilePath }).logAudit('tool:started', 'operator');
+    const next = new SecurityAuditor({ auditFilePath });
+    const second = next.logAudit('tool:completed', 'operator');
+    expect(second.sequence).toBe(2);
+    expect(second.prevHash).toBe(first.hash);
+    expect(new SecurityAuditor({ auditFilePath }).verifyChainIntegrity()).toBe(true);
+  });
+  it('rejects a corrupted chain without modifying the file', () => {
+    const auditFilePath = path();
+    new SecurityAuditor({ auditFilePath }).logAudit('tool:started', 'operator');
+    const corrupted = readFileSync(auditFilePath, 'utf8').replace('tool:started', 'tool:forged');
+    writeFileSync(auditFilePath, corrupted);
+    expect(() => new SecurityAuditor({ auditFilePath })).toThrow('integrity failed');
+    expect(readFileSync(auditFilePath, 'utf8')).toBe(corrupted);
   });
 });

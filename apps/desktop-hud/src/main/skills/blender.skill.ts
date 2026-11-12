@@ -2,6 +2,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync, promises as fs } from 'node:fs';
 import { join } from 'node:path';
+import { TEMP_DIR } from '../runtime-paths.js';
 import type { ApplicationSkill, SkillActionDefinition, SkillResult } from '../skill-framework.js';
 
 const execAsync = promisify(exec);
@@ -136,7 +137,7 @@ export class BlenderSkill implements ApplicationSkill {
         const exe = await this.findBlenderExecutable();
         if (!exe) return { success: false, error: 'Blender is not installed.' };
 
-        const tempScript = join('E:\\Gematron\\temp', `blender_${Date.now()}.py`);
+        const tempScript = join(TEMP_DIR, `blender_${Date.now()}.py`);
         try {
           await fs.writeFile(tempScript, code, 'utf8');
           const fileArg = blendFile && existsSync(blendFile) ? `"${blendFile}" ` : '';
@@ -155,7 +156,7 @@ export class BlenderSkill implements ApplicationSkill {
 
       case 'renderScene': {
         const blendFile = String(params.blendFile || params.blendFilePath || '').trim();
-        const outputImg = String(params.outputImg || 'E:\\Gematron\\temp\\render.png').trim();
+        const outputImg = String(params.outputImg || join(TEMP_DIR, 'render.png')).trim();
         if (this.mockMode) {
           return { success: true, data: { rendered: true, outputImg } };
         }

@@ -15,7 +15,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
-const PROJECT_ROOT = 'E:\\Gematron';
+const PROJECT_ROOT =
+  process.env.GEMATRON_ROOT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PASSWORD_FILE = path.join(PROJECT_ROOT, 'logs', 'opencode-server-password.txt');
 const SERVER_URL = process.env.OPENCODE_SERVER_URL || 'http://127.0.0.1:4096';
 

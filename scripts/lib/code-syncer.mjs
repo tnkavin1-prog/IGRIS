@@ -12,6 +12,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import * as esbuild from 'esbuild';
 
@@ -304,7 +305,7 @@ export function atomicWriteFile(destPath, content) {
 export class CodeSyncer {
   /**
    * @param {object} [options={}]
-   * @param {string} [options.projectRoot] - Workspace root (defaults to GEMATRON_ROOT or 'E:\\Gematron')
+   * @param {string} [options.projectRoot] - Workspace root (defaults to GEMATRON_ROOT or the repo root)
    * @param {string} [options.backupDir] - Backups root (defaults to <projectRoot>/backups/kimi-history)
    */
   constructor(options = {}) {
@@ -312,7 +313,7 @@ export class CodeSyncer {
       options.projectRoot ||
         process.env.GEMATRON_ROOT ||
         process.env.PROJECT_ROOT ||
-        'E:\\Gematron',
+        path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..'),
     );
     this.backupDir = path.resolve(
       options.backupDir || path.join(this.projectRoot, 'backups', 'kimi-history'),

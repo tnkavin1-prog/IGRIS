@@ -2,6 +2,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync, promises as fs } from 'node:fs';
 import { join } from 'node:path';
+import { TEMP_DIR } from '../runtime-paths.js';
 import type { ApplicationSkill, SkillActionDefinition, SkillResult } from '../skill-framework.js';
 
 const execAsync = promisify(exec);
@@ -127,7 +128,7 @@ export class CreativeSkill implements ApplicationSkill {
           };
         }
 
-        const tempScript = join('E:\\Gematron\\temp', `adobe_${Date.now()}.jsx`);
+        const tempScript = join(TEMP_DIR, `adobe_${Date.now()}.jsx`);
         try {
           await fs.writeFile(tempScript, scriptContent, 'utf8');
           // Windows file association trigger for Adobe JSX
