@@ -638,9 +638,22 @@ export function CompactHUD({
                   <div className="aph">
                     <HudIcon name="shield" size={14} />
                     Approval needed
+                    {pendingApproval.step.riskLevel && pendingApproval.step.riskLevel !== 'safe' ? (
+                      <span className={`apr apr-${pendingApproval.step.riskLevel}`}>
+                        {pendingApproval.step.riskLevel}
+                      </span>
+                    ) : null}
                   </div>
                   <p>{pendingApproval.step.description}</p>
-                  <small>Confirm to execute this high-impact action.</small>
+                  <small>
+                    {pendingApproval.step.actionType === 'run_command'
+                      ? 'This command runs on your machine. Review it before you allow it.'
+                      : 'Confirm to execute this high-impact action.'}
+                  </small>
+                  {pendingApproval.step.actionType === 'run_command' &&
+                  typeof pendingApproval.step.params?.command === 'string' ? (
+                    <code className="apc">{pendingApproval.step.params.command}</code>
+                  ) : null}
                   <div className="apb">
                     <button
                       className="btn ghost sm"

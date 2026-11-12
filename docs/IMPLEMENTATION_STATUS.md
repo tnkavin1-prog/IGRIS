@@ -29,7 +29,7 @@ Current final typecheck, unit, lint, build, and E2E outcomes are recorded below 
 
 ## Separate Chrome extension
 
-The extension has its own 52-tool catalog, semantic element registry, mandatory consequential-action approval policy, and bridge-minted ephemeral-token session manager. Its reconnect/resumption, origin/host checks, and consent policy must not be represented as desktop protections. Older extension-specific evidence is in [TEST_REPORT.md](TEST_REPORT.md).
+The extension has its own 52-tool catalog, semantic element registry, mandatory consequential-action approval policy, and bridge-minted ephemeral-token session manager. Automatic approval is opt-in, and the optional desktop control token for the native HUD can be pasted in from the extension's connection settings. Its reconnect/resumption, origin/host checks, and consent policy must not be represented as desktop protections. Older extension-specific evidence is in [TEST_REPORT.md](TEST_REPORT.md).
 
 Prompt framing is a mitigation, not proof against arbitrary prompt injection. Neither surface should be treated as a multi-user network service.
 
@@ -45,6 +45,7 @@ Prompt framing is a mitigation, not proof against arbitrary prompt injection. Ne
 | CDP deep DOM           | Text lookup, clicks, typing, and uploads traverse open shadow roots and same-origin iframes with frame-chain coordinate translation; scrolling picks one strategy (container, else one wheel event)       | 4 new CDP tests assert deep-query helpers, frame translation, single container scroll, and a single wheel fallback.                             |
 | Extension approval      | Automatic approval is now opt-in on the extension too: a missing stored value can no longer switch it on, so a fresh install always asks before a consequential action             | 2 new storage unit tests plus the offline Live approval end-to-end suite, which gates a submit-like click, traps focus and honours a denial.      |
 | Overlay chrome          | The overlay panel renders its drag strip with minimize-to-orb, dock-to-side-panel and close controls, and the host resizes the frame to the active view (pill, panel, orb, expanded) | Overlay end-to-end suite covers the default panel, the expanded surface, the orb, closing, and that a second request does not stack a second frame. |
+| Approval transparency   | The desktop approval card shows the risk tier of the step and the exact command that would run, so the decision is informed                          | The HUD renders the risk badge and the command text for `run_command` steps; the workflow tests assert the tier that reaches the renderer. |
 
 ## Remaining priorities
 

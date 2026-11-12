@@ -85,9 +85,9 @@ describe('ControlAuthService', () => {
     expect(auth.extract({ Authorization: 'Bearer upper' })).toBe('upper');
     expect(auth.extract({})).toBeNull();
     expect(auth.extract({ authorization: 'Basic xx' })).toBeNull();
-    expect(auth.extract({ authorization: ['Bearer arr'], 'x-gematron-control-token': 'tok2' })).toBe(
-      'arr',
-    );
+    expect(
+      auth.extract({ authorization: ['Bearer arr'], 'x-gematron-control-token': 'tok2' }),
+    ).toBe('arr');
   });
 
   it('survives a read-only token directory without crashing', () => {

@@ -279,8 +279,8 @@ export function SettingsPanel({
                   The native desktop HUD accepts a per-install token for its control API. Copy the{' '}
                   <code>control-token</code> file from the HUD data folder (
                   <code>%LOCALAPPDATA%\Gemetron</code>) and paste it here. The extension is already
-                  trusted by its own origin, so this is only needed for locked-down installations. It
-                  is stored in <code>chrome.storage.local</code> and never synced.
+                  trusted by its own origin, so this is only needed for locked-down installations.
+                  It is stored in <code>chrome.storage.local</code> and never synced.
                 </p>
                 <div className="secret-row">
                   <input

@@ -58,10 +58,7 @@ export class ControlServer {
    * address is already in use. A silent failure here is confusing: the HUD
    * looks healthy while a stale instance keeps serving the control API.
    */
-  public start(
-    getWindow: () => BrowserWindow | null,
-    cdpClient: CDPClient,
-  ): Promise<boolean> {
+  public start(getWindow: () => BrowserWindow | null, cdpClient: CDPClient): Promise<boolean> {
     return new Promise((resolve) => {
       const createAndListen = (retriesLeft = 3) => {
         this.server = createServer(async (req, res) => {
@@ -80,13 +77,25 @@ export class ControlServer {
 
           // --- Host pin (DNS-rebinding defense) ---
           if (!isLoopbackHost(req.headers.host, this.port)) {
-            this.reject(res, 403, 'Host header is not the loopback control endpoint.', 'control:host-rejected', req);
+            this.reject(
+              res,
+              403,
+              'Host header is not the loopback control endpoint.',
+              'control:host-rejected',
+              req,
+            );
             return;
           }
 
           // --- Origin policy: web origins are never served ---
           if (originDecision === 'reject-web') {
-            this.reject(res, 403, 'Web origins may not call the desktop control API.', 'control:origin-rejected', req);
+            this.reject(
+              res,
+              403,
+              'Web origins may not call the desktop control API.',
+              'control:origin-rejected',
+              req,
+            );
             return;
           }
 

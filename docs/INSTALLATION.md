@@ -219,6 +219,18 @@ Do not load the repository root — Chrome needs `manifest.json` at the folder r
 
 The secret is stored in `chrome.storage.local` and sent as a bearer token on every bridge request. It is never sent to Google.
 
+### Optional: the desktop control token
+
+The native desktop HUD exposes a loopback control API (`http://127.0.0.1:9228`) for summons and focus requests. The extension is trusted by its own `chrome-extension://` origin, so no token is needed for that path.
+
+If you want the desktop HUD to demand a shared secret as well:
+
+1. Open the file `%LOCALAPPDATA%\Gemetron\control-token` (or `<data dir>\control-token` when `GEMATRON_DATA_DIR` is set). It is created when the HUD starts.
+2. Open **Settings → Connection → Desktop control token** in the extension.
+3. Paste the file contents and press **Save**.
+
+The token is stored in `chrome.storage.local`, is never synced, and is only ever sent to `127.0.0.1`.
+
 ---
 
 ## 8. First session

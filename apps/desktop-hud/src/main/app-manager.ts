@@ -956,14 +956,14 @@ export class AppManagerService {
     return [];
   }
 
-/**
- * Run a system shell command with a capability/risk policy.
- *
- * Blocked commands never execute. Dangerous commands require an explicit
- * `approved: true` from a human decision (workflow approval step), so the
- * agent cannot silently escalate from a read-only query to a destructive
- * operation even when automatic approval is enabled for ordinary steps.
- */
+  /**
+   * Run a system shell command with a capability/risk policy.
+   *
+   * Blocked commands never execute. Dangerous commands require an explicit
+   * `approved: true` from a human decision (workflow approval step), so the
+   * agent cannot silently escalate from a read-only query to a destructive
+   * operation even when automatic approval is enabled for ordinary steps.
+   */
   public async runSystemCommand(
     command: string,
     options: {
@@ -1000,8 +1000,7 @@ export class AppManagerService {
     }
 
     // 2. Dangerous commands need a human decision.
-    const needsApproval =
-      assessment.risk === 'dangerous' || options.requiresApproval === true;
+    const needsApproval = assessment.risk === 'dangerous' || options.requiresApproval === true;
     if (needsApproval && options.approved !== true && options.allowDangerous !== true) {
       options.audit?.('command:approval-required', {
         command: cmd,
