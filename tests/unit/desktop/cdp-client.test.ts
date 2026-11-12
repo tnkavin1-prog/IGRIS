@@ -70,9 +70,9 @@ describe('CDPClient', () => {
 
     const tabs = await client.listTabs();
     expect(tabs.length).toBe(2);
-    expect(tabs[0].id).toBe('page1');
-    expect(tabs[0].title).toBe('SSC CGL Mock Exam');
-    expect(tabs[1].id).toBe('page2');
+    expect(tabs[0]?.id).toBe('page1');
+    expect(tabs[0]?.title).toBe('SSC CGL Mock Exam');
+    expect(tabs[1]?.id).toBe('page2');
 
     const status = await client.getStatus();
     expect(status.connected).toBe(true);
@@ -132,15 +132,18 @@ describe('CDPClient', () => {
       },
     ];
 
-    vi.spyOn(client as any, 'executeCDPCommand').mockImplementation(async (wsUrl: string) => {
-      if (wsUrl.includes('tab1')) {
-        return { result: { value: 'hidden' } };
-      }
-      if (wsUrl.includes('tab2')) {
-        return { result: { value: 'visible' } };
-      }
-      return { result: { value: 'unknown' } };
-    });
+    vi.spyOn(client as any, 'executeCDPCommand').mockImplementation(
+      async (wsUrl: unknown): Promise<any> => {
+        const url = String(wsUrl);
+        if (url.includes('tab1')) {
+          return { result: { value: 'hidden' } };
+        }
+        if (url.includes('tab2')) {
+          return { result: { value: 'visible' } };
+        }
+        return { result: { value: 'unknown' } };
+      },
+    );
 
     const active = await client.findActiveTab(tabs);
     expect(active).not.toBeNull();
@@ -212,29 +215,31 @@ describe('CDPClient', () => {
       ];
       vi.spyOn(client, 'listTabs').mockResolvedValue(mockTabs);
 
-      vi.spyOn(client as any, 'executeCDPCommand').mockImplementation(async (wsUrl: string) => {
-        if (wsUrl.includes('tab1')) {
+      vi.spyOn(client as any, 'executeCDPCommand').mockImplementation(
+        async (wsUrl: unknown): Promise<any> => {
+          if (String(wsUrl).includes('tab1')) {
+            return {
+              result: {
+                value: {
+                  bodyText:
+                    'General Intelligence and Reasoning. Question 1: What is quantitative aptitude score?',
+                  title: 'SSC CGL Mock Exam 2026',
+                  url: 'https://ssc.nic.in/exam',
+                },
+              },
+            };
+          }
           return {
             result: {
               value: {
-                bodyText:
-                  'General Intelligence and Reasoning. Question 1: What is quantitative aptitude score?',
-                title: 'SSC CGL Mock Exam 2026',
-                url: 'https://ssc.nic.in/exam',
+                bodyText: 'Artificial intelligence is intelligence demonstrated by machines.',
+                title: 'Wikipedia Article',
+                url: 'https://en.wikipedia.org/wiki/Artificial_intelligence',
               },
             },
           };
-        }
-        return {
-          result: {
-            value: {
-              bodyText: 'Artificial intelligence is intelligence demonstrated by machines.',
-              title: 'Wikipedia Article',
-              url: 'https://en.wikipedia.org/wiki/Artificial_intelligence',
-            },
-          },
-        };
-      });
+        },
+      );
 
       const res = await client.searchTabContent('quantitative aptitude');
       expect(res.totalTabs).toBe(2);
@@ -298,9 +303,7 @@ describe('CDPClient', () => {
         .spyOn(client, 'evaluate')
         .mockResolvedValue({ scrolled: true } as never);
       const wheelSpy = vi.spyOn(client, 'dispatchMouseWheel').mockResolvedValue(true);
-      const keySpy = vi
-        .spyOn(client as any, 'dispatchKeyEvent')
-        .mockResolvedValue({ result: {} });
+      const keySpy = vi.spyOn(client as any, 'dispatchKeyEvent').mockResolvedValue({ result: {} });
 
       const scrolled = await client.scroll('down', 450, 'tab1');
 
@@ -356,9 +359,7 @@ describe('CDPClient', () => {
 
     it('resolves click targets through the same deep DOM helpers', async () => {
       vi.spyOn(client, 'listTabs').mockResolvedValue([pageTab]);
-      const evaluateSpy = vi
-        .spyOn(client, 'evaluate')
-        .mockResolvedValue({ x: 10, y: 20 } as never);
+      const evaluateSpy = vi.spyOn(client, 'evaluate').mockResolvedValue({ x: 10, y: 20 } as never);
       const clickAtSpy = vi.spyOn(client, 'clickAt').mockResolvedValue(true);
 
       const clicked = await client.click('#deep-button', 'tab1');

@@ -29,8 +29,10 @@ describe('AgenticWorkflowEngine', () => {
     vi.spyOn(cdpClient, 'navigate').mockResolvedValue({ ok: true, url: 'https://www.google.com' });
     vi.spyOn(cdpClient, 'readPage').mockResolvedValue({
       title: 'Google Search',
+      url: 'https://www.google.com',
+      text: 'Sample text excerpt',
       headings: ['Search Results'],
-      textExcerpt: 'Sample text excerpt',
+      untrusted: true,
     });
 
     nativeInput = new NativeInputService({ mockMode: true });

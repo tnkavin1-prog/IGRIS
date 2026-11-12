@@ -1,29 +1,30 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { TrayManager } from '../../../apps/desktop-hud/src/main/tray-manager.js';
+import type { TrayManagerCallbacks } from '../../../apps/desktop-hud/src/main/tray-manager.js';
 
 describe('TrayManager - Windows System Tray & Background Daemon', () => {
-  let callbacks: {
-    onSummon: ReturnType<typeof vi.fn>;
-    onKillswitch: ReturnType<typeof vi.fn>;
-    onDesktopRadar: ReturnType<typeof vi.fn>;
-    onVisualBlackboard: ReturnType<typeof vi.fn>;
-    onToggleSoundMute: ReturnType<typeof vi.fn>;
-    onOpenNotes: ReturnType<typeof vi.fn>;
-    onExit: ReturnType<typeof vi.fn>;
-    getStatus: ReturnType<typeof vi.fn>;
+  let callbacks: TrayManagerCallbacks & {
+    onSummon: Mock<() => void>;
+    onKillswitch: Mock<() => void>;
+    onDesktopRadar: Mock<() => void>;
+    onVisualBlackboard: Mock<() => void>;
+    onToggleSoundMute: Mock<() => void>;
+    onOpenNotes: Mock<() => void>;
+    onExit: Mock<() => void>;
+    getStatus: Mock<() => string>;
   };
   let trayManager: TrayManager;
 
   beforeEach(() => {
     callbacks = {
-      onSummon: vi.fn(),
-      onKillswitch: vi.fn(),
-      onDesktopRadar: vi.fn(),
-      onVisualBlackboard: vi.fn(),
-      onToggleSoundMute: vi.fn(),
-      onOpenNotes: vi.fn(),
-      onExit: vi.fn(),
-      getStatus: vi.fn().mockReturnValue('Idle'),
+      onSummon: vi.fn<() => void>(),
+      onKillswitch: vi.fn<() => void>(),
+      onDesktopRadar: vi.fn<() => void>(),
+      onVisualBlackboard: vi.fn<() => void>(),
+      onToggleSoundMute: vi.fn<() => void>(),
+      onOpenNotes: vi.fn<() => void>(),
+      onExit: vi.fn<() => void>(),
+      getStatus: vi.fn<() => string>().mockReturnValue('Idle'),
     };
 
     trayManager = new TrayManager({

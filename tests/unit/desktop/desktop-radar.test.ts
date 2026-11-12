@@ -32,7 +32,9 @@ describe('Desktop Radar - Active Applications & Window Management', () => {
 
   it('focuses an application window by numeric HWND', async () => {
     const wins = await appManager.listRunningWindows();
-    const targetHwnd = wins[0].hwnd;
+    const targetHwnd = wins[0]?.hwnd;
+    expect(targetHwnd).toBeDefined();
+    if (targetHwnd === undefined) throw new Error('no window to focus');
 
     const ok = await appManager.focusWindow(targetHwnd);
     expect(ok).toBe(true);
@@ -66,8 +68,8 @@ describe('Desktop Radar - Active Applications & Window Management', () => {
   it('searches text across windows with containerTitle metadata in AppManagerService', async () => {
     const matches = await appManager.findText('Chrome');
     expect(matches.length).toBeGreaterThan(0);
-    expect(matches[0].text).toContain('Google Chrome');
-    expect(matches[0].containerTitle).toBe('Google Chrome');
+    expect(matches[0]?.text).toContain('Google Chrome');
+    expect(matches[0]?.containerTitle).toBe('Google Chrome');
   });
 
   it('filters text search by windowScope in AppManagerService', async () => {
@@ -78,7 +80,7 @@ describe('Desktop Radar - Active Applications & Window Management', () => {
     // Search for "Code" within "Visual Studio" scope should match
     const match = await appManager.findText('Code', 'Visual Studio');
     expect(match.length).toBeGreaterThan(0);
-    expect(match[0].text).toBe('Visual Studio Code');
-    expect(match[0].containerTitle).toBe('Visual Studio Code');
+    expect(match[0]?.text).toBe('Visual Studio Code');
+    expect(match[0]?.containerTitle).toBe('Visual Studio Code');
   });
 });

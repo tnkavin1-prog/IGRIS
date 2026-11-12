@@ -7,7 +7,7 @@ import {
 import type { CDPClient } from '../../../apps/desktop-hud/src/main/cdp-client.js';
 import type { AppManagerService } from '../../../apps/desktop-hud/src/main/app-manager.js';
 import type { NativeInputService } from '../../../apps/desktop-hud/src/main/native-input.js';
-import type { WindowItem } from '../../../apps/desktop-hud/src/main/types.js';
+import type { ChromeTabInfo, WindowItem } from '../../../apps/desktop-hud/src/main/types.js';
 
 const chromeWindow: WindowItem = {
   hwnd: 42,
@@ -33,20 +33,20 @@ function tabElements(count: number) {
 
 function harness(options: { debug?: boolean; windows?: WindowItem[]; tabCounts?: number[] } = {}) {
   const cdp = {
-    listTabs: vi.fn(async () => []),
-    createTab: vi.fn(async () => null),
-    navigate: vi.fn(async () => ({ ok: true, url: '' })),
+    listTabs: vi.fn(async (): Promise<ChromeTabInfo[]> => []),
+    createTab: vi.fn(async (): Promise<ChromeTabInfo | null> => null),
+    navigate: vi.fn(async (): Promise<{ ok: boolean; url: string }> => ({ ok: true, url: '' })),
   };
   const apps = {
-    listRunningWindows: vi.fn(async () => options.windows ?? [chromeWindow]),
-    focusWindow: vi.fn(async () => true),
+    listRunningWindows: vi.fn(async (): Promise<WindowItem[]> => options.windows ?? [chromeWindow]),
+    focusWindow: vi.fn(async (): Promise<boolean> => true),
     runSystemCommand: vi.fn(async () => ({ ok: false, stdout: '', stderr: '' })),
   };
   const tabCounts = [...(options.tabCounts ?? [1, 2])];
   const input = {
-    sendHotkey: vi.fn(async () => true),
-    typeText: vi.fn(async () => true),
-    findUIElements: vi.fn(async () =>
+    sendHotkey: vi.fn(async (_keys: string): Promise<boolean> => true),
+    typeText: vi.fn(async (_text: string): Promise<boolean> => true),
+    findUIElements: vi.fn(async (_key: string) =>
       tabElements(tabCounts.length > 1 ? (tabCounts.shift() ?? 0) : (tabCounts[0] ?? 0)),
     ),
   };

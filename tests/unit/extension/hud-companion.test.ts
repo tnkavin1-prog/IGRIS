@@ -72,12 +72,19 @@ describe('Option 1: Native Desktop Companion HUD & Active Tab Tracking', () => {
       await import('../../../apps/chrome-extension/src/tools/session-export.js');
     const bundle = buildSessionExportBundle(
       [
-        { id: '1', kind: 'user', text: 'Derive inradius of equilateral triangle', timestamp: 1000 },
+        {
+          id: '1',
+          kind: 'user',
+          text: 'Derive inradius of equilateral triangle',
+          at: 1000,
+          final: true,
+        },
         {
           id: '2',
           kind: 'assistant',
           text: 'The inradius formula is r = a / (2*sqrt(3)).',
-          timestamp: 2000,
+          at: 2000,
+          final: true,
         },
       ],
       {

@@ -15,6 +15,7 @@ const shot: CaptureResult = {
   mimeType: 'image/png',
   width: 1000,
   height: 500,
+  timestamp: Date.now(),
   screenBounds: { x: -2000, y: 100, width: 2000, height: 1000 },
 };
 const action = (params = { x: 120, y: 60 }): AgentDecision => ({

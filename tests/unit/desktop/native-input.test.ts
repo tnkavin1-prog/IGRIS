@@ -115,7 +115,7 @@ describe('NativeInputService', () => {
   });
 
   it('uses the persistent bridge and preserves Unicode text', async () => {
-    const request = vi.fn(async () => 'True');
+    const request = vi.fn(async (_action: string, _args: string[] = []) => 'True');
     input = new NativeInputService({
       mockMode: false,
       bridge: { request, dispose: vi.fn() },

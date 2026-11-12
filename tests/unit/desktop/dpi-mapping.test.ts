@@ -6,32 +6,27 @@ describe('Per-Monitor DPI-Aware Coordinate Mapping', () => {
   let input: NativeInputService;
 
   const mockMultiDisplayMetrics: DisplayMetrics = {
-    primaryDisplay: {
-      id: 1,
-      bounds: { x: 0, y: 0, width: 1920, height: 1080 },
-      workArea: { x: 0, y: 0, width: 1920, height: 1040 },
-      scaleFactor: 1.0,
-      isPrimary: true,
-    },
+    width: 1920,
+    height: 1080,
+    scaleFactor: 1.0,
+    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    virtualBounds: { x: -1920, y: 0, width: 4480, height: 1080 },
     allDisplays: [
       {
         id: 1,
         bounds: { x: 0, y: 0, width: 1920, height: 1080 },
-        workArea: { x: 0, y: 0, width: 1920, height: 1040 },
         scaleFactor: 1.0,
         isPrimary: true,
       },
       {
         id: 2,
         bounds: { x: 1920, y: 0, width: 2560, height: 1440 },
-        workArea: { x: 1920, y: 0, width: 2560, height: 1400 },
         scaleFactor: 1.5,
         isPrimary: false,
       },
       {
         id: 3,
         bounds: { x: -1920, y: 0, width: 1920, height: 1080 },
-        workArea: { x: -1920, y: 0, width: 1920, height: 1040 },
         scaleFactor: 1.25,
         isPrimary: false,
       },

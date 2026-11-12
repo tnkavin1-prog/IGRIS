@@ -27,17 +27,22 @@ const projects = onlyExtension
       { name: 'local-bridge', dir: 'apps/local-bridge' },
       { name: 'chrome-extension', dir: 'apps/chrome-extension' },
       { name: 'desktop-hud', dir: 'apps/desktop-hud' },
+      { name: 'tests', dir: '.', project: 'tsconfig.tests.json' },
     ];
 
 let failed = 0;
 for (const project of projects) {
   const cwd = join(root, project.dir);
   process.stdout.write(`\n▶ typecheck ${project.name}\n`);
-  const result = spawnSync(process.execPath, [tsc, '-p', 'tsconfig.json', '--pretty', 'false'], {
-    cwd,
-    stdio: 'inherit',
-    shell: false,
-  });
+  const result = spawnSync(
+    process.execPath,
+    [tsc, '-p', project.project ?? 'tsconfig.json', '--pretty', 'false'],
+    {
+      cwd,
+      stdio: 'inherit',
+      shell: false,
+    },
+  );
   if (result.status !== 0) {
     failed += 1;
     console.error(`✖ ${project.name} failed`);

@@ -61,31 +61,38 @@ describe('Audit Exporter', () => {
       status: 'completed',
       startedAt: Date.now() - 15000,
       completedAt: Date.now(),
+      activeStepIndex: 3,
       steps: [
         {
           id: 'step_1',
+          order: 1,
           description: 'Launch scientific workspace',
           actionType: 'launch_app',
           params: { appName: 'notepad.exe' },
           status: 'completed',
+          requiresApproval: false,
           startedAt: Date.now() - 14000,
           completedAt: Date.now() - 12000,
         },
         {
           id: 'step_2',
+          order: 2,
           description: 'Click primary experiment coordinate',
           actionType: 'computer_click',
           params: { x: 960, y: 540 },
           status: 'completed',
+          requiresApproval: false,
           startedAt: Date.now() - 11000,
           completedAt: Date.now() - 9500,
         },
         {
           id: 'step_3',
+          order: 3,
           description: 'Type experiment configuration data',
           actionType: 'computer_type',
           params: { text: 'Psi_0 = |0>' },
           status: 'completed',
+          requiresApproval: false,
           startedAt: Date.now() - 9000,
           completedAt: Date.now() - 8000,
         },
@@ -93,7 +100,6 @@ describe('Audit Exporter', () => {
     },
     screenshots: [
       {
-        id: 'shot_1',
         title: 'Initial State Viewport',
         base64Data:
           'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
@@ -102,9 +108,10 @@ describe('Audit Exporter', () => {
       },
     ],
     telemetrySummary: {
-      totalInputEvents: 14,
-      totalScreenshotsTaken: 2,
-      activeWindowsDetected: 3,
+      totalSteps: 3,
+      completedSteps: 3,
+      failedSteps: 0,
+      totalLatencyMs: 7000,
     },
   };
 
@@ -235,13 +242,16 @@ describe('Audit Exporter', () => {
         status: 'completed',
         startedAt: 1000,
         completedAt: 2000,
+        activeStepIndex: 1,
         steps: [
           {
             id: 'step_pipe',
+            order: 1,
             description: 'Run pipeline command with | pipe\nand newline',
             actionType: 'run_command',
             params: { command: 'Get-Process | Select-Object -First 5' },
             status: 'completed',
+            requiresApproval: false,
             startedAt: 1000,
             completedAt: 1500,
           },
