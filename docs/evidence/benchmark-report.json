@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-13T12:25:39.758Z",
+  "generatedAt": "2026-11-13T12:30:11.292Z",
   "total": 6,
   "passed": 6,
   "failed": 0,
@@ -16,7 +16,7 @@
       "name": "Open document",
       "passed": true,
       "details": "ok=false error=Document not found: C:\\fake\\doc.pdf",
-      "durationMs": 1
+      "durationMs": 0
     },
     {
       "id": "E",
@@ -37,14 +37,14 @@
       "name": "Storage off C:",
       "passed": true,
       "details": "root=E:\\GemetronData",
-      "durationMs": 1
+      "durationMs": 0
     },
     {
       "id": "F2",
       "name": "Temp cleanup",
       "passed": true,
       "details": "removed=1 freed=1000",
-      "durationMs": 2
+      "durationMs": 3
     }
   ]
 }

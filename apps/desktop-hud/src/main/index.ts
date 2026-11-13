@@ -2,6 +2,7 @@ import { app, ipcMain, globalShortcut, shell } from 'electron';
 import { join } from 'node:path';
 import { appendFileSync, mkdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { CDPClient } from './cdp-client.js';
+import { session } from 'electron';
 import { DATA_ROOT, ICON_PATH, LOGS_DIR, NOTES_DIR, TEMP_DIR } from './runtime-paths.js';
 import { WakeWordService } from './wake-word.js';
 import { startAutoUpdates } from './auto-update.js';
@@ -87,6 +88,18 @@ import { screenGrounding } from './screen-grounding.js';
     /* read-only media: Electron falls back to its own defaults */
   }
 }
+
+// Allow the renderer to access the microphone for voice input. Without this
+// handler Electron denies the permission in packaged builds, which silently
+// breaks wake word and live transcription.
+session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+  const allowed = ['media', 'microphone', 'audioCapture', 'notifications'];
+  callback(allowed.includes(permission));
+});
+session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+  const allowed = ['media', 'microphone', 'audioCapture', 'notifications'];
+  return allowed.includes(permission);
+});
 
 // Register custom Windows URI protocol (e.g. gematron://summon)
 for (const protocol of ['gematron', 'gemetron']) {
