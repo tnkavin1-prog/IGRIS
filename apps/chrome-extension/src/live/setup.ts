@@ -68,7 +68,10 @@ export function buildLiveSetup(options: SetupOptions): LiveSetup {
   if (toolsEnabled) {
     setup.tools = [
       {
-        functionDeclarations: buildFunctionDeclarations() as unknown as NonNullable<
+        // Only the tools the extension can actually execute are declared.
+        // Declaring a tool without an implementation is a promise the model
+        // will keep and the executor can only break.
+        functionDeclarations: buildFunctionDeclarations('browser') as unknown as NonNullable<
           LiveSetup['tools']
         >[number]['functionDeclarations'],
       },

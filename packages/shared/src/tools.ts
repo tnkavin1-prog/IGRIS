@@ -32,6 +32,12 @@ export interface ToolDefinition {
   parameters: ObjectSchema;
   approval: ApprovalPolicy;
   permission?: OptionalPermission;
+  /**
+   * Where the tool can run. Tools marked `desktop` are implemented by the
+   * native HUD only; the browser extension must not advertise them, because a
+   * declaration without an implementation is a tool call that can only fail.
+   */
+  platform?: 'browser' | 'desktop' | 'both';
 }
 
 const str = (description: string): SchemaNode => ({
@@ -461,6 +467,7 @@ export const TOOLS: readonly ToolDefinition[] = [
     name: 'read_clipboard',
     category: 'interaction',
     approval: 'never',
+    platform: 'desktop',
     description: 'Inspect and retrieve the current plain text contents from the OS clipboard.',
     parameters: params({}),
   },
@@ -468,6 +475,7 @@ export const TOOLS: readonly ToolDefinition[] = [
     name: 'write_clipboard',
     category: 'interaction',
     approval: 'never',
+    platform: 'desktop',
     description: 'Copy specified text, code, or formatted data onto the OS clipboard.',
     parameters: params({ text: str('Text or code to copy to the clipboard.') }, ['text']),
   },
@@ -647,6 +655,7 @@ export const TOOLS: readonly ToolDefinition[] = [
     name: 'search_tab_content',
     category: 'browser',
     approval: 'never',
+    platform: 'desktop',
     description:
       'Search for text, keywords, or topics across all currently open Chrome browser tabs and return matching tab references and snippets.',
     parameters: params(
@@ -661,6 +670,7 @@ export const TOOLS: readonly ToolDefinition[] = [
     name: 'close_duplicate_tabs',
     category: 'browser',
     approval: 'never',
+    platform: 'desktop',
     description:
       'Automatically find and close redundant or duplicate Chrome browser tabs sharing identical URLs to clean up tab clutter.',
     parameters: params({}),
@@ -723,8 +733,22 @@ export function isToolName(value: string): value is ToolName {
 }
 
 /** Gemini `functionDeclarations` payload, generated from the catalog. */
-export function buildFunctionDeclarations(): Array<Record<string, unknown>> {
-  return TOOLS.map((tool) => ({
+export function buildFunctionDeclarations(
+  platform: 'browser' | 'desktop' | 'both' = 'both',
+): Array<Record<string, unknown>> {
+  // 'both' is the default: every tool, so callers that do not care about
+  // the surface still see the whole catalog.
+  if (platform === 'both') {
+    return TOOLS.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      behavior: 'NON_BLOCKING',
+      parameters: toGeminiParameters(tool.parameters),
+    }));
+  }
+  return TOOLS.filter(
+    (tool) => tool.platform === undefined || tool.platform === 'both' || tool.platform === platform,
+  ).map((tool) => ({
     name: tool.name,
     description: tool.description,
     behavior: 'NON_BLOCKING',

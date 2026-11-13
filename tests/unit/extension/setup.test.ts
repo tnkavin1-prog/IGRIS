@@ -28,14 +28,17 @@ describe('buildLiveSetup', () => {
 
     expect(setup.tools).toHaveLength(1);
     const declarations = setup.tools?.[0]?.functionDeclarations ?? [];
-    expect(declarations.length).toBe(58);
+    expect(declarations.length).toBe(54);
     expect(declarations.every((declaration) => declaration.behavior === 'NON_BLOCKING')).toBe(true);
     expect(declarations.map((declaration) => declaration.name)).toContain('get_page_snapshot');
     expect(declarations.map((declaration) => declaration.name)).toContain(
       'teach_visual_blackboard',
     );
-    expect(declarations.map((declaration) => declaration.name)).toContain('read_clipboard');
-    expect(declarations.map((declaration) => declaration.name)).toContain('search_tab_content');
+    // The clipboard and tab-maintenance tools exist only in the native HUD.
+    // Declaring them here would promise the model something the extension
+    // cannot execute.
+    expect(declarations.map((declaration) => declaration.name)).not.toContain('read_clipboard');
+    expect(declarations.map((declaration) => declaration.name)).not.toContain('search_tab_content');
   });
 
   it('omits tools when browser control is disabled', () => {

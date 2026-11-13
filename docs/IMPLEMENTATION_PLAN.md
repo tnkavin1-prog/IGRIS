@@ -51,10 +51,10 @@
 
 | ID  | Item                                                                                 | Status   |
 | --- | ------------------------------------------------------------------------------------ | -------- |
-| F11 | PDF text extraction (`pdfjs-dist`, OCR as fallback)                                  | **Done** | `pdf-reader.ts` extracts the text layer with a pure-JavaScript engine (no native build). A new Live tool `read_document` reads PDFs and plain text and reports scanned documents so OCR takes over. The packaged archive stays at 9.65 MB because the engine is bundled into `main.cjs` rather than shipped twice. |
+| F11 | PDF text extraction (`pdfjs-dist`, OCR as fallback)                                  | **Done** | `pdf-reader.ts` extracts the text layer with a pure-JavaScript engine (no native build). A new Live tool `read_document` reads PDFs and plain text and reports scanned documents so OCR takes over. The packaged archive stays at 9.65 MB because the engine is bundled into `main.cjs` rather than shipped twice.                                                                                                   |
 | F12 | Document generation pipelines (`minimax-pdf` / `-docx` / `-xlsx` / `pptx-generator`) | Pending  |
 | F13 | Video understanding (frame sampling, scene detection, audio extraction)              | Pending  |
-| F14 | Extension tool parity (4 declared tools have no handler)                             | Pending  |
+| F14 | Extension tool parity (4 declared tools have no handler)                             | **Done** | The shared catalog gained a `platform` field. The four desktop-only tools (`read_clipboard`, `write_clipboard`, `search_tab_content`, `close_duplicate_tabs`) are tagged `desktop`; the extension now declares only the `browser` platform, so the model is never offered a tool the extension cannot execute. The desktop HUD keeps declaring all of them. Covered by the shared catalog and extension setup tests. |
 | F15 | Provider-independent model interface + documented fallback                           | Pending  |
 | F16 | Log rotation, quotas, dossier caps, secret hygiene                                   | Pending  |
 | F17 | Voice barge-in that pauses the running task                                          | Pending  |
