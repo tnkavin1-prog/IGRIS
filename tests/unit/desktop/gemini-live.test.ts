@@ -8,6 +8,7 @@ import { computerOperator } from '../../../apps/desktop-hud/src/main/computer-op
 import { autonomousAgent } from '../../../apps/desktop-hud/src/main/autonomous-agent.js';
 import { SecurityAuditor } from '../../../apps/desktop-hud/src/main/security-auditor.js';
 import type { PdfReader } from '../../../apps/desktop-hud/src/main/pdf-reader.js';
+import type { VideoReader } from '../../../apps/desktop-hud/src/main/video-reader.js';
 
 describe('GeminiLiveService', () => {
   let cdpClient: CDPClient;
@@ -1205,6 +1206,59 @@ describe('GeminiLiveService', () => {
     expect(openSpy).toHaveBeenCalledWith('C:\\Users\\tester\\OneDrive\\Desktop\\Q3 report.pdf');
     expect(responses[1].response.result.success).toBe(true);
     expect(responses[1].response.result.windowTitle).toContain('Acrobat');
+  });
+
+  it('analyses a video and sends its key frames to the model', async () => {
+    const sent: any[] = [];
+    (service as any).socket = {
+      readyState: 1,
+      send: (str: string) => sent.push(JSON.parse(str)),
+    };
+    const reader = (service as any).videoReader as VideoReader;
+    vi.spyOn(reader, 'analyze').mockResolvedValue({
+      ok: true,
+      filePath: 'E:\\clips\\demo.mp4',
+      metadata: {
+        width: 840,
+        height: 480,
+        durationSeconds: 9.2,
+        frameRate: 24,
+        codec: 'h264',
+        audioCodec: 'aac',
+        hasAudio: true,
+        sizeBytes: 128_000,
+      },
+      frames: [
+        { index: 1, timeSeconds: 0, path: 'E:\\temp\\frame_1.jpg', data: 'AAAA' },
+        { index: 2, timeSeconds: 3, path: 'E:\\temp\\frame_2.jpg', data: 'BBBB' },
+      ],
+      audioPath: 'E:\\temp\\demo.wav',
+      note: 'Audio extracted to a WAV file. Transcription is left to the caller.',
+    });
+
+    const handler = (service as any).handleServerMessage.bind(service);
+    await handler(
+      JSON.stringify({
+        toolCall: {
+          functionCalls: [
+            {
+              id: 'call_analyse_video',
+              name: 'analyze_video',
+              args: { path: 'E:\\clips\\demo.mp4', max_frames: 4 },
+            },
+          ],
+        },
+      }),
+    );
+
+    const toolResponse = sent.find((m) => m.toolResponse)?.toolResponse.functionResponses[0]
+      .response.result;
+    expect(toolResponse.success).toBe(true);
+    expect(toolResponse.metadata.width).toBe(840);
+    expect(toolResponse.framesExtracted).toBe(2);
+    expect(toolResponse.audioPath).toBe('E:\\temp\\demo.wav');
+    // Two frames were pushed to the model as image frames.
+    expect(sent.filter((m) => m.realtimeInput?.video).length).toBe(2);
   });
 
   it('reads a document through the PDF reader', async () => {

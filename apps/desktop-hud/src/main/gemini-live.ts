@@ -22,6 +22,7 @@ import { join } from 'node:path';
 import { HardwareMonitorService } from './hardware-monitor.js';
 import { FrameCoordinateMapper } from './frame-coords.js';
 import { PdfReader } from './pdf-reader.js';
+import { VideoReader } from './video-reader.js';
 import { buildDefaultAdapterRegistry } from './application-adapters.js';
 import type {
   BoundingBoxTarget,
@@ -55,6 +56,15 @@ async function readTextFile(
   }
 }
 
+/** Read a binary file as base64, or null on failure. */
+async function readFileBase64(filePath: string): Promise<string | null> {
+  try {
+    return (await readFile(filePath)).toString('base64');
+  } catch {
+    return null;
+  }
+}
+
 export interface GeminiLiveServiceDeps {
   nativeInput?: NativeInputService;
   computerVision?: ComputerVisionService;
@@ -74,6 +84,7 @@ export class GeminiLiveService extends EventEmitter {
   private computerVision: ComputerVisionService;
   private appManager: AppManagerService;
   private pdfReader = new PdfReader();
+  private videoReader = new VideoReader();
   private browserGateway: BrowserGateway;
   private executionGuard = new ExecutionGuard();
   private workflowEngine: AgenticWorkflowEngine;
@@ -1018,6 +1029,26 @@ export class GeminiLiveService extends EventEmitter {
                       description: 'Folder to search when query is used. Defaults to desktop.',
                     },
                   },
+                },
+              },
+              {
+                name: 'analyze_video',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Probes a video file and extracts its key frames and audio track so the assistant can describe or reason about its content. The frames are sent to the vision model and the audio is written to a WAV file.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    path: {
+                      type: 'STRING',
+                      description: 'Absolute path of the video file to analyse',
+                    },
+                    max_frames: {
+                      type: 'INTEGER',
+                      description: 'Maximum number of key frames to extract (default 6)',
+                    },
+                  },
+                  required: ['path'],
                 },
               },
               {
@@ -2284,6 +2315,36 @@ export class GeminiLiveService extends EventEmitter {
                 windowTitle: opened.windowTitle,
                 ...(opened.error ? { error: opened.error } : {}),
               };
+              break;
+            }
+
+            case 'analyze_video': {
+              const path = String(call.args.path || call.args.file_path || '');
+              const maxFrames = Number(call.args.max_frames || call.args.maxFrames || 6) || 6;
+              if (!path) {
+                result = { success: false, error: 'No video path was given.' };
+                break;
+              }
+              const analysis = await this.videoReader.analyze(path, {
+                maxFrames,
+                includeFrames: true,
+              });
+              result = {
+                success: analysis.ok,
+                path,
+                metadata: analysis.metadata,
+                framesExtracted: analysis.frames.length,
+                frameTimes: analysis.frames.map((frame) => frame.timeSeconds),
+                audioPath: analysis.audioPath,
+                ...(analysis.note ? { note: analysis.note } : {}),
+                ...(analysis.error ? { error: analysis.error } : {}),
+              };
+              // Send the first few frames as images so the model can actually
+              // see them; the tool response itself carries only metadata.
+              for (const frame of analysis.frames.slice(0, 3)) {
+                const data = frame.data ?? (await readFileBase64(frame.path));
+                if (data) this.sendImageFrame(data);
+              }
               break;
             }
 
