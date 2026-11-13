@@ -1,7 +1,6 @@
 import { chromium } from '@playwright/test';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -13,11 +12,19 @@ const alphabet = 'abcdefghijklmnopqrstuvwxyz';
 let id = '';
 for (let i = 0; i < 16; i += 1) id += alphabet[digest[i] >> 4] + alphabet[digest[i] & 15];
 
-const context = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'gbl-debug-')), {
-  headless: false,
-  viewport: { width: 440, height: 940 },
-  args: [`--disable-extensions-except=${extensionDir}`, `--load-extension=${extensionDir}`],
-});
+// The browser profile stays on the project drive; Chromium writes ~10 MB into
+// it and the system drive must not collect those.
+const profileRoot = join(root, 'temp', 'e2e-profiles');
+mkdirSync(profileRoot, { recursive: true });
+
+const context = await chromium.launchPersistentContext(
+  mkdtempSync(join(profileRoot, 'gbl-debug-')),
+  {
+    headless: false,
+    viewport: { width: 440, height: 940 },
+    args: [`--disable-extensions-except=${extensionDir}`, `--load-extension=${extensionDir}`],
+  },
+);
 const page = await context.newPage();
 page.on('console', (msg) => console.log('CONSOLE', msg.type(), msg.text()));
 page.on('pageerror', (err) => console.log('PAGEERROR', err.message));

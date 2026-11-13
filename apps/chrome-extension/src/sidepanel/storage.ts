@@ -78,6 +78,8 @@ export function sanitizeSettings(input: Partial<AppSettings> | undefined | null)
     retention,
     maxToolSteps: Math.round(clamp(merged.maxToolSteps, 1, 24, DEFAULT_SETTINGS.maxToolSteps)),
     audioCues: Boolean(merged.audioCues),
+    downloadDirectory:
+      typeof merged.downloadDirectory === 'string' ? merged.downloadDirectory.trim() : '',
   };
 }
 

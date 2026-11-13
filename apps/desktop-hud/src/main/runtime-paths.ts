@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, parse, resolve } from 'node:path';
 
 const MODULE_DIR = typeof __dirname === 'string' ? __dirname : process.cwd();
 
@@ -29,12 +29,52 @@ function resourcesDir(): string {
 
 export const REPO_ROOT = findRepoRoot();
 
-// Installed builds keep writable state in %LOCALAPPDATA%\Gemetron; dev builds keep it in the repo.
-export const DATA_ROOT =
-  process.env.GEMATRON_DATA_DIR ||
-  (IS_PACKAGED
-    ? join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'Gemetron')
-    : REPO_ROOT);
+/**
+ * Pick the directory that holds the application's writable state.
+ *
+ * The storage policy forbids the system drive: an application installed on
+ * E: must not scatter its logs, notes, downloads and browser profile over
+ * C:. The data root therefore follows the drive the application lives on,
+ * and only falls back to %LOCALAPPDATA% when that drive *is* C: and the
+ * caller has not configured anything better.
+ *
+ * Exported as a pure function so the policy can be tested without touching
+ * the filesystem.
+ */
+export function pickDataRoot(options: {
+  env?: NodeJS.ProcessEnv;
+  packaged: boolean;
+  repoRoot: string;
+  execPath: string;
+  localAppData?: string;
+  home?: string;
+}): string {
+  const env = options.env ?? process.env;
+  const override = env.GEMATRON_DATA_DIR;
+  if (override && override.trim()) return resolve(override.trim());
+
+  if (!options.packaged) return resolve(options.repoRoot);
+
+  const installDrive = parse(options.execPath).root;
+  if (!/^c:\\$/i.test(installDrive)) {
+    // The install drive is not C: - keep the state beside the application.
+    return join(installDrive, 'GemetronData');
+  }
+  const localAppData =
+    options.localAppData ?? env.LOCALAPPDATA ?? join(options.home ?? homedir(), 'AppData', 'Local');
+  return join(localAppData, 'Gemetron');
+}
+
+// Installed builds keep writable state beside the application; dev builds keep
+// it in the repository. GEMATRON_DATA_DIR always wins.
+export const DATA_ROOT = pickDataRoot({
+  env: process.env,
+  packaged: IS_PACKAGED,
+  repoRoot: REPO_ROOT,
+  execPath: process.execPath,
+  localAppData: process.env.LOCALAPPDATA,
+  home: homedir(),
+});
 
 export const SCRIPTS_DIR = IS_PACKAGED
   ? join(resourcesDir(), 'scripts')

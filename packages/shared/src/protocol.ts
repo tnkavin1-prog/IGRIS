@@ -254,6 +254,12 @@ export interface AppSettings {
   maxToolSteps: number;
   /** Play a short chime when the session starts listening. */
   audioCues: boolean;
+  /**
+   * Directory the browser downloads into. Empty means "use the browser
+   * default". The storage policy asks for an explicit, non-system-drive
+   * location, so this is configurable per installation.
+   */
+  downloadDirectory: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -276,6 +282,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   retention: 'session',
   maxToolSteps: 12,
   audioCues: false,
+  downloadDirectory: '',
 };
 
 export type LiveStatus =

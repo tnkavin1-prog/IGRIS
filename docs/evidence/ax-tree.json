@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-13T01:33:27.777Z",
+  "generatedAt": "2026-11-13T01:48:36.353Z",
   "surfaces": {
     "live panel": [
       {
@@ -1186,41 +1186,6 @@
         "focused": false
       },
       {
-        "role": "generic",
-        "name": "",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "generic",
-        "name": "",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "code",
-        "name": "",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "StaticText",
-        "name": "Keep the terminal window open while you use the extension. The bridge logs every request but never the API key.",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "generic",
-        "name": "",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
         "role": "button",
         "name": "Close",
         "description": "",
@@ -1508,172 +1473,50 @@
         "focused": false
       },
       {
-        "role": "heading",
-        "name": "Local bridge",
-        "description": "",
-        "disabled": false,
-        "focused": false,
-        "level": 3
-      },
-      {
-        "role": "StaticText",
-        "name": "Online",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "paragraph",
+        "role": "generic",
         "name": "",
         "description": "",
         "disabled": false,
         "focused": false
       },
       {
-        "role": "LabelText",
+        "role": "generic",
         "name": "",
         "description": "",
         "disabled": false,
         "focused": false
       },
       {
-        "role": "button",
-        "name": "Test connection",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "StaticText",
-        "name": "Gemini Browser Live local bridge",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "StaticText",
-        "name": " v",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "StaticText",
-        "name": "1.0.0",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "heading",
-        "name": "Bridge secret",
-        "description": "",
-        "disabled": false,
-        "focused": false,
-        "level": 3
-      },
-      {
-        "role": "StaticText",
-        "name": "Required",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "paragraph",
+        "role": "generic",
         "name": "",
         "description": "",
         "disabled": false,
         "focused": false
       },
       {
-        "role": "textbox",
-        "name": "Paste LOCAL_GATE_SECRET",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "button",
-        "name": "Show secret",
-        "description": "Show secret",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "button",
-        "name": "Save",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "heading",
-        "name": "Desktop control token",
-        "description": "",
-        "disabled": false,
-        "focused": false,
-        "level": 3
-      },
-      {
-        "role": "StaticText",
-        "name": "Optional",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "paragraph",
+        "role": "generic",
         "name": "",
         "description": "",
         "disabled": false,
         "focused": false
       },
       {
-        "role": "textbox",
-        "name": "Paste the control token",
+        "role": "generic",
+        "name": "",
         "description": "",
         "disabled": false,
         "focused": false
       },
       {
-        "role": "button",
-        "name": "Show token",
-        "description": "Show token",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "button",
-        "name": "Save",
+        "role": "code",
+        "name": "",
         "description": "",
         "disabled": false,
         "focused": false
       },
       {
         "role": "StaticText",
-        "name": "Start the bridge",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "StaticText",
-        "name": "npm run bridge",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "Keep the terminal window open while you use the extension. The bridge logs ",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "every request but never the API key.",
+        "name": "Keep the terminal window open while you use the extension. The bridge logs every request but never the API key.",
         "description": "",
         "disabled": false,
         "focused": false
@@ -1938,6 +1781,297 @@
         "focused": false
       },
       {
+        "role": "heading",
+        "name": "Local bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false,
+        "level": 3
+      },
+      {
+        "role": "StaticText",
+        "name": "Online",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "paragraph",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "LabelText",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Test connection",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Gemini Browser Live local bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": " v",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "1.0.0",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "heading",
+        "name": "Bridge secret",
+        "description": "",
+        "disabled": false,
+        "focused": false,
+        "level": 3
+      },
+      {
+        "role": "StaticText",
+        "name": "Required",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "paragraph",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "textbox",
+        "name": "Paste LOCAL_GATE_SECRET",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Show secret",
+        "description": "Show secret",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Save",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "heading",
+        "name": "Desktop control token",
+        "description": "",
+        "disabled": false,
+        "focused": false,
+        "level": 3
+      },
+      {
+        "role": "StaticText",
+        "name": "Optional",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "paragraph",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "textbox",
+        "name": "Paste the control token",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Show token",
+        "description": "Show token",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "button",
+        "name": "Save",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "heading",
+        "name": "Download directory",
+        "description": "",
+        "disabled": false,
+        "focused": false,
+        "level": 3
+      },
+      {
+        "role": "StaticText",
+        "name": "Browser default",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "paragraph",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "LabelText",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Start the bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "npm run bridge",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Keep the terminal window open while you use the extension. The bridge logs ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "every request but never the API key.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Changes apply to the next session.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Close",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Save settings",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Nothing here yet.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Summarize this page",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Find the key details",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Compare these tabs",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Fill this form",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Connection",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Voice",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Agent",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Access",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Privacy",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
         "role": "StaticText",
         "name": "Local bridge",
         "description": "",
@@ -2170,6 +2304,76 @@
         "focused": false
       },
       {
+        "role": "StaticText",
+        "name": "Download directory",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Browser default",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Chrome saves downloads into the browser default folder. Point it at the desktop HUD data folder (for example ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "code",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": ") so nothing is written to the system drive. The optional ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "code",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": " permission is required for this to take effect.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Download folder",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "textbox",
+        "name": "Download folder Leave empty to keep the browser's own default.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "Leave empty to keep the browser's own default.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
         "role": "InlineTextBox",
         "name": "Start the bridge",
         "description": "",
@@ -2185,97 +2389,6 @@
       },
       {
         "role": "InlineTextBox",
-        "name": "Changes apply to the next session.",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "Close",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "Save settings",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "Nothing here yet.",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "Summarize this page",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "Find the key details",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "Compare these tabs",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "Fill this form",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "Connection",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "Voice",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "Agent",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "Access",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "Privacy",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
         "name": "Local bridge",
         "description": "",
         "disabled": false,
@@ -2283,14 +2396,14 @@
       },
       {
         "role": "InlineTextBox",
-        "name": "The bridge holds your Gemini API key and mints single-use Live tokens. It listens ",
+        "name": "The bridge holds your Gemini API key and mints single-use Live tokens. It ",
         "description": "",
         "disabled": false,
         "focused": false
       },
       {
         "role": "InlineTextBox",
-        "name": "on loopback only; the key never enters Chrome.",
+        "name": "listens on loopback only; the key never enters Chrome.",
         "description": "",
         "disabled": false,
         "focused": false
@@ -2437,14 +2550,14 @@
       },
       {
         "role": "InlineTextBox",
-        "name": "and paste it here. The extension is already trusted by its own origin, so this is only ",
+        "name": "and paste it here. The extension is already trusted by its own origin, so this is ",
         "description": "",
         "disabled": false,
         "focused": false
       },
       {
         "role": "InlineTextBox",
-        "name": "needed for locked-down installations. It is stored in ",
+        "name": "only needed for locked-down installations. It is stored in ",
         "description": "",
         "disabled": false,
         "focused": false
@@ -2458,14 +2571,7 @@
       },
       {
         "role": "InlineTextBox",
-        "name": " and ",
-        "description": "",
-        "disabled": false,
-        "focused": false
-      },
-      {
-        "role": "InlineTextBox",
-        "name": "never synced.",
+        "name": " and never synced.",
         "description": "",
         "disabled": false,
         "focused": false
@@ -2473,6 +2579,90 @@
       {
         "role": "InlineTextBox",
         "name": "Save",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Download directory",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Chrome saves downloads into the browser default folder. Point it at the desktop ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "HUD data folder (for example ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "E:\\Gemetron\\downloads",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": ") so nothing is written ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "to the system drive. The optional ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "StaticText",
+        "name": "downloads",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": " permission is required for this to ",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "take effect.",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Download folder",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "generic",
+        "name": "",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "Leave empty to keep the browser's own default.",
         "description": "",
         "disabled": false,
         "focused": false
@@ -2522,6 +2712,20 @@
       {
         "role": "InlineTextBox",
         "name": "chrome.storage.local",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "E:\\Gemetron\\downloads",
+        "description": "",
+        "disabled": false,
+        "focused": false
+      },
+      {
+        "role": "InlineTextBox",
+        "name": "downloads",
         "description": "",
         "disabled": false,
         "focused": false

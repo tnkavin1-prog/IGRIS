@@ -329,6 +329,7 @@ export class AgentController {
     void this.checkBridge(true);
     void this.refreshDevices();
     void this.refreshPermissions();
+    void this.applyDownloadDirectory(settings.downloadDirectory);
     try {
       if (typeof chrome !== 'undefined' && chrome?.storage?.local) {
         chrome.storage.local
@@ -661,6 +662,9 @@ export class AgentController {
     this.player?.setOutputDevice(merged.outputDeviceId);
     this.capture?.setGain(merged.inputGain);
     this.capture?.setSilenceMs(merged.vadSilenceMs);
+    if (merged.downloadDirectory !== this.snapshot.settings.downloadDirectory) {
+      void this.applyDownloadDirectory(merged.downloadDirectory);
+    }
 
     if (merged.retention === 'session') {
       void removeConversation().catch(() => undefined);
@@ -683,6 +687,32 @@ export class AgentController {
     this.manager?.updateSettings(defaults);
     this.toast('Settings restored to defaults.', 'success');
     void this.checkBridge(true);
+  }
+
+  /**
+   * Point Chrome's download engine at the configured directory.
+   *
+   * The storage policy asks for downloads to land on the project drive
+   * instead of the system drive. The permission is optional, so a failure
+   * here is reported but never fatal.
+   */
+  async applyDownloadDirectory(directory: string): Promise<boolean> {
+    const target = (directory ?? '').trim();
+    if (!target) return false;
+    try {
+      if (typeof chrome === 'undefined' || !chrome.downloads) return false;
+      // setDownloadPath arrived in Chrome 121; the bundled type definitions
+      // are older, so the capability is checked at runtime.
+      const downloads = chrome.downloads as typeof chrome.downloads & {
+        setDownloadPath?: (path: string) => Promise<void>;
+      };
+      if (typeof downloads.setDownloadPath !== 'function') return false;
+      await downloads.setDownloadPath(target);
+      return true;
+    } catch (error) {
+      console.warn('[Gemetron] Could not set the download directory:', error);
+      return false;
+    }
   }
 
   /* ───────────────────────────── devices ───────────────────────────── */

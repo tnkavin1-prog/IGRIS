@@ -311,6 +311,39 @@ export function SettingsPanel({
                 </div>
               </section>
 
+              <section className="settings-section">
+                <div className="settings-section-head">
+                  <h3>Download directory</h3>
+                  {draft.downloadDirectory ? (
+                    <Badge tone="green" icon="check">
+                      Configured
+                    </Badge>
+                  ) : (
+                    <Badge tone="neutral" icon="info">
+                      Browser default
+                    </Badge>
+                  )}
+                </div>
+                <p className="section-help">
+                  Chrome saves downloads into the browser default folder. Point it at the desktop
+                  HUD data folder (for example <code>E:\Gemetron\downloads</code>) so nothing is
+                  written to the system drive. The optional <code>downloads</code> permission is
+                  required for this to take effect.
+                </p>
+                <Field
+                  label="Download folder"
+                  hint="Leave empty to keep the browser's own default."
+                >
+                  <input
+                    type="text"
+                    value={draft.downloadDirectory}
+                    onChange={(event) => set('downloadDirectory', event.target.value)}
+                    placeholder="E:\\Gemetron\\downloads"
+                    spellCheck={false}
+                  />
+                </Field>
+              </section>
+
               <div className="info-card">
                 <Icon name="terminal" size={16} />
                 <div>

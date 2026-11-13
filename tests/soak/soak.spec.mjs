@@ -1,8 +1,7 @@
 import { test, expect, chromium } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -97,7 +96,12 @@ test.beforeAll(async () => {
   const addr = bridgeServer.address();
   bridgeUrl = `http://127.0.0.1:${addr.port}`;
 
-  context = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'gbl-soak-')), {
+  // The soak profile stays on the project drive: Chromium writes ~10 MB into
+  // every profile it is given.
+  const profileRoot = join(root, 'temp', 'e2e-profiles');
+  mkdirSync(profileRoot, { recursive: true });
+
+  context = await chromium.launchPersistentContext(mkdtempSync(join(profileRoot, 'gbl-soak-')), {
     headless: false,
     viewport: { width: 440, height: 940 },
     args: [

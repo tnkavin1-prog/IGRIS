@@ -139,6 +139,14 @@ describe('sanitizeSettings', () => {
     expect(sanitizeSettings({ autoApprove: undefined }).autoApprove).toBe(false);
     expect(sanitizeSettings({ autoApprove: true }).autoApprove).toBe(true);
   });
+
+  it('keeps the download directory as an explicit, trimmed path', () => {
+    expect(sanitizeSettings({}).downloadDirectory).toBe('');
+    expect(sanitizeSettings({ downloadDirectory: '  ' }).downloadDirectory).toBe('');
+    expect(
+      sanitizeSettings({ downloadDirectory: ' E:\\Gemetron\\downloads ' }).downloadDirectory,
+    ).toBe('E:\\Gemetron\\downloads');
+  });
 });
 
 describe('loadSettings', () => {

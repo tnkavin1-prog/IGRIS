@@ -47,6 +47,11 @@ const bundle = spawnSync(process.execPath, [join(desktop, 'scripts/build.mjs')],
 });
 if (bundle.status !== 0) throw new Error('Desktop bundle failed.');
 if (!process.env.CSC_LINK) process.env.CSC_IDENTITY_AUTO_DISCOVERY = 'false';
+// electron-builder downloads its own binaries (nsis, winCodeSign). Keep them
+// on the project drive instead of the system drive.
+const builderCache = join(root, 'temp', 'electron-builder-cache');
+mkdirSync(builderCache, { recursive: true });
+process.env.ELECTRON_BUILDER_CACHE = process.env.ELECTRON_BUILDER_CACHE || builderCache;
 // Stage inside the repository instead of the system temp directory: the
 // staging folder holds a full unpacked Electron build (~370 MB), and leaving
 // those behind in %TEMP% filled the system drive.

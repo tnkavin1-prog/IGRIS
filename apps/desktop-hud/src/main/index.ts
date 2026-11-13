@@ -2,7 +2,7 @@ import { app, ipcMain, globalShortcut, shell } from 'electron';
 import { join } from 'node:path';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { CDPClient } from './cdp-client.js';
-import { DATA_ROOT, ICON_PATH, IS_PACKAGED, LOGS_DIR, NOTES_DIR } from './runtime-paths.js';
+import { DATA_ROOT, ICON_PATH, LOGS_DIR, NOTES_DIR, TEMP_DIR } from './runtime-paths.js';
 import { WakeWordService } from './wake-word.js';
 import { startAutoUpdates } from './auto-update.js';
 
@@ -49,10 +49,19 @@ import type {
 } from './types.js';
 import { screenGrounding } from './screen-grounding.js';
 
-if (IS_PACKAGED) {
-  const userData = join(DATA_ROOT, 'electron');
-  mkdirSync(userData, { recursive: true });
-  app.setPath('userData', userData);
+// Electron keeps its own caches, cookies and local storage under the
+// userData directory. Both it and the temporary directory must follow the
+// configured data root, otherwise a development run writes Chromium caches
+// and the updater staging area to the system drive.
+{
+  const electronDir = join(DATA_ROOT, 'electron');
+  try {
+    mkdirSync(electronDir, { recursive: true });
+    app.setPath('userData', electronDir);
+    app.setPath('temp', TEMP_DIR);
+  } catch {
+    /* read-only media: Electron falls back to its own defaults */
+  }
 }
 
 // Register custom Windows URI protocol (e.g. gematron://summon)
