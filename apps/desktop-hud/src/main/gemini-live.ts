@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { readFileSync, existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import WebSocket from 'ws';
 import type { CDPClient } from './cdp-client.js';
 import { BrowserGateway } from './browser-gateway.js';
@@ -19,6 +20,7 @@ import { downloadManager } from './download-manager.js';
 import { BRIDGE_ENV_PATH } from './runtime-paths.js';
 import { HardwareMonitorService } from './hardware-monitor.js';
 import { FrameCoordinateMapper } from './frame-coords.js';
+import { PdfReader } from './pdf-reader.js';
 import type {
   BoundingBoxTarget,
   CaptureResult,
@@ -33,6 +35,23 @@ import type {
 
 const LIVE_WS_URL =
   'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
+
+/** Read a plain-text document, with a hard cap on the returned size. */
+async function readTextFile(
+  filePath: string,
+  maxChars = 40_000,
+): Promise<{ ok: boolean; text: string; error?: string }> {
+  try {
+    const raw = await readFile(filePath, 'utf8');
+    return { ok: true, text: raw.slice(0, maxChars) };
+  } catch (error) {
+    return {
+      ok: false,
+      text: '',
+      error: `Could not read "${filePath}": ${(error as Error).message}`,
+    };
+  }
+}
 
 export interface GeminiLiveServiceDeps {
   nativeInput?: NativeInputService;
@@ -52,6 +71,7 @@ export class GeminiLiveService extends EventEmitter {
   private nativeInput: NativeInputService;
   private computerVision: ComputerVisionService;
   private appManager: AppManagerService;
+  private pdfReader = new PdfReader();
   private browserGateway: BrowserGateway;
   private executionGuard = new ExecutionGuard();
   private workflowEngine: AgenticWorkflowEngine;
@@ -988,6 +1008,26 @@ export class GeminiLiveService extends EventEmitter {
                       description: 'Folder to search when query is used. Defaults to desktop.',
                     },
                   },
+                },
+              },
+              {
+                name: 'read_document',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Reads the text of a local document (PDF, text file) so it can be summarised or searched. Use it instead of reading a PDF page by page from screenshots.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    path: {
+                      type: 'STRING',
+                      description: 'Absolute path of the document to read',
+                    },
+                    max_pages: {
+                      type: 'INTEGER',
+                      description: 'Maximum number of pages to read (default 20)',
+                    },
+                  },
+                  required: ['path'],
                 },
               },
               {
@@ -2233,6 +2273,44 @@ export class GeminiLiveService extends EventEmitter {
                 path: target,
                 windowTitle: opened.windowTitle,
                 ...(opened.error ? { error: opened.error } : {}),
+              };
+              break;
+            }
+
+            case 'read_document': {
+              const path = String(call.args.path || call.args.file_path || '');
+              const maxPages = Number(call.args.max_pages || call.args.maxPages || 0) || undefined;
+              if (!path) {
+                result = { success: false, error: 'No document path was given.' };
+                break;
+              }
+              const extension = path.toLowerCase().split('.').pop() ?? '';
+              if (extension === 'pdf') {
+                const document = await this.pdfReader.read(path, { maxPages });
+                result = {
+                  success: document.ok,
+                  path,
+                  pageCount: document.pageCount,
+                  pagesRead: document.pages.length,
+                  truncated: document.truncated,
+                  text: document.text,
+                  ...(document.scanned
+                    ? {
+                        scanned: true,
+                        hint: 'This PDF has no text layer: it is a scan. Use computer_use_screenshot and screen_ocr to read it instead.',
+                      }
+                    : {}),
+                  ...(document.error ? { error: document.error } : {}),
+                };
+                break;
+              }
+              // Plain text and other readable formats fall back to the file.
+              const text = await readTextFile(path);
+              result = {
+                success: text.ok,
+                path,
+                text: text.text,
+                ...(text.error ? { error: text.error } : {}),
               };
               break;
             }

@@ -49,16 +49,16 @@
 
 ## P2/P3 — capability depth and hardening
 
-| ID  | Item                                                                                 | Status  |
-| --- | ------------------------------------------------------------------------------------ | ------- |
-| F11 | PDF text extraction (`pdfjs-dist`, OCR as fallback)                                  | Pending |
-| F12 | Document generation pipelines (`minimax-pdf` / `-docx` / `-xlsx` / `pptx-generator`) | Pending |
-| F13 | Video understanding (frame sampling, scene detection, audio extraction)              | Pending |
-| F14 | Extension tool parity (4 declared tools have no handler)                             | Pending |
-| F15 | Provider-independent model interface + documented fallback                           | Pending |
-| F16 | Log rotation, quotas, dossier caps, secret hygiene                                   | Pending |
-| F17 | Voice barge-in that pauses the running task                                          | Pending |
-| F18 | Adaptive monitoring (screen stream + tab polling)                                    | Pending |
+| ID  | Item                                                                                 | Status   |
+| --- | ------------------------------------------------------------------------------------ | -------- |
+| F11 | PDF text extraction (`pdfjs-dist`, OCR as fallback)                                  | **Done** | `pdf-reader.ts` extracts the text layer with a pure-JavaScript engine (no native build). A new Live tool `read_document` reads PDFs and plain text and reports scanned documents so OCR takes over. The packaged archive stays at 9.65 MB because the engine is bundled into `main.cjs` rather than shipped twice. |
+| F12 | Document generation pipelines (`minimax-pdf` / `-docx` / `-xlsx` / `pptx-generator`) | Pending  |
+| F13 | Video understanding (frame sampling, scene detection, audio extraction)              | Pending  |
+| F14 | Extension tool parity (4 declared tools have no handler)                             | Pending  |
+| F15 | Provider-independent model interface + documented fallback                           | Pending  |
+| F16 | Log rotation, quotas, dossier caps, secret hygiene                                   | Pending  |
+| F17 | Voice barge-in that pauses the running task                                          | Pending  |
+| F18 | Adaptive monitoring (screen stream + tab polling)                                    | Pending  |
 
 ---
 

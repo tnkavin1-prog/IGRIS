@@ -7,6 +7,7 @@ import { AppManagerService } from '../../../apps/desktop-hud/src/main/app-manage
 import { computerOperator } from '../../../apps/desktop-hud/src/main/computer-operator.js';
 import { autonomousAgent } from '../../../apps/desktop-hud/src/main/autonomous-agent.js';
 import { SecurityAuditor } from '../../../apps/desktop-hud/src/main/security-auditor.js';
+import type { PdfReader } from '../../../apps/desktop-hud/src/main/pdf-reader.js';
 
 describe('GeminiLiveService', () => {
   let cdpClient: CDPClient;
@@ -1204,6 +1205,46 @@ describe('GeminiLiveService', () => {
     expect(openSpy).toHaveBeenCalledWith('C:\\Users\\tester\\OneDrive\\Desktop\\Q3 report.pdf');
     expect(responses[1].response.result.success).toBe(true);
     expect(responses[1].response.result.windowTitle).toContain('Acrobat');
+  });
+
+  it('reads a document through the PDF reader', async () => {
+    let sentPayload: any = null;
+    (service as any).socket = {
+      readyState: 1,
+      send: (str: string) => {
+        sentPayload = JSON.parse(str);
+      },
+    };
+    const reader = (service as any).pdfReader as PdfReader;
+    vi.spyOn(reader, 'read').mockResolvedValue({
+      ok: true,
+      filePath: 'E:\\docs\\report.pdf',
+      pageCount: 12,
+      pages: [{ page: 1, text: 'Quarterly summary' }],
+      text: 'Quarterly summary',
+      truncated: false,
+      scanned: false,
+    });
+
+    const handler = (service as any).handleServerMessage.bind(service);
+    await handler(
+      JSON.stringify({
+        toolCall: {
+          functionCalls: [
+            {
+              id: 'call_read_doc',
+              name: 'read_document',
+              args: { path: 'E:\\docs\\report.pdf', max_pages: 5 },
+            },
+          ],
+        },
+      }),
+    );
+
+    const result = sentPayload.toolResponse.functionResponses[0].response.result;
+    expect(result.success).toBe(true);
+    expect(result.pageCount).toBe(12);
+    expect(result.text).toContain('Quarterly summary');
   });
 
   it('maps model frame coordinates to the physical desktop before clicking', async () => {

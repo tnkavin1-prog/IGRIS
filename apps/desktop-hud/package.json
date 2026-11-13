@@ -14,5 +14,8 @@
     "@gbl/shared": "*",
     "electron-updater": "^6.8.11",
     "ws": "^8.22.1"
+  },
+  "devDependencies": {
+    "pdfjs-dist": "^6.5.438"
   }
 }
