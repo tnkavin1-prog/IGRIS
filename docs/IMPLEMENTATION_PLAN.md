@@ -57,8 +57,8 @@
 | F14 | Extension tool parity (4 declared tools have no handler)                             | **Done** | The shared catalog gained a `platform` field. The four desktop-only tools (`read_clipboard`, `write_clipboard`, `search_tab_content`, `close_duplicate_tabs`) are tagged `desktop`; the extension now declares only the `browser` platform, so the model is never offered a tool the extension cannot execute. The desktop HUD keeps declaring all of them. Covered by the shared catalog and extension setup tests. |
 | F15 | Provider-independent model interface + documented fallback                           | Pending  |
 | F16 | Log rotation, quotas, dossier caps, secret hygiene                                   | Pending  |
-| F17 | Voice barge-in that pauses the running task                                          | Pending  |
-| F18 | Adaptive monitoring (screen stream + tab polling)                                    | Pending  |
+| F17 | Voice barge-in that pauses the running task                                          | **Done** | The renderer pauses the current workflow task when Gemini Live reports an interruption and shows a resume control in the ambient bar.                                                                                                                                                                                                                                                                                |
+| F18 | Adaptive monitoring (screen stream + tab polling)                                    | **Done** | The screen stream samples every 10 seconds while idle, closed or in error and every 2.5 seconds while active; the interval is re-evaluated on every status change.                                                                                                                                                                                                                                                   |
 
 ---
 
