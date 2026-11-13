@@ -43,6 +43,7 @@ export function App() {
   const [isMaximized, setIsMaximized] = useState(false);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
   const [taskInterrupted, setTaskInterrupted] = useState(false);
+  const [checkpoints, setCheckpoints] = useState<AgenticTask[]>([]);
   const [displayMode, setDisplayMode] = useState<HudDisplayMode>(() => {
     try {
       const saved = localStorage.getItem('lumen.displayMode');
@@ -187,6 +188,10 @@ export function App() {
     window.geminiHUD.workflow
       .getCurrentTask()
       .then(setCurrentTask)
+      .catch(() => undefined);
+    window.geminiHUD.workflow
+      .listCheckpoints()
+      .then(setCheckpoints)
       .catch(() => undefined);
 
     // 3. Subscribe to IPC Events
@@ -472,6 +477,18 @@ export function App() {
   const handleResumeTask = async () => {
     await window.geminiHUD?.workflow.resumeCurrent().catch(() => undefined);
     setTaskInterrupted(false);
+  };
+  const handleResumeCheckpoint = async (taskId: string) => {
+    const ok = await window.geminiHUD?.workflow.resumeCheckpoint(taskId).catch(() => false);
+    if (ok) {
+      const task = await window.geminiHUD?.workflow.getCurrentTask().catch(() => null);
+      if (task) setCurrentTask(task);
+      setCheckpoints((prev) => prev.filter((cp) => cp.id !== taskId));
+    }
+  };
+  const handleDiscardCheckpoint = async (taskId: string) => {
+    await window.geminiHUD?.workflow.discardCheckpoint(taskId).catch(() => undefined);
+    setCheckpoints((prev) => prev.filter((cp) => cp.id !== taskId));
   };
 
   const handleWakeWordChange = (enabled: boolean) => {
@@ -825,6 +842,49 @@ export function App() {
           </button>
         </div>
       )}
+      {checkpoints.length > 0 ? (
+        <div
+          className="checkpoint-banner"
+          style={{
+            position: 'absolute',
+            bottom: 8,
+            left: 8,
+            right: 8,
+            padding: '8px 10px',
+            borderRadius: 10,
+            background: 'rgba(20, 20, 30, 0.85)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            color: '#fff',
+            fontSize: 12,
+            zIndex: 50,
+          }}
+        >
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Resume a previous task?</div>
+          {checkpoints.map((cp) => (
+            <div
+              key={cp.id}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}
+            >
+              <span
+                style={{
+                  flex: 1,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {cp.goal}
+              </span>
+              <button type="button" onClick={() => handleResumeCheckpoint(cp.id)}>
+                Resume
+              </button>
+              <button type="button" onClick={() => handleDiscardCheckpoint(cp.id)}>
+                Dismiss
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
