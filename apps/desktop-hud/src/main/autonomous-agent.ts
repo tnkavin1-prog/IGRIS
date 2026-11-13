@@ -303,7 +303,16 @@ export class AutonomousAgent extends EventEmitter {
     );
     const windows = await this.manager.listRunningWindows();
     const cursor = await this.input.getCursorPosition();
-    return { timestamp: Date.now(), screenshot, windows, cursor };
+    // Which window owns the foreground is a first-class observation: without
+    // it the agent cannot tell that focus moved away mid-task.
+    const foreground = windows.find((w) => w.isForeground) ?? windows[0];
+    return {
+      timestamp: Date.now(),
+      screenshot,
+      windows,
+      cursor,
+      ...(foreground?.title ? { activeWindow: foreground.title } : {}),
+    };
   }
   private async execute(
     step: AgentStep,

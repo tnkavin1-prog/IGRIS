@@ -42,7 +42,7 @@ function fixture() {
     computerVision: vision as any,
     appManager: manager as any,
   });
-  return { agent, planner, input, vision };
+  return { agent, planner, input, vision, manager };
 }
 
 beforeEach(() => {
@@ -85,6 +85,43 @@ describe('autonomous verification loop', () => {
     expect(input.mouseClick).toHaveBeenCalledExactlyOnceWith(-1760, 220);
     expect(vision.captureScreen).toHaveBeenCalledTimes(2);
     expect(completed).toHaveBeenCalledOnce();
+  });
+  it('reports the foreground window in every observation', async () => {
+    const { agent, planner, manager } = fixture();
+    manager.listRunningWindows.mockResolvedValue([
+      {
+        hwnd: 1,
+        title: 'Background window',
+        processName: 'other',
+        pid: 1,
+        isVisible: true,
+        isIconic: false,
+      },
+      {
+        hwnd: 2,
+        title: 'Focused Notepad',
+        processName: 'notepad',
+        pid: 2,
+        isVisible: true,
+        isIconic: false,
+        isForeground: true,
+      },
+    ]);
+    planner.next.mockResolvedValue(action());
+    planner.verify.mockResolvedValue({
+      succeeded: true,
+      goalAchieved: true,
+      evidence: 'Fixture changed',
+    });
+
+    const seen: string[] = [];
+    await agent.startSession('Change fixture', {
+      onObservation: (observation) => seen.push(observation.activeWindow ?? '<none>'),
+    });
+
+    // Every observation must carry the foreground title, not just the first.
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((title) => title === 'Focused Notepad')).toBe(true);
   });
   it('replans a failed step with a different mutation', async () => {
     const { agent, planner, input } = fixture();

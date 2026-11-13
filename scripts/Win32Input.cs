@@ -676,6 +676,7 @@ namespace Gemetron {
             StringBuilder sb = new StringBuilder();
             sb.Append("[");
             bool first = true;
+            IntPtr foreground = GetForegroundWindow();
 
             EnumerateAllWindows((hWnd) => {
                 if (!IsWindowVisible(hWnd) && !IsIconic(hWnd)) return;
@@ -709,7 +710,8 @@ namespace Gemetron {
                 sb.Append("\"processName\":\"").Append(EscapeJson(processName)).Append("\",");
                 sb.Append("\"pid\":").Append(pid).Append(",");
                 sb.Append("\"isVisible\":").Append(isVisible ? "true" : "false").Append(",");
-                sb.Append("\"isIconic\":").Append(isIconic ? "true" : "false");
+                sb.Append("\"isIconic\":").Append(isIconic ? "true" : "false").Append(",");
+                sb.Append("\"isForeground\":").Append(hWnd == foreground ? "true" : "false");
                 sb.Append("}");
             });
 

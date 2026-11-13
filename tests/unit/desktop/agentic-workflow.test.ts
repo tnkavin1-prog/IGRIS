@@ -214,9 +214,9 @@ describe('AgenticWorkflowEngine', () => {
         params: { appName: 'bad_app' },
       },
       {
-        description: 'Subsequent step that should never execute',
+        description: 'Subsequent step that still runs',
         actionType: 'computer_type',
-        params: { text: 'should not run' },
+        params: { text: 'should still run' },
       },
     ]);
 
@@ -224,11 +224,13 @@ describe('AgenticWorkflowEngine', () => {
     await new Promise((r) => setTimeout(r, 60));
 
     const cur = engine.getCurrentTask();
-    expect(cur?.status).toBe('failed');
-    expect(cur?.activeStepIndex).toBe(0);
+    // A failed action no longer abandons the rest of the plan.
+    expect(cur?.status).toBe('partial');
+    expect(cur?.activeStepIndex).toBe(2);
     expect(cur?.steps[0]?.status).toBe('failed');
     expect(cur?.steps[0]?.error).toContain('Executable not found');
-    expect(cur?.steps[1]?.status).toBe('pending');
+    expect(cur?.steps[1]?.status).toBe('completed');
+    expect(cur?.error).toContain('Executable not found');
     expect(stepFailedListener).toHaveBeenCalledTimes(1);
   });
 

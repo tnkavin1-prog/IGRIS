@@ -712,15 +712,19 @@ export class AgenticWorkflowEngine extends EventEmitter {
             break;
           }
 
+          // One failed action must not abandon the rest of the plan: the step
+          // is recorded as failed, the remaining steps still run, and the task
+          // ends as "partial" with the failure listed.
           step.status = 'failed';
           step.completedAt = Date.now();
           step.error = (stepErr as Error).message;
-          this.currentTask.status = 'failed';
-          this.currentTask.error = (stepErr as Error).message;
-          this.currentTask.completedAt = Date.now();
+          this.currentTask.activeStepIndex += 1;
+          this.currentTask.error = this.currentTask.error
+            ? `${this.currentTask.error}; ${step.error}`
+            : step.error;
           this.emit('task:step-failed', { task: this.currentTask, step, error: step.error });
           this.emit('task:updated', this.currentTask);
-          break;
+          continue;
         }
       }
 
@@ -729,7 +733,8 @@ export class AgenticWorkflowEngine extends EventEmitter {
         this.currentTask.status === 'running' &&
         this.currentTask.activeStepIndex >= this.currentTask.steps.length
       ) {
-        this.currentTask.status = 'completed';
+        const failed = this.currentTask.steps.filter((s) => s.status === 'failed');
+        this.currentTask.status = failed.length > 0 ? 'partial' : 'completed';
         this.currentTask.completedAt = Date.now();
         if (this.memoryStore) {
           this.memoryStore.addRecentContext({

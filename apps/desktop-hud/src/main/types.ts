@@ -182,6 +182,8 @@ export interface WindowItem {
   pid: number;
   isVisible: boolean;
   isIconic: boolean;
+  /** True for the window that currently owns the foreground. */
+  isForeground?: boolean;
   bounds?: { x: number; y: number; width: number; height: number };
 }
 
@@ -279,7 +281,14 @@ export interface WorkflowStep {
 }
 
 export type TaskStatus =
-  'planning' | 'running' | 'paused' | 'waiting_approval' | 'completed' | 'failed' | 'cancelled';
+  | 'planning'
+  | 'running'
+  | 'paused'
+  | 'waiting_approval'
+  | 'completed'
+  | 'partial'
+  | 'failed'
+  | 'cancelled';
 
 export interface AgenticTask {
   id: string;

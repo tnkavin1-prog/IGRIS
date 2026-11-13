@@ -329,6 +329,7 @@ export function App() {
 
         if (
           task.status === 'completed' ||
+          task.status === 'partial' ||
           task.status === 'failed' ||
           task.status === 'cancelled'
         ) {
