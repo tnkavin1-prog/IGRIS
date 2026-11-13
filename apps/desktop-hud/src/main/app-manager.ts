@@ -1,8 +1,9 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
+import { existsSync, readdirSync, statSync, type Dirent } from 'node:fs';
+import { basename, extname, isAbsolute, join } from 'node:path';
 import type {
   CommandResult,
+  DocumentMatch,
   LaunchResult,
   TileWindowsOptions,
   TileWindowsResult,
@@ -49,6 +50,27 @@ function isBrowserName(raw: string): boolean {
     raw === 'google' ||
     raw === 'google chrome'
   );
+}
+
+/**
+ * Score how well a document answers a request.
+ *
+ * "report" should find "Q3 report.pdf"; "pdf" should find every PDF. An empty
+ * query means "the most recent documents" and is handled by the caller.
+ */
+function scoreDocument(doc: DocumentMatch, wanted: string): number {
+  if (!wanted) return 1;
+  const name = doc.name.toLowerCase();
+  const stem = name.replace(/\.[^.]+$/, '');
+  const extension = doc.extension;
+
+  if (name === wanted || stem === wanted) return 100;
+  if (name.startsWith(wanted)) return 80;
+  if (stem.startsWith(wanted)) return 70;
+  if (name.includes(wanted)) return 50;
+  if (stem.includes(wanted)) return 40;
+  if (extension === `.${wanted.replace(/^\./, '')}`) return 30;
+  return 0;
 }
 
 function findExecutableForApp(appName: string): { exe: string; defaultArgs: string[] } | null {
@@ -714,6 +736,151 @@ export class AppManagerService {
   }
 
   /**
+   * Resolve a well-known folder (desktop, documents, downloads, pictures...).
+   *
+   * The shell owns the mapping, so OneDrive redirection and localised folder
+   * names are handled correctly. A hardcoded "%USERPROFILE%\Desktop" is not.
+   */
+  public async knownFolder(name = 'desktop'): Promise<string> {
+    if (this.mockMode) return '';
+    const key = name.trim().toLowerCase() || 'desktop';
+    try {
+      const res = await this.runCli('known-folder', [key]);
+      return res.trim();
+    } catch {
+      try {
+        const output = await this.evalWin32(
+          `[Gemetron.Win32Input]::KnownFolder('${key.replace(/'/g, "''")}')`,
+        );
+        return output.trim();
+      } catch {
+        return '';
+      }
+    }
+  }
+
+  /**
+   * Find documents by name or extension.
+   *
+   * `folder` may be a known-folder name ("desktop") or an absolute path. The
+   * search stays shallow on purpose: a request like "the PDF on my desktop"
+   * should not walk the whole profile.
+   */
+  public async findDocuments(query: string, folder = 'desktop'): Promise<DocumentMatch[]> {
+    const wanted = query.trim().toLowerCase();
+    const target = folder.trim();
+    const root = isAbsolute(target) ? target : await this.knownFolder(target || 'desktop');
+    if (!root || !existsSync(root)) return [];
+
+    const collected: DocumentMatch[] = [];
+    const walk = (dir: string, depth: number): void => {
+      if (depth > 2) return;
+      let entries: Dirent[];
+      try {
+        entries = readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        if (entry.name.startsWith('.')) continue;
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full, depth + 1);
+          continue;
+        }
+        if (!entry.isFile()) continue;
+        try {
+          const stat = statSync(full);
+          collected.push({
+            path: full,
+            name: entry.name,
+            extension: extname(entry.name).toLowerCase(),
+            sizeBytes: stat.size,
+            modifiedAt: stat.mtimeMs,
+            folder: dir,
+            score: 0,
+          });
+        } catch {
+          /* the file vanished between listing and stat */
+        }
+      }
+    };
+    walk(root, 0);
+
+    const scored = collected
+      .map((doc) => ({ doc, score: scoreDocument(doc, wanted) }))
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score || b.doc.modifiedAt - a.doc.modifiedAt)
+      .slice(0, 10)
+      .map((entry) => entry.doc);
+    return scored;
+  }
+
+  /**
+   * Open a document with its registered default application.
+   *
+   * The shell accepts the request; the caller still needs proof that a viewer
+   * window appeared, so the new window is located and focused.
+   */
+  public async openDocument(filePath: string): Promise<{
+    ok: boolean;
+    windowTitle?: string;
+    error?: string;
+  }> {
+    const target = filePath.trim();
+    if (!target) return { ok: false, error: 'No document path was given.' };
+    if (!existsSync(target)) {
+      return { ok: false, error: `Document not found: ${target}` };
+    }
+    if (this.mockMode) {
+      return { ok: true, windowTitle: `${basename(target)} (Opened)` };
+    }
+
+    const before = await this.listRunningWindows().catch(() => [] as WindowItem[]);
+    let accepted: boolean;
+    try {
+      const encoded = Buffer.from(target, 'utf8').toString('base64');
+      const res = await this.runCli('open-document', [encoded]);
+      accepted = res.toLowerCase().includes('true');
+    } catch {
+      accepted = await this.invokeWin32(
+        `[Gemetron.Win32Input]::OpenDocument('${target.replace(/'/g, "''")}')`,
+      );
+    }
+    if (!accepted) {
+      return { ok: false, error: `The shell refused to open "${target}".` };
+    }
+
+    const stem = basename(target, extname(target)).toLowerCase();
+    const deadline = Date.now() + 8000;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 500));
+      const after = await this.listRunningWindows().catch(() => [] as WindowItem[]);
+      const fresh = after.filter((w) => !before.some((b) => b.hwnd === w.hwnd));
+      const viewer =
+        fresh.find((w) => w.title.toLowerCase().includes(stem)) ??
+        fresh.find((w) => w.isVisible) ??
+        fresh[0];
+      if (viewer) {
+        // The shell can ask the user which application should handle the
+        // file instead of opening it. That is not a successful open.
+        if (/pick an app|how do you want to open|choose an app/i.test(viewer.title)) {
+          return {
+            ok: false,
+            error: `The system asked which application should open "${target}". No default handler is registered for this file type.`,
+          };
+        }
+        await this.focusWindow(viewer.hwnd).catch(() => false);
+        return { ok: true, windowTitle: viewer.title };
+      }
+    }
+    return {
+      ok: false,
+      error: `"${target}" was handed to the shell but no viewer window appeared within 8 seconds.`,
+    };
+  }
+
+  /**
    * Helper to resolve an application window from running windows using name and aliases
    */
   public resolveAppWindow(query: string, windows: WindowItem[]): WindowItem | undefined {
@@ -1220,7 +1387,14 @@ export class AppManagerService {
     return { x: 0, y: 0, width: 0, height: 0 };
   }
 
-  private runCli(action: string, args: string[] = []): Promise<string> {
+  /**
+   * Run one native helper command.
+   *
+   * The call is always bounded: the helper talks to the window manager and
+   * to the shell, and a modal system dialog can keep it alive indefinitely.
+   * An unbounded call would hang the whole agent instead of failing one step.
+   */
+  private runCli(action: string, args: string[] = [], timeoutMs = 8000): Promise<string> {
     return new Promise((resolve, reject) => {
       const exePath = join(this.scriptsDir, 'Win32Input.exe');
       if (!existsSync(exePath)) {
@@ -1233,6 +1407,19 @@ export class AppManagerService {
 
       let stdout = '';
       let stderr = '';
+      let settled = false;
+
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        try {
+          child.kill();
+        } catch {
+          /* the process may already be gone */
+        }
+        reject(new Error(`Native helper timed out during "${action}" after ${timeoutMs} ms.`));
+      }, timeoutMs);
+      timer.unref?.();
 
       child.stdout.on('data', (d) => {
         stdout += d.toString();
@@ -1242,6 +1429,9 @@ export class AppManagerService {
       });
 
       child.on('close', (code) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
         if (code === 0) {
           resolve(stdout.trim());
         } else {
@@ -1249,7 +1439,12 @@ export class AppManagerService {
         }
       });
 
-      child.on('error', reject);
+      child.on('error', (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(err);
+      });
     });
   }
 

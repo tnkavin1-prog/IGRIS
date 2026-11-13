@@ -209,6 +209,19 @@ export interface CommandResult {
   reason?: string;
 }
 
+/** A document found on disk while answering a "the PDF on my desktop" request. */
+export interface DocumentMatch {
+  path: string;
+  name: string;
+  extension: string;
+  sizeBytes: number;
+  modifiedAt: number;
+  /** The folder the document was found in. */
+  folder: string;
+  /** How well the document matched the request; higher is better. */
+  score: number;
+}
+
 /* ==================== Autonomous Agentic Workflow ==================== */
 export type WorkflowActionType =
   | 'launch_app'

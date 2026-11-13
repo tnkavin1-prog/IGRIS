@@ -564,10 +564,59 @@ export class NativeInputService extends EventEmitter {
     return fallback();
   }
 
+  /**
+   * Resolve a well-known folder (desktop, documents, downloads, ...).
+   *
+   * The shell owns the answer: OneDrive redirection and localised folder
+   * names make a hardcoded "%USERPROFILE%\Desktop" wrong on many machines.
+   */
+  public async knownFolder(name = 'desktop'): Promise<string> {
+    if (this.mockMode) return '';
+    try {
+      const res = await this.runCli('known-folder', [name]);
+      return res.trim();
+    } catch {
+      // Fallback for a machine without the compiled helper.
+      try {
+        const output = await this.evalWin32(
+          `[Gemetron.Win32Input]::KnownFolder('${name.replace(/'/g, "''")}')`,
+        );
+        return output.trim();
+      } catch {
+        return '';
+      }
+    }
+  }
+
+  /**
+   * Open a document with its registered default application.
+   *
+   * Returns true only when the shell accepted the request; the caller is
+   * still responsible for verifying that a viewer window appeared.
+   */
+  public async openDocument(filePath: string): Promise<boolean> {
+    if (this.mockMode) return true;
+    const encoded = Buffer.from(filePath, 'utf8').toString('base64');
+    try {
+      const res = await this.runCli('open-document', [encoded]);
+      return res.toLowerCase().includes('true');
+    } catch {
+      try {
+        const output = await this.evalWin32(
+          `[Gemetron.Win32Input]::OpenDocument('${filePath.replace(/'/g, "''")}')`,
+        );
+        return /(^|\W)true(\W|$)/i.test(output);
+      } catch {
+        return false;
+      }
+    }
+  }
+
   private async invokeWin32(cmd: string): Promise<boolean> {
     try {
-      await this.evalWin32(cmd);
-      return true;
+      const output = await this.evalWin32(cmd);
+      // The helper prints the real result; a zero exit code is not a success.
+      return /(^|\W)true(\W|$)/i.test(output);
     } catch (err) {
       console.warn('[NativeInput] Win32 invoke failed:', err);
       return false;

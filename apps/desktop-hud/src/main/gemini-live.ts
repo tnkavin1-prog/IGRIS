@@ -945,6 +945,52 @@ export class GeminiLiveService extends EventEmitter {
                 },
               },
               {
+                name: 'find_document',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Finds documents on this computer by name or file extension, for example "the PDF on my desktop" or "the report in Documents". Returns the matching paths with their folder, size and last-modified time.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    query: {
+                      type: 'STRING',
+                      description:
+                        'File name, part of a file name, or extension to look for (pdf, report, budget.xlsx)',
+                    },
+                    folder: {
+                      type: 'STRING',
+                      description:
+                        'Where to look: desktop, documents, downloads, pictures, or an absolute path. Defaults to desktop.',
+                    },
+                  },
+                  required: ['query'],
+                },
+              },
+              {
+                name: 'open_document',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Opens a local document with its default application (PDF reader, Word, Excel) and verifies that a viewer window appeared. Use find_document first when the path is unknown.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    path: {
+                      type: 'STRING',
+                      description: 'Absolute path of the document to open',
+                    },
+                    query: {
+                      type: 'STRING',
+                      description:
+                        'Optional document name; used with folder to resolve the path automatically',
+                    },
+                    folder: {
+                      type: 'STRING',
+                      description: 'Folder to search when query is used. Defaults to desktop.',
+                    },
+                  },
+                },
+              },
+              {
                 name: 'switch_active_window',
                 behavior: 'NON_BLOCKING',
                 description:
@@ -2136,6 +2182,58 @@ export class GeminiLiveService extends EventEmitter {
                 Array.isArray(rawArgs) ? rawArgs : [String(rawArgs)],
               );
               result = res;
+              break;
+            }
+
+            case 'find_document': {
+              const query = String(call.args.query || call.args.name || '');
+              const folder = String(call.args.folder || call.args.directory || 'desktop');
+              const documents = await this.appManager.findDocuments(query, folder);
+              result = {
+                success: documents.length > 0,
+                query,
+                folder,
+                count: documents.length,
+                documents: documents.map((doc) => ({
+                  path: doc.path,
+                  name: doc.name,
+                  extension: doc.extension,
+                  sizeBytes: doc.sizeBytes,
+                  modifiedAt: new Date(doc.modifiedAt).toISOString(),
+                  folder: doc.folder,
+                })),
+                ...(documents.length === 0
+                  ? {
+                      error: `No document matching "${query}" was found in ${folder}.`,
+                      hint: 'Try find_document with just the file extension (for example "pdf"), or another folder.',
+                    }
+                  : {}),
+              };
+              break;
+            }
+
+            case 'open_document': {
+              let target = String(call.args.path || call.args.file_path || '');
+              if (!target) {
+                const query = String(call.args.query || call.args.name || '');
+                const folder = String(call.args.folder || 'desktop');
+                const documents = await this.appManager.findDocuments(query, folder);
+                target = documents[0]?.path ?? '';
+                if (!target) {
+                  result = {
+                    success: false,
+                    error: `No document matching "${query}" was found in ${folder}.`,
+                  };
+                  break;
+                }
+              }
+              const opened = await this.appManager.openDocument(target);
+              result = {
+                success: opened.ok,
+                path: target,
+                windowTitle: opened.windowTitle,
+                ...(opened.error ? { error: opened.error } : {}),
+              };
               break;
             }
 

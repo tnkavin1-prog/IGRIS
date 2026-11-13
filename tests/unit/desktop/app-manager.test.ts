@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { AppManagerService } from '../../../apps/desktop-hud/src/main/app-manager.js';
+
+/** Test fixtures live on the project drive, never on the system drive. */
+function repoTemp(): string {
+  return join(process.cwd(), 'temp');
+}
 
 describe('AppManagerService', () => {
   let appManager: AppManagerService;
@@ -89,6 +96,35 @@ describe('AppManagerService', () => {
     expect(res.error).toContain('not found');
     // The old behaviour burned ten seconds and blamed the window lookup.
     expect(res.error).not.toContain('no matching window appeared');
+  });
+
+  it('finds documents by name and by extension inside a folder', async () => {
+    // The fixture lives on the project drive, not on the system drive.
+    const dir = mkdtempSync(join(repoTemp(), 'app-manager-docs-'));
+    try {
+      writeFileSync(join(dir, 'Q3 report.pdf'), 'pdf');
+      writeFileSync(join(dir, 'budget.xlsx'), 'xlsx');
+      writeFileSync(join(dir, 'notes.txt'), 'txt');
+
+      const byName = await appManager.findDocuments('report', dir);
+      expect(byName).toHaveLength(1);
+      expect(byName[0]?.name).toBe('Q3 report.pdf');
+      expect(byName[0]?.path.startsWith(dir)).toBe(true);
+
+      const byExtension = await appManager.findDocuments('xlsx', dir);
+      expect(byExtension.map((doc) => doc.name)).toEqual(['budget.xlsx']);
+
+      const missing = await appManager.findDocuments('nonexistent', dir);
+      expect(missing).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports a missing document instead of pretending it opened', async () => {
+    const res = await appManager.openDocument('C:\\definitely\\missing\\file.pdf');
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain('not found');
   });
 
   it('focuses, minimizes, maximizes, and closes windows', async () => {

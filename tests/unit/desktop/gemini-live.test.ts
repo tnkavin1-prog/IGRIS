@@ -1153,6 +1153,59 @@ describe('GeminiLiveService', () => {
     expect(responses[1].response.result.acknowledged).toBe(false);
   });
 
+  it('finds and opens local documents through the known-folder resolver', async () => {
+    let sentPayload: any = null;
+    (service as any).socket = {
+      readyState: 1,
+      send: (str: string) => {
+        sentPayload = JSON.parse(str);
+      },
+    };
+    const manager = (service as any).appManager;
+    const findSpy = vi.spyOn(manager, 'findDocuments').mockResolvedValue([
+      {
+        path: 'C:\\Users\\tester\\OneDrive\\Desktop\\Q3 report.pdf',
+        name: 'Q3 report.pdf',
+        extension: '.pdf',
+        sizeBytes: 1024,
+        modifiedAt: Date.now(),
+        folder: 'C:\\Users\\tester\\OneDrive\\Desktop',
+        score: 100,
+      },
+    ]);
+    const openSpy = vi
+      .spyOn(manager, 'openDocument')
+      .mockResolvedValue({ ok: true, windowTitle: 'Q3 report.pdf - Adobe Acrobat' });
+
+    const handler = (service as any).handleServerMessage.bind(service);
+    await handler(
+      JSON.stringify({
+        toolCall: {
+          functionCalls: [
+            {
+              id: 'call_find_doc',
+              name: 'find_document',
+              args: { query: 'report' },
+            },
+            {
+              id: 'call_open_doc',
+              name: 'open_document',
+              args: { query: 'report' },
+            },
+          ],
+        },
+      }),
+    );
+
+    const responses = sentPayload.toolResponse.functionResponses;
+    expect(findSpy).toHaveBeenCalledWith('report', 'desktop');
+    expect(responses[0].response.result.success).toBe(true);
+    expect(responses[0].response.result.documents[0].name).toBe('Q3 report.pdf');
+    expect(openSpy).toHaveBeenCalledWith('C:\\Users\\tester\\OneDrive\\Desktop\\Q3 report.pdf');
+    expect(responses[1].response.result.success).toBe(true);
+    expect(responses[1].response.result.windowTitle).toContain('Acrobat');
+  });
+
   it('maps model frame coordinates to the physical desktop before clicking', async () => {
     let sentPayload: any = null;
     (service as any).socket = {

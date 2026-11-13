@@ -204,11 +204,40 @@ namespace Gemetron {
         [DllImport("user32.dll")]
         public static extern bool SetProcessDPIAware();
 
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern int SHGetKnownFolderPath(
+            [MarshalAs(UnmanagedType.LPStruct)] Guid rfid,
+            uint dwFlags,
+            IntPtr hToken,
+            out IntPtr ppszPath);
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern IntPtr ShellExecuteW(
+            IntPtr hwnd,
+            string lpOperation,
+            string lpFile,
+            string lpParameters,
+            string lpDirectory,
+            int nShowCmd);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern bool FreeLibrary(IntPtr hModule);
+
         public static readonly IntPtr DPI_AWARENESS_CONTEXT_UNAWARE = new IntPtr(-1);
         public static readonly IntPtr DPI_AWARENESS_CONTEXT_SYSTEM_AWARE = new IntPtr(-2);
         public static readonly IntPtr DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE = new IntPtr(-3);
         public static readonly IntPtr DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = new IntPtr(-4);
         public static readonly IntPtr DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED = new IntPtr(-5);
+
+        // Known folder identifiers. Resolving them through the shell honours
+        // OneDrive redirection and localised folder names, which a hardcoded
+        // "%USERPROFILE%\Desktop" never can.
+        private static readonly Guid FolderDesktop = new Guid("B4BFCC3A-DB2C-424C-B029-7FE99A87C641");
+        private static readonly Guid FolderDocuments = new Guid("FDD39AD0-238F-46AF-ADB4-6C85480369C7");
+        private static readonly Guid FolderDownloads = new Guid("374DE290-123F-4565-9164-39C4925E467B");
+        private static readonly Guid FolderPictures = new Guid("33E28130-4E1E-4676-835A-98395C3BC3BB");
+        private static readonly Guid FolderMusic = new Guid("4BD8D571-6D19-48D3-BE97-422220080E43");
+        private static readonly Guid FolderVideos = new Guid("18989B1D-99B5-455B-841C-AB7C74E4DDFC");
 
         public static bool AttachToInputDesktop() {
             try {
@@ -744,6 +773,59 @@ namespace Gemetron {
             return found;
         }
 
+        /// <summary>
+        /// Resolve a well-known folder (Desktop, Documents, Downloads, ...).
+        /// The shell knows about OneDrive redirection and localised names,
+        /// which is why the paths are never hardcoded.
+        /// </summary>
+        public static string KnownFolder(string name) {
+            string key = (name ?? "").Trim().ToLowerInvariant();
+            Guid folderId;
+            switch (key) {
+                case "desktop": folderId = FolderDesktop; break;
+                case "documents": folderId = FolderDocuments; break;
+                case "downloads": folderId = FolderDownloads; break;
+                case "pictures": case "images": folderId = FolderPictures; break;
+                case "music": folderId = FolderMusic; break;
+                case "videos": folderId = FolderVideos; break;
+                default:
+                    throw new ArgumentException("Unknown known folder: " + name);
+            }
+
+            IntPtr buffer = IntPtr.Zero;
+            try {
+                int hr = SHGetKnownFolderPath(folderId, 0, IntPtr.Zero, out buffer);
+                if (hr != 0 || buffer == IntPtr.Zero) {
+                    return "";
+                }
+                return Marshal.PtrToStringUni(buffer) ?? "";
+            } finally {
+                if (buffer != IntPtr.Zero) {
+                    Marshal.FreeCoTaskMem(buffer);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Open a document with its registered default application.
+        /// ShellExecute returns an instance handle; anything above 32 means the
+        /// shell accepted the request.
+        /// </summary>
+        public static bool OpenDocument(string path) {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) {
+                return false;
+            }
+            AttachToInputDesktop();
+            IntPtr result = ShellExecuteW(
+                IntPtr.Zero,
+                "open",
+                path,
+                null,
+                null,
+                1 /* SW_SHOWNORMAL */);
+            return result.ToInt64() > 32;
+        }
+
         public static bool FocusWindow(string query) {
             AttachToInputDesktop();
             IntPtr hwnd = FindWindowByQuery(query);
@@ -1102,6 +1184,10 @@ namespace Gemetron {
                 case "uia-set-value":
                     return UIASetValue(DecodeBase64(args[0]), DecodeBase64(args[1]),
                         args.Length > 2 ? DecodeBase64(args[2]) : "").ToString();
+                case "known-folder":
+                    return KnownFolder(args.Length > 0 ? args[0] : "desktop");
+                case "open-document":
+                    return OpenDocument(DecodeBase64(args[0])).ToString();
                 default:
                     throw new ArgumentException("Unknown native action: " + action);
             }
@@ -1168,6 +1254,18 @@ namespace Gemetron {
                     case "window-bounds":
                         if (args.Length >= 2) {
                             Console.WriteLine(GetWindowBounds(args[1]));
+                            return 0;
+                        }
+                        break;
+                    case "known-folder":
+                        if (args.Length >= 2) {
+                            Console.WriteLine(KnownFolder(args[1]));
+                            return 0;
+                        }
+                        break;
+                    case "open-document":
+                        if (args.Length >= 2) {
+                            Console.WriteLine(OpenDocument(DecodeBase64(args[1])).ToString());
                             return 0;
                         }
                         break;
