@@ -644,7 +644,13 @@ if (!gotLock) {
       await liveService.workflow.rejectStep(taskId, stepId, reason),
   );
   ipcMain.handle('workflow:get-current-task', () => liveService.workflow.getCurrentTask());
-
+  ipcMain.handle('workflow:list-checkpoints', () => liveService.workflow.listCheckpoints());
+  ipcMain.handle('workflow:resume-checkpoint', async (_, taskId: string) =>
+    await liveService.workflow.resumeCheckpoint(taskId),
+  );
+  ipcMain.handle('workflow:discard-checkpoint', async (_, taskId: string) =>
+    await liveService.workflow.discardCheckpoint(taskId),
+  );
   // Persistent Memory Handlers
   ipcMain.handle('memory:get-preferences', () => liveService.memory.getPreferences());
   ipcMain.handle('memory:update-preferences', (_, partial) =>

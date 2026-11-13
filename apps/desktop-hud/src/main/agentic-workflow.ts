@@ -8,6 +8,7 @@ import type { ClipboardService } from './clipboard-manager.js';
 import type { JarvisMemoryStore } from './jarvis-memory.js';
 import { computerOperator } from './computer-operator.js';
 import { assessCommand, redactCommand } from './command-policy.js';
+import { TaskCheckpointStore } from './task-checkpoint.js';
 import { join } from 'node:path';
 import { TEMP_DIR } from './runtime-paths.js';
 import type {
@@ -28,6 +29,8 @@ export interface WorkflowEngineDependencies {
   clipboardService?: ClipboardService;
   memoryStore?: JarvisMemoryStore;
   autoApprove?: boolean;
+  /** Directory that holds task checkpoints. Omit to disable checkpointing. */
+  checkpointDir?: string;
 }
 
 /** Risk tier of a `run_command` step, derived from the command policy. */
@@ -54,6 +57,7 @@ export class AgenticWorkflowEngine extends EventEmitter {
    * explicit human decision (see `riskLevel` handling in `executeLoop`).
    */
   private autoApprove = false;
+  private checkpointStore: TaskCheckpointStore | null = null;
 
   constructor(deps: WorkflowEngineDependencies) {
     super();
@@ -66,6 +70,19 @@ export class AgenticWorkflowEngine extends EventEmitter {
     this.memoryStore = deps.memoryStore;
     if (typeof deps.autoApprove === 'boolean') {
       this.autoApprove = deps.autoApprove;
+    }
+    if (deps.checkpointDir) {
+      try {
+        this.checkpointStore = new TaskCheckpointStore({ dir: deps.checkpointDir });
+        // A crashed session leaves a checkpoint behind; surface it as the
+        // current task so the user can resume rather than start over.
+        const incomplete = this.checkpointStore.listIncomplete();
+        if (incomplete.length > 0 && this.currentTask === null) {
+          this.currentTask = incomplete[0]!;
+        }
+      } catch {
+        this.checkpointStore = null;
+      }
     }
   }
 
@@ -95,6 +112,29 @@ export class AgenticWorkflowEngine extends EventEmitter {
 
   public getCurrentTask(): AgenticTask | null {
     return this.currentTask ? { ...this.currentTask, steps: [...this.currentTask.steps] } : null;
+  }
+
+  /** List the tasks that were left unfinished by a previous process run. */
+  public listCheckpoints(): AgenticTask[] {
+    return this.checkpointStore?.listIncomplete() ?? [];
+  }
+
+  /** Restore a checkpointed task as the current task. */
+  public resumeCheckpoint(taskId: string): boolean {
+    const task = this.checkpointStore?.load(taskId);
+    if (!task) return false;
+    if (this.isExecuting) return false;
+    this.currentTask = task;
+    this.currentTask.status = 'running';
+    this.emit('task:updated', this.currentTask);
+    return true;
+  }
+
+  /** Remove a checkpoint (for example after the user has dismissed it). */
+  public discardCheckpoint(taskId: string): boolean {
+    this.checkpointStore?.remove(taskId);
+    if (this.currentTask?.id === taskId) this.currentTask = null;
+    return true;
   }
 
   /**
@@ -706,6 +746,7 @@ export class AgenticWorkflowEngine extends EventEmitter {
           this.emit('task:step-completed', { task: this.currentTask, step, result });
 
           this.currentTask.activeStepIndex += 1;
+          this.checkpointStore?.save(this.currentTask);
           this.emit('task:updated', this.currentTask);
         } catch (stepErr) {
           if (!this.currentTask || (this.currentTask.status as TaskStatus) !== 'running') {
@@ -722,6 +763,7 @@ export class AgenticWorkflowEngine extends EventEmitter {
           this.currentTask.error = this.currentTask.error
             ? `${this.currentTask.error}; ${step.error}`
             : step.error;
+          this.checkpointStore?.save(this.currentTask);
           this.emit('task:step-failed', { task: this.currentTask, step, error: step.error });
           this.emit('task:updated', this.currentTask);
           continue;
@@ -736,6 +778,7 @@ export class AgenticWorkflowEngine extends EventEmitter {
         const failed = this.currentTask.steps.filter((s) => s.status === 'failed');
         this.currentTask.status = failed.length > 0 ? 'partial' : 'completed';
         this.currentTask.completedAt = Date.now();
+        this.checkpointStore?.remove(this.currentTask.id);
         if (this.memoryStore) {
           this.memoryStore.addRecentContext({
             category: 'workflow',

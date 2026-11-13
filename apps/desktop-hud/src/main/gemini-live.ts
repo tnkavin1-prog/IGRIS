@@ -17,7 +17,8 @@ import { autonomousAgent } from './autonomous-agent.js';
 import { GeminiVisionPlanner } from './vision-planner.js';
 import { screenGrounding } from './screen-grounding.js';
 import { downloadManager } from './download-manager.js';
-import { BRIDGE_ENV_PATH } from './runtime-paths.js';
+import { BRIDGE_ENV_PATH, DATA_ROOT } from './runtime-paths.js';
+import { join } from 'node:path';
 import { HardwareMonitorService } from './hardware-monitor.js';
 import { FrameCoordinateMapper } from './frame-coords.js';
 import { PdfReader } from './pdf-reader.js';
@@ -127,6 +128,9 @@ export class GeminiLiveService extends EventEmitter {
         browserGateway: this.browserGateway,
         clipboardService: this.clipboard,
         memoryStore: this.memoryStore,
+        // Persist task state across restarts so an interrupted multi-step
+        // workflow can be resumed instead of started from scratch.
+        checkpointDir: join(DATA_ROOT, 'tasks'),
       });
 
     this.auditor = deps?.auditor ?? new SecurityAuditor({ mockMode: this.appManager.isMockMode });
