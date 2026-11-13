@@ -236,8 +236,7 @@ const api = {
       ipcRenderer.invoke('workflow:reject-step', taskId, stepId, reason),
     getCurrentTask: (): Promise<AgenticTask | null> =>
       ipcRenderer.invoke('workflow:get-current-task'),
-    listCheckpoints: (): Promise<AgenticTask[]> =>
-      ipcRenderer.invoke('workflow:list-checkpoints'),
+    listCheckpoints: (): Promise<AgenticTask[]> => ipcRenderer.invoke('workflow:list-checkpoints'),
     resumeCheckpoint: (taskId: string): Promise<boolean> =>
       ipcRenderer.invoke('workflow:resume-checkpoint', taskId),
     discardCheckpoint: (taskId: string): Promise<boolean> =>
