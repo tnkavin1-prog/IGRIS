@@ -16,6 +16,7 @@ import type { BrowserGateway } from './browser-gateway.js';
 import { SCRIPTS_DIR } from './runtime-paths.js';
 import { assessCommand, redactCommand } from './command-policy.js';
 import type { ApplicationAdapterRegistry } from './application-adapters.js';
+import { logger } from './errors.js';
 
 export interface AppManagerOptions {
   mockMode?: boolean;
@@ -74,7 +75,9 @@ function scoreDocument(doc: DocumentMatch, wanted: string): number {
   return 0;
 }
 
-export function findExecutableForApp(appName: string): { exe: string; defaultArgs: string[] } | null {
+export function findExecutableForApp(
+  appName: string,
+): { exe: string; defaultArgs: string[] } | null {
   const raw = appName.trim().toLowerCase();
 
   if (raw === 'chrome' || raw === 'google chrome' || raw.includes('chrome')) {
@@ -267,7 +270,7 @@ export class AppManagerService {
         return parsed;
       }
     } catch (err) {
-      console.warn('[AppManager] Failed to list windows via Win32:', err);
+      logger.warn('Failed to list windows via Win32', { error: String(err) });
     }
 
     return []; // Never fake real desktop state. An empty list is honest; fake windows make the agent lie.
