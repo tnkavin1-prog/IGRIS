@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { existsSync } from 'node:fs';
+import { logger } from './errors.js';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import type { CursorPosition, DisplayMetrics, SingleDisplayInfo } from './types.js';
@@ -405,8 +406,9 @@ export class NativeInputService extends EventEmitter {
         this.simulatedCursor = { x, y };
         return { x, y };
       }
-    } catch {}
-
+    } catch (err) {
+      logger.warn('Native input operation failed', { error: String(err) });
+    }
     return { ...this.simulatedCursor };
   }
 

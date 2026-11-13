@@ -714,8 +714,9 @@ export class AppManagerService {
       if (res && res.trim().startsWith('{')) {
         return JSON.parse(res.trim());
       }
-    } catch {}
-
+    } catch (err) {
+      logger.warn('AppManager operation failed', { error: String(err) });
+    }
     if (monitorIndex > 0) {
       return { x: 1920 * monitorIndex, y: 0, width: 1920, height: 1040 };
     }
@@ -1224,7 +1225,9 @@ export class AppManagerService {
         if (res && res.trim().startsWith('[')) {
           return JSON.parse(res.trim());
         }
-      } catch {}
+      } catch (err) {
+        logger.warn('AppManager operation failed', { error: String(err) });
+      }
     }
 
     return [];
@@ -1386,7 +1389,9 @@ export class AppManagerService {
       try {
         child.kill('SIGTERM');
         child.kill();
-      } catch {}
+      } catch (err) {
+        logger.warn('AppManager operation failed', { error: String(err) });
+      }
     }
     this.activeProcesses.clear();
   }
@@ -1407,8 +1412,9 @@ export class AppManagerService {
       if (raw && raw.startsWith('{')) {
         return JSON.parse(raw);
       }
-    } catch {}
-
+    } catch (err) {
+      logger.warn('AppManager operation failed', { error: String(err) });
+    }
     return { x: 0, y: 0, width: 0, height: 0 };
   }
 

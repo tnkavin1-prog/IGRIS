@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { join } from 'node:path';
+import { logger } from './errors.js';
 import type { BrowserWindow } from 'electron';
 import type { CDPClient } from './cdp-client.js';
 import {
@@ -387,7 +388,9 @@ export class ControlServer {
           (this.server as any).closeAllConnections();
         }
         this.server.close();
-      } catch {}
+      } catch (err) {
+        logger.warn('Control server operation failed', { error: String(err) });
+      }
       this.server = null;
     }
   }
