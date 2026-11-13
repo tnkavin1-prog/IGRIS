@@ -1,10 +1,36 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync, promises as fs } from 'node:fs';
+import { existsSync, promises as fs, writeFileSync, unlinkSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { TEMP_DIR } from '../runtime-paths.js';
 import os from 'node:os';
 import type { ApplicationSkill, SkillActionDefinition, SkillResult } from '../skill-framework.js';
 
 const execAsync = promisify(exec);
+
+/**
+ * Run a PowerShell script from a file so that quoting is not mangled by the
+ * `-Command "..."` wrapper. The old form broke on any text containing
+ * spaces or quotes.
+ */
+async function runPowerShellScript(script: string, timeoutMs = 60_000): Promise<string> {
+  mkdirSync(TEMP_DIR, { recursive: true });
+  const scriptPath = join(TEMP_DIR, `office-${Date.now()}.ps1`);
+  writeFileSync(scriptPath, script, 'utf8');
+  try {
+    const { stdout } = await execAsync(
+      `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`,
+      { timeout: timeoutMs },
+    );
+    return stdout;
+  } finally {
+    try {
+      unlinkSync(scriptPath);
+    } catch {
+      /* best effort */
+    }
+  }
+}
 
 export interface OfficeSkillOptions {
   mockMode?: boolean;
@@ -164,7 +190,7 @@ export class OfficeSkill implements ApplicationSkill {
               Write-Error $_.Exception.Message
             }
           `;
-          await execAsync(`powershell -NoProfile -Command "${script}"`);
+          await runPowerShellScript(script);
           return { success: true, data: { created: true, filePath, title } };
         } catch {
           // Fallback to text/markdown if Word COM is unavailable on host
@@ -215,7 +241,7 @@ export class OfficeSkill implements ApplicationSkill {
               Write-Error $_.Exception.Message
             }
           `;
-          await execAsync(`powershell -NoProfile -Command "${script}"`);
+          await runPowerShellScript(script, 120_000);
 
           const { existsSync, statSync } = await import('node:fs');
           if (!existsSync(filePath) || statSync(filePath).size === 0) {
@@ -249,7 +275,7 @@ export class OfficeSkill implements ApplicationSkill {
             [System.Runtime.InteropServices.Marshal]::ReleaseComObject($word) | Out-Null
             $text
           `;
-          const { stdout } = await execAsync(`powershell -NoProfile -Command "${script}"`);
+          const stdout = await runPowerShellScript(script);
           return { success: true, data: { filePath, content: stdout.trim() } };
         } catch (err) {
           return { success: false, error: (err as Error).message };
