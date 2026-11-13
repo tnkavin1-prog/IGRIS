@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-13T10:34:42.481Z",
+  "generatedAt": "2026-11-13T12:25:39.758Z",
   "total": 6,
   "passed": 6,
   "failed": 0,
@@ -9,14 +9,14 @@
       "name": "Basic Windows control",
       "passed": true,
       "details": "launch ok=true",
-      "durationMs": 1
+      "durationMs": 0
     },
     {
       "id": "A2",
       "name": "Open document",
       "passed": true,
       "details": "ok=false error=Document not found: C:\\fake\\doc.pdf",
-      "durationMs": 0
+      "durationMs": 1
     },
     {
       "id": "E",
@@ -30,14 +30,14 @@
       "name": "Checkpoint reload",
       "passed": true,
       "details": "loaded=bench-task",
-      "durationMs": 5
+      "durationMs": 4
     },
     {
       "id": "F",
       "name": "Storage off C:",
       "passed": true,
       "details": "root=E:\\GemetronData",
-      "durationMs": 0
+      "durationMs": 1
     },
     {
       "id": "F2",

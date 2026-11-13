@@ -57,6 +57,26 @@ export function createMainWindow(preloadPath: string, htmlPath: string): Browser
 
   mainWindow.once('ready-to-show', () => {
     if (mainWindow) {
+      // Guarantee the window is visible on the primary display even if a
+      // previous session left it off-screen (monitor change, orb collapse).
+      const display = screen.getPrimaryDisplay();
+      const area = display.workArea;
+      const b = mainWindow.getBounds();
+      if (
+        b.x + b.width < area.x ||
+        b.x > area.x + area.width ||
+        b.y + b.height < area.y ||
+        b.y > area.y + area.height
+      ) {
+        const w = Math.min(b.width, area.width);
+        const h = Math.min(b.height, area.height);
+        mainWindow.setBounds({
+          x: area.x + area.width - w - 40,
+          y: area.y + 40,
+          width: w,
+          height: h,
+        });
+      }
       mainWindow.show();
       mainWindow.focus();
       mainWindow.setAlwaysOnTop(true);
