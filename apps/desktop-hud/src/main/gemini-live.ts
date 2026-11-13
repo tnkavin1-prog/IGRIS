@@ -22,6 +22,7 @@ import { join } from 'node:path';
 import { HardwareMonitorService } from './hardware-monitor.js';
 import { FrameCoordinateMapper } from './frame-coords.js';
 import { PdfReader } from './pdf-reader.js';
+import { buildDefaultAdapterRegistry } from './application-adapters.js';
 import type {
   BoundingBoxTarget,
   CaptureResult,
@@ -107,6 +108,11 @@ export class GeminiLiveService extends EventEmitter {
         nativeInput: this.nativeInput,
       });
     this.appManager.setBrowserGateway(this.browserGateway);
+    // Register the application adapters so the launch path is uniform
+    // regardless of whether the request arrives from the voice tool, the
+    // skill registry or the workflow engine.
+    const adapterRegistry = buildDefaultAdapterRegistry(this.appManager, this.browserGateway);
+    this.appManager.setAdapterRegistry(adapterRegistry);
     this.clipboard =
       deps?.clipboard ?? new ClipboardService({ mockMode: this.appManager.isMockMode });
     this.memoryStore = deps?.memoryStore ?? new JarvisMemoryStore();

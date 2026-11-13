@@ -15,6 +15,7 @@ import type { JarvisMemoryStore } from './jarvis-memory.js';
 import type { BrowserGateway } from './browser-gateway.js';
 import { SCRIPTS_DIR } from './runtime-paths.js';
 import { assessCommand, redactCommand } from './command-policy.js';
+import type { ApplicationAdapterRegistry } from './application-adapters.js';
 
 export interface AppManagerOptions {
   mockMode?: boolean;
@@ -73,7 +74,7 @@ function scoreDocument(doc: DocumentMatch, wanted: string): number {
   return 0;
 }
 
-function findExecutableForApp(appName: string): { exe: string; defaultArgs: string[] } | null {
+export function findExecutableForApp(appName: string): { exe: string; defaultArgs: string[] } | null {
   const raw = appName.trim().toLowerCase();
 
   if (raw === 'chrome' || raw === 'google chrome' || raw.includes('chrome')) {
@@ -173,6 +174,7 @@ export class AppManagerService {
   private scriptsDir: string;
   private memoryStore?: JarvisMemoryStore;
   private browserGateway?: BrowserGateway;
+  private adapterRegistry?: ApplicationAdapterRegistry;
   private activeProcesses: Set<ChildProcess> = new Set();
   private simulatedWindows: WindowItem[] = [
     {
@@ -222,6 +224,10 @@ export class AppManagerService {
 
   public setBrowserGateway(gateway: BrowserGateway): void {
     this.browserGateway = gateway;
+  }
+
+  public setAdapterRegistry(registry: ApplicationAdapterRegistry): void {
+    this.adapterRegistry = registry;
   }
 
   public setMockMode(enabled: boolean): void {
@@ -282,6 +288,14 @@ export class AppManagerService {
    */
   public async launchApplication(appName: string, args: string[] = []): Promise<LaunchResult> {
     const raw = appName.trim().toLowerCase();
+    const adapter = this.adapterRegistry?.resolve(raw);
+    if (adapter) {
+      const available = await adapter.isAvailable();
+      if (!available) {
+        return { ok: false, appName, error: `${appName} is not installed.` };
+      }
+      return adapter.launch(args);
+    }
     const memAlias = this.memoryStore?.getAlias(raw);
     const aliasCarriesIntent =
       Boolean(memAlias) &&
@@ -309,9 +323,21 @@ export class AppManagerService {
     }
 
     const target = this.resolveLaunchTarget(raw, args, memAlias);
-    const executable = target.executable;
-    const finalArgs = target.args;
+    return this.launchDirect(target.executable, target.args, appName, raw);
+  }
 
+  /**
+   * Launch an already-resolved executable and verify that a window appears.
+   *
+   * Split out from {@link launchApplication} so the application adapters can
+   * spawn an executable without re-running the resolver (which would loop).
+   */
+  public async launchDirect(
+    executable: string,
+    finalArgs: string[],
+    appName: string,
+    raw: string,
+  ): Promise<LaunchResult> {
     if (this.mockMode) {
       const mockPid = Math.floor(1000 + Math.random() * 9000);
       this.simulatedWindows.push({
@@ -340,9 +366,6 @@ export class AppManagerService {
         shell: useShell,
         windowsHide: false,
       });
-      // spawn() reports a missing executable asynchronously through the
-      // 'error' event. Reading the flag synchronously lost the real cause and
-      // turned "file not found" into a ten second "no window appeared" timeout.
       started = await new Promise<boolean>((resolve) => {
         const grace = setTimeout(() => resolve(true), 2000);
         child?.on('error', (err: NodeJS.ErrnoException) => {
@@ -402,7 +425,6 @@ export class AppManagerService {
       const windows = await this.listRunningWindows().catch(() => [] as WindowItem[]);
       const found = this.resolveAppWindow(raw, windows) ?? this.resolveAppWindow(exeBase, windows);
       if (found) {
-        // The window exists; now confirm it actually came to the foreground.
         const focused = await this.focusWindow(found.hwnd).catch(() => false);
         return {
           ok: true,
