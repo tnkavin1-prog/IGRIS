@@ -239,7 +239,12 @@ export function buildDefaultAdapterRegistry(
       }
       const resolved = findExecutableForApp('chrome');
       if (!resolved) return false;
-      const result = await appManager.launchDirect(resolved.exe, resolved.defaultArgs, 'chrome', 'chrome');
+      const result = await appManager.launchDirect(
+        resolved.exe,
+        resolved.defaultArgs,
+        'chrome',
+        'chrome',
+      );
       return result.ok;
     },
   });
