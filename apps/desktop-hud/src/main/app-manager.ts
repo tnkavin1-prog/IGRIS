@@ -14,7 +14,7 @@ import type {
 import type { JarvisMemoryStore } from './jarvis-memory.js';
 import type { BrowserGateway } from './browser-gateway.js';
 import { SCRIPTS_DIR } from './runtime-paths.js';
-import { assessCommand } from './command-policy.js';
+import { assessCommand, redactCommand } from './command-policy.js';
 
 export interface AppManagerOptions {
   mockMode?: boolean;
@@ -1232,7 +1232,7 @@ export class AppManagerService {
     // 1. Hard policy: blocked commands never run.
     if (assessment.blocked) {
       options.audit?.('command:blocked', {
-        command: cmd,
+        command: redactCommand(cmd),
         risk: assessment.risk,
         rules: assessment.matchedRules,
       });
@@ -1252,7 +1252,7 @@ export class AppManagerService {
     const needsApproval = assessment.risk === 'dangerous' || options.requiresApproval === true;
     if (needsApproval && options.approved !== true && options.allowDangerous !== true) {
       options.audit?.('command:approval-required', {
-        command: cmd,
+        command: redactCommand(cmd),
         risk: assessment.risk,
         rules: assessment.matchedRules,
       });
@@ -1270,7 +1270,7 @@ export class AppManagerService {
 
     if (assessment.risk !== 'safe') {
       options.audit?.('command:executed', {
-        command: cmd,
+        command: redactCommand(cmd),
         risk: assessment.risk,
         rules: assessment.matchedRules,
         approved: options.approved === true || options.allowDangerous === true,

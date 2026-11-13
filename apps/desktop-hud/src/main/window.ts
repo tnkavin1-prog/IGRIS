@@ -1,5 +1,5 @@
 import { BrowserWindow, screen } from 'electron';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { LOGS_DIR } from './runtime-paths.js';
 
@@ -67,7 +67,17 @@ export function createMainWindow(preloadPath: string, htmlPath: string): Browser
   mainWindow.webContents.on('console-message', (_, level, message, line, sourceId) => {
     const lineStr = `[${new Date().toISOString()}] [Renderer] [lvl ${level}] ${message} (${sourceId}:${line})\n`;
     try {
-      appendFileSync(RENDERER_LOG, lineStr);
+      try {
+        const s = statSync(RENDERER_LOG);
+        if (s.size >= 5 * 1024 * 1024) {
+          try {
+            unlinkSync(`${RENDERER_LOG}.1`);
+          } catch {}
+          renameSync(RENDERER_LOG, `${RENDERER_LOG}.1`);
+        }
+      } catch {}
+      mkdirSync(LOGS_DIR, { recursive: true });
+      appendFileSync(RENDERER_LOG, lineStr, 'utf8');
     } catch {}
     console.log(`[Renderer Console] [${level}] ${message} (${sourceId}:${line})`);
   });
@@ -75,7 +85,17 @@ export function createMainWindow(preloadPath: string, htmlPath: string): Browser
   mainWindow.webContents.on('did-fail-load', (_, errorCode, errorDescription) => {
     const errStr = `[${new Date().toISOString()}] [DesktopHUD] Failed to load HTML: ${errorCode} - ${errorDescription}\n`;
     try {
-      appendFileSync(RENDERER_LOG, errStr);
+      try {
+        const s = statSync(RENDERER_LOG);
+        if (s.size >= 5 * 1024 * 1024) {
+          try {
+            unlinkSync(`${RENDERER_LOG}.1`);
+          } catch {}
+          renameSync(RENDERER_LOG, `${RENDERER_LOG}.1`);
+        }
+      } catch {}
+      mkdirSync(LOGS_DIR, { recursive: true });
+      appendFileSync(RENDERER_LOG, errStr, 'utf8');
     } catch {}
     console.error(`[DesktopHUD] Failed to load HTML: ${errorCode} - ${errorDescription}`);
   });
@@ -83,7 +103,17 @@ export function createMainWindow(preloadPath: string, htmlPath: string): Browser
   mainWindow.webContents.on('render-process-gone', (_, details) => {
     const goneStr = `[${new Date().toISOString()}] [DesktopHUD] Render process gone: ${JSON.stringify(details)}\n`;
     try {
-      appendFileSync(RENDERER_LOG, goneStr);
+      try {
+        const s = statSync(RENDERER_LOG);
+        if (s.size >= 5 * 1024 * 1024) {
+          try {
+            unlinkSync(`${RENDERER_LOG}.1`);
+          } catch {}
+          renameSync(RENDERER_LOG, `${RENDERER_LOG}.1`);
+        }
+      } catch {}
+      mkdirSync(LOGS_DIR, { recursive: true });
+      appendFileSync(RENDERER_LOG, goneStr, 'utf8');
     } catch {}
     console.error(`[DesktopHUD] Render process gone:`, details);
   });

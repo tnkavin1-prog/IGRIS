@@ -1,15 +1,38 @@
 import { app, ipcMain, globalShortcut, shell } from 'electron';
 import { join } from 'node:path';
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, mkdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { CDPClient } from './cdp-client.js';
 import { DATA_ROOT, ICON_PATH, LOGS_DIR, NOTES_DIR, TEMP_DIR } from './runtime-paths.js';
 import { WakeWordService } from './wake-word.js';
 import { startAutoUpdates } from './auto-update.js';
 
-function logLine(file: 'hud-startup' | 'electron-error', msg: string): void {
+const LOG_ROTATION_BYTES = 5 * 1024 * 1024;
+
+function rotateLogIfNeeded(logPath: string): void {
   try {
-    appendFileSync(join(LOGS_DIR, `${file}.log`), `[${new Date().toISOString()}] ${msg}\n`);
-  } catch {}
+    const stat = statSync(logPath);
+    if (stat.size < LOG_ROTATION_BYTES) return;
+    const rotated = `${logPath}.1`;
+    try {
+      unlinkSync(rotated);
+    } catch {
+      /* no previous backup */
+    }
+    renameSync(logPath, rotated);
+  } catch {
+    /* the file does not exist yet, or it is not writable */
+  }
+}
+
+function logLine(file: 'hud-startup' | 'electron-error', msg: string): void {
+  const logPath = join(LOGS_DIR, `${file}.log`);
+  try {
+    mkdirSync(LOGS_DIR, { recursive: true });
+    rotateLogIfNeeded(logPath);
+    appendFileSync(logPath, `[${new Date().toISOString()}] ${msg}\n`, 'utf8');
+  } catch {
+    console.error(`[Log] Failed to write ${file}.log`);
+  }
 }
 
 process.on('uncaughtException', (err) => {

@@ -7,7 +7,7 @@ import type { BrowserGateway } from './browser-gateway.js';
 import type { ClipboardService } from './clipboard-manager.js';
 import type { JarvisMemoryStore } from './jarvis-memory.js';
 import { computerOperator } from './computer-operator.js';
-import { assessCommand } from './command-policy.js';
+import { assessCommand, redactCommand } from './command-policy.js';
 import { join } from 'node:path';
 import { TEMP_DIR } from './runtime-paths.js';
 import type {
@@ -864,7 +864,7 @@ export class AgenticWorkflowEngine extends EventEmitter {
           audit: (event, details) => {
             this.memoryStore?.addRecentContext({
               category: 'workflow',
-              summary: `Command ${event}: ${String(details?.command ?? p.command)}`,
+              summary: `Command ${event}: ${redactCommand(String(details?.command ?? p.command))}`,
               metadata: {
                 ...details,
                 taskId: this.currentTask?.id,

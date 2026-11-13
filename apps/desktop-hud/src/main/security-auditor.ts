@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { createHash } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { LOGS_DIR } from './runtime-paths.js';
 
@@ -65,6 +65,22 @@ export class SecurityAuditor extends EventEmitter {
     if (this.writable) {
       try {
         mkdirSync(dirname(this.auditFilePath), { recursive: true });
+        // The chain is append-only, so it cannot be rotated without breaking
+        // the hash link. When it grows past the cap, archive it and start a
+        // new chain in the same file; the archive keeps the history.
+        try {
+          const stat = statSync(this.auditFilePath);
+          if (stat.size >= 10 * 1024 * 1024) {
+            const archived = `${this.auditFilePath}.${Date.now()}.archive`;
+            try {
+              renameSync(this.auditFilePath, archived);
+            } catch {
+              /* keep appending */
+            }
+          }
+        } catch {
+          /* the file does not exist yet */
+        }
         appendFileSync(this.auditFilePath, JSON.stringify(entry) + '\n', 'utf8');
       } catch {
         this.writable = false;

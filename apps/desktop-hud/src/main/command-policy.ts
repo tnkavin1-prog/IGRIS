@@ -319,3 +319,41 @@ export function isCommandSafe(command: string): boolean {
   const assessment = assessCommand(command);
   return assessment.risk === 'safe' || assessment.risk === 'caution';
 }
+
+/**
+ * Redact obviously secret-bearing fragments from a command before it is
+ * written to the audit chain or to the memory store.
+ *
+ * The audit chain is meant to be reviewable by the user, so it must not
+ * preserve passwords, tokens or API keys that happened to be on the command
+ * line. The redaction is deliberately conservative: it targets the common
+ * shapes (`-Header "Authorization: Bearer …"`, `--api-key=…`, `--password …`)
+ * and never tries to reconstruct the original.
+ */
+export function redactCommand(command: string): string {
+  let result = command;
+  // Bearer tokens first (they are the credential, not the scheme).
+  result = result.replace(/\bBearer\s+[A-Za-z0-9._-]{16,}/gi, 'Bearer [REDACTED]');
+  // Authorization headers: keep the scheme, drop the credential.
+  result = result.replace(
+    /(\b(?:authorization)\s*[:=]\s*["']?)([^\s"']{6,})(["']?)/gi,
+    '$1[REDACTED]$3',
+  );
+  // Common secret-bearing flags and environment assignments.
+  result = result.replace(
+    /(--?(?:api[-_]?key|token|password|passwd|secret|auth)\s*[= ]\s*["']?)([^\s"']{4,})(["']?)/gi,
+    '$1[REDACTED]$3',
+  );
+  result = result.replace(
+    /\b([A-Z_]+(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD))\s*=\s*["']?([^\s"']{4,})(["']?)/g,
+    '$1=[REDACTED]$3',
+  );
+  // HTTP basic auth embedded in URLs.
+  result = result.replace(/(\/\/)([^:/\s]+):([^@\s]+)(@)/g, '$1$2:[REDACTED]$4');
+  // HTTP basic auth passed via -u user:password.
+  result = result.replace(/(-u\s+)([^\s"']+):([^\s"']+)/gi, '$1[REDACTED]');
+  // Long standalone hex/base64 blobs that look like keys (32+ hex or 24+ base64 chars).
+  result = result.replace(/\b[0-9a-f]{32,}\b/gi, '[REDACTED]');
+  result = result.replace(/\b[A-Za-z0-9+/]{40,}={0,2}\b/g, '[REDACTED]');
+  return result;
+}

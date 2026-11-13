@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { assessCommand, isCommandSafe } from '../../../apps/desktop-hud/src/main/command-policy.js';
+import {
+  assessCommand,
+  isCommandSafe,
+  redactCommand,
+} from '../../../apps/desktop-hud/src/main/command-policy.js';
 
 describe('assessCommand', () => {
   it('treats empty commands as safe no-ops', () => {
@@ -94,5 +98,36 @@ describe('assessCommand', () => {
     expect(result.risk).toBe('caution');
     expect(result.blocked).toBe(false);
     expect(result.requiresApproval).toBe(false);
+  });
+});
+
+describe('redactCommand', () => {
+  it('redacts bearer tokens and common secret flags', () => {
+    expect(redactCommand('curl -H "Authorization: Bearer abcdef0123456789abcdef"')).toContain(
+      '[REDACTED]',
+    );
+    expect(redactCommand('curl -H "Authorization: Bearer abcdef0123456789abcdef"')).not.toContain(
+      'abcdef0123456789abcdef',
+    );
+
+    expect(redactCommand('gh api --token ghp_abcdefghijklmnopqrstuvwxyz0123')).toContain(
+      '[REDACTED]',
+    );
+    expect(redactCommand('gh api --token ghp_abcdefghijklmnopqrstuvwxyz0123')).not.toContain(
+      'ghp_abcdefghijklmnopqrstuvwxyz0123',
+    );
+
+    expect(redactCommand('curl -u alice:secret-password https://example.com')).not.toContain(
+      'secret-password',
+    );
+    expect(redactCommand('set GEMINI_API_KEY=AIzaSyVerySecretValue12345678901234567890')).toContain(
+      'GEMINI_API_KEY=[REDACTED]',
+    );
+  });
+
+  it('preserves ordinary commands', () => {
+    expect(redactCommand('Get-Process | Select-Object -First 5')).toBe(
+      'Get-Process | Select-Object -First 5',
+    );
   });
 });
