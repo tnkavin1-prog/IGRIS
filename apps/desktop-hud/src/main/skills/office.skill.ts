@@ -45,6 +45,21 @@ export class OfficeSkill implements ApplicationSkill {
         ],
       },
       {
+        name: 'createPdf',
+        description:
+          'Creates a PDF document with a title and body text, using the installed Word application to render it. Verifies that the output file exists and is non-empty.',
+        parameters: [
+          {
+            name: 'filePath',
+            type: 'string',
+            description: 'Destination .pdf file path',
+            required: true,
+          },
+          { name: 'title', type: 'string', description: 'Document title heading', required: true },
+          { name: 'content', type: 'string', description: 'Body text content', required: true },
+        ],
+      },
+      {
         name: 'readWordDoc',
         description: 'Reads text content from an existing Word document.',
         parameters: [
@@ -165,6 +180,56 @@ export class OfficeSkill implements ApplicationSkill {
         }
       }
 
+      case 'createPdf': {
+        const filePath = String(params.filePath || '').trim();
+        const title = String(params.title || '').trim();
+        const content = String(params.content || '').trim();
+        if (!filePath) return { success: false, error: 'filePath is required.' };
+        if (!/\.pdf$/i.test(filePath)) {
+          return { success: false, error: 'filePath must end in .pdf.' };
+        }
+
+        if (this.mockMode) {
+          return { success: true, data: { created: true, filePath, title } };
+        }
+
+        try {
+          const script = `
+            try {
+              $word = New-Object -ComObject Word.Application
+              $word.Visible = $false
+              $doc = $word.Documents.Add()
+              $selection = $word.Selection
+              $selection.TypeParagraph()
+              $selection.Style = "Heading 1"
+              $selection.TypeText("${title.replace(/"/g, '`"')}")
+              $selection.TypeParagraph()
+              $selection.Style = "Normal"
+              $selection.TypeText("${content.replace(/"/g, '`"')}")
+              $doc.SaveAs2([ref]"${filePath.replace(/\\/g, '\\\\')}", 17)
+              $doc.Close()
+              $word.Quit()
+              [System.Runtime.InteropServices.Marshal]::ReleaseComObject($word) | Out-Null
+              Write-Output "OK"
+            } catch {
+              Write-Error $_.Exception.Message
+            }
+          `;
+          await execAsync(`powershell -NoProfile -Command "${script}"`);
+
+          const { existsSync, statSync } = await import('node:fs');
+          if (!existsSync(filePath) || statSync(filePath).size === 0) {
+            throw new Error('Word reported success but the PDF file is missing or empty.');
+          }
+          return { success: true, data: { created: true, filePath, title, verified: true } };
+        } catch (error) {
+          return {
+            success: false,
+            error: `Could not create the PDF: ${(error as Error).message}`,
+          };
+        }
+      }
+
       case 'readWordDoc': {
         const filePath = String(params.filePath || '').trim();
         if (!filePath || !existsSync(filePath)) {
@@ -271,6 +336,7 @@ export class OfficeSkill implements ApplicationSkill {
     if (!result || !result.success) return false;
     switch (action) {
       case 'createWordDoc':
+      case 'createPdf':
       case 'createExcelSheet':
       case 'createPowerPoint':
         return Boolean((result.data as { created?: boolean })?.created);
