@@ -5,6 +5,7 @@ import { CDPClient } from './cdp-client.js';
 import { DATA_ROOT, ICON_PATH, LOGS_DIR, NOTES_DIR, TEMP_DIR } from './runtime-paths.js';
 import { WakeWordService } from './wake-word.js';
 import { startAutoUpdates } from './auto-update.js';
+import { cleanupTempDir } from './temp-cleanup.js';
 
 const LOG_ROTATION_BYTES = 5 * 1024 * 1024;
 
@@ -145,6 +146,17 @@ if (!gotLock) {
   app.whenReady().then(async () => {
     try {
       logLine('hud-startup', 'app.whenReady started');
+      try {
+        const cleanup = cleanupTempDir();
+        if (cleanup.removedFiles + cleanup.removedDirs > 0) {
+          logLine(
+            'hud-startup',
+            `Temp cleanup removed ${cleanup.removedFiles} files and ${cleanup.removedDirs} dirs (${cleanup.bytesFreed} bytes)`,
+          );
+        }
+      } catch {
+        /* temp cleanup is best-effort */
+      }
       liveService = new GeminiLiveService(cdpClient);
       logLine('hud-startup', 'GeminiLiveService created');
       const controlAuth = new ControlAuthService();
