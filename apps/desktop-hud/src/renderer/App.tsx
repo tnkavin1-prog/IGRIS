@@ -42,6 +42,7 @@ export function App() {
   const [isPinned, setIsPinned] = useState(true);
   const [isMaximized, setIsMaximized] = useState(false);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const [taskInterrupted, setTaskInterrupted] = useState(false);
   const [displayMode, setDisplayMode] = useState<HudDisplayMode>(() => {
     try {
       const saved = localStorage.getItem('lumen.displayMode');
@@ -79,6 +80,10 @@ export function App() {
   const lastEscapeTimeRef = useRef(0);
   const displayModeRef = useRef(displayMode);
   const statusRef = useRef(status);
+  const currentTaskRef = useRef(currentTask);
+  useEffect(() => {
+    currentTaskRef.current = currentTask;
+  }, [currentTask]);
 
   // Prevent renderer crashes from unhandled promise rejections and errors.
   // Chrome/CDP being unavailable must never kill the HUD window.
@@ -296,6 +301,14 @@ export function App() {
     cleanups.push(
       window.geminiHUD.gemini.onInterrupted(() => {
         audioCtrl.clearPlayback();
+        // Barge-in: the user spoke over the assistant. If a workflow task is
+        // running, pause it so the user's new instruction is not lost inside
+        // the step that was mid-flight.
+        const task = currentTaskRef.current;
+        if (task && (task.status === 'running' || task.status === 'waiting_approval')) {
+          void window.geminiHUD?.workflow.pauseCurrent().catch(() => undefined);
+          setTaskInterrupted(true);
+        }
       }),
     );
 
@@ -334,6 +347,7 @@ export function App() {
           task.status === 'cancelled'
         ) {
           setPendingApproval(null);
+          setTaskInterrupted(false);
         }
       }),
     );
@@ -455,6 +469,10 @@ export function App() {
 
   const handleCollapseToBar = () => setDisplayMode('bar');
   const handleCollapseToOrb = () => setDisplayMode('orb');
+  const handleResumeTask = async () => {
+    await window.geminiHUD?.workflow.resumeCurrent().catch(() => undefined);
+    setTaskInterrupted(false);
+  };
 
   const handleWakeWordChange = (enabled: boolean) => {
     setSettings((previous) => ({ ...previous, wakeWordEnabled: enabled }));
@@ -767,6 +785,17 @@ export function App() {
             <small>Gemetron · {statusLabel}</small>
             <div>{exportNotice || (isLive ? 'Escape to stop' : 'Ready to talk')}</div>
           </div>
+          {taskInterrupted ? (
+            <button
+              type="button"
+              className="ib"
+              aria-label="Resume paused task"
+              title="Resume paused task"
+              onClick={handleResumeTask}
+            >
+              <HudIcon name="play" size={17} />
+            </button>
+          ) : null}
           <button
             type="button"
             className="mic"
