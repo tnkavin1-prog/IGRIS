@@ -26,7 +26,10 @@ export interface ApplicationAdapter {
   findWindow(windows: WindowItem[]): WindowItem | undefined;
   focus(window: WindowItem): Promise<boolean>;
   verify(window: WindowItem): Promise<boolean>;
-  recover?(reason: string): Promise<boolean>;
+  /** Inspect the running instance and report whether it is still usable. */
+  observe(windows: WindowItem[]): { running: boolean; window?: WindowItem; healthy: boolean };
+  /** Attempt to bring the application back after a failure. */
+  recover(reason: string, appManager: AppManagerService): Promise<boolean>;
 }
 
 export class ApplicationAdapterRegistry {
@@ -96,6 +99,27 @@ export function buildDefaultAdapterRegistry(
     },
     async verify(window) {
       return window.isVisible && !window.isIconic && Boolean(window.title.trim());
+    },
+    observe(windows) {
+      const window = this.findWindow(windows);
+      if (!window) return { running: false, healthy: false };
+      const healthy = window.isVisible && !window.isIconic && window.title.trim().length > 0;
+      return { running: true, window, healthy };
+    },
+    async recover(_reason, appManager) {
+      const windows = await appManager.listRunningWindows().catch(() => [] as WindowItem[]);
+      const window = this.findWindow(windows);
+      if (window) return appManager.focusWindow(window.hwnd);
+      // Relaunch as a last resort.
+      const resolved = findExecutableForApp(options.id);
+      if (!resolved) return false;
+      const result = await appManager.launchDirect(
+        resolved.exe,
+        resolved.defaultArgs,
+        options.id,
+        options.id,
+      );
+      return result.ok;
     },
   });
 
@@ -198,6 +222,25 @@ export function buildDefaultAdapterRegistry(
     },
     async verify(window) {
       return window.isVisible && !window.isIconic && window.title.trim().length > 0;
+    },
+    observe(windows) {
+      const window = this.findWindow(windows);
+      if (!window) return { running: false, healthy: false };
+      const healthy = window.isVisible && !window.isIconic && window.title.trim().length > 0;
+      return { running: true, window, healthy };
+    },
+    async recover(_reason, appManager) {
+      const windows = await appManager.listRunningWindows().catch(() => [] as WindowItem[]);
+      const window = this.findWindow(windows);
+      if (window) return appManager.focusWindow(window.hwnd);
+      if (browserGateway) {
+        const res = await browserGateway.focusOrLaunch();
+        return res.success;
+      }
+      const resolved = findExecutableForApp('chrome');
+      if (!resolved) return false;
+      const result = await appManager.launchDirect(resolved.exe, resolved.defaultArgs, 'chrome', 'chrome');
+      return result.ok;
     },
   });
 
