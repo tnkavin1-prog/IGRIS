@@ -394,8 +394,9 @@ export class GeminiLiveService extends EventEmitter {
     this.emitTelemetry();
   }
 
-  public startScreenStream(intervalMs = 2500): void {
+  public startScreenStream(intervalMs?: number): void {
     if (this.screenStreamTimer) return;
+    const interval = intervalMs ?? this.screenStreamInterval();
     this.screenStreamTimer = setInterval(async () => {
       if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
       try {
@@ -409,7 +410,7 @@ export class GeminiLiveService extends EventEmitter {
           this.sendImageFrame(shot.data);
         }
       } catch {}
-    }, intervalMs);
+    }, interval);
   }
 
   /**
@@ -3027,6 +3028,25 @@ export class GeminiLiveService extends EventEmitter {
       this.status = newStatus;
       this.emit('status-changed', newStatus);
       this.emitTelemetry();
+      // Adaptive monitoring: a Live session only needs fresh frames while the
+      // user is interacting. While idle or closed, sample rarely so the
+      // screen stream stops burning bandwidth and CPU for nothing.
+      if (this.screenStreamTimer) {
+        this.stopScreenStream();
+        this.startScreenStream(this.screenStreamInterval());
+      }
+    }
+  }
+
+  /** Interval for the screen stream, tuned to the current session state. */
+  private screenStreamInterval(): number {
+    switch (this.status) {
+      case 'idle':
+      case 'closed':
+      case 'error':
+        return 10_000;
+      default:
+        return 2_500;
     }
   }
 

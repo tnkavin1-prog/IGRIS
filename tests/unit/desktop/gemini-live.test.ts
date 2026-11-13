@@ -1340,6 +1340,17 @@ describe('GeminiLiveService', () => {
     expect(result.mappedFromFrame).toEqual({ x: 512, y: 288 });
   });
 
+  it('slows the screen stream while idle and speeds it up while active', () => {
+    (service as any).status = 'idle';
+    expect((service as any).screenStreamInterval()).toBe(10_000);
+    (service as any).status = 'closed';
+    expect((service as any).screenStreamInterval()).toBe(10_000);
+    (service as any).status = 'error';
+    expect((service as any).screenStreamInterval()).toBe(10_000);
+    (service as any).status = 'listening';
+    expect((service as any).screenStreamInterval()).toBe(2_500);
+  });
+
   it('stores resumption handles and re-uses them in the next setup', async () => {
     const sent: any[] = [];
     (service as any).socket = {
