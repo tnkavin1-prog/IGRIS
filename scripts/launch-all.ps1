@@ -61,21 +61,59 @@ if (-not (Test-Path $electronExe)) {
 $hudPort = 9228
 $hudConn = Get-NetTCPConnection -LocalPort $hudPort -ErrorAction SilentlyContinue | Where-Object { $_.OwningProcess -gt 0 -and $_.State -ne 'Closed' } | Select-Object -First 1
 
+function Get-ControlTokenHeaders {
+    $token = $env:GEMATRON_CONTROL_TOKEN
+    $tokenPath = "$repoRoot\control-token"
+    if (-not $token -and (Test-Path $tokenPath)) {
+        try {
+            $token = (Get-Content -Path $tokenPath -Raw -ErrorAction SilentlyContinue).Trim()
+        } catch {}
+    }
+    $headers = @{}
+    if ($token) {
+        $headers["x-gematron-control-token"] = $token
+    }
+    return $headers
+}
+
+function Invoke-HudSummon {
+    param([int]$port = 9228)
+    $headers = Get-ControlTokenHeaders
+    $body = '{"prompt":""}'
+    try {
+        $resp = Invoke-RestMethod -Uri "http://127.0.0.1:$port/summon" -Method Post -Headers $headers -Body $body -ContentType "application/json" -TimeoutSec 3 -ErrorAction Stop
+        if ($resp -and $resp.ok -eq $true) {
+            return $true
+        }
+    } catch {}
+    return $false
+}
+
+$needsLaunch = $true
+
 if ($hudConn) {
     Write-Host "      [OK] Desktop HUD is already ACTIVE (Port $hudPort, PID: $($hudConn.OwningProcess))." -ForegroundColor Green
     Write-Host "      [..] Bringing floating HUD window to front..." -ForegroundColor Cyan
-    try {
-        $body = '{"prompt":""}'
-        Invoke-RestMethod -Uri "http://127.0.0.1:9228/summon" -Method Post -Body $body -ContentType "application/json" -TimeoutSec 2 -ErrorAction SilentlyContinue | Out-Null
+    if (Invoke-HudSummon -port $hudPort) {
         Write-Host "      [OK] Summon signal delivered to live HUD." -ForegroundColor Green
-    } catch {}
-} else {
+        $needsLaunch = $false
+    } else {
+        Write-Host "      [WARN] Existing HUD on port $hudPort is unresponsive or unauthenticated. Terminating stale process..." -ForegroundColor Yellow
+        if ($hudConn.OwningProcess -gt 0) {
+            Stop-Process -Id $hudConn.OwningProcess -Force -ErrorAction SilentlyContinue
+        }
+        Get-Process -Name "electron" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 1000
+        $needsLaunch = $true
+    }
+}
+
+if ($needsLaunch) {
     # If electron was running but port 9228 wasn't listening, clean up orphan
     Get-Process -Name "electron" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     
     Write-Host "      [..] Spawning Floating HUD Window..." -ForegroundColor Cyan
-    $launchCmd = "`"$electronExe`" `"$appDir`""
-    Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $launchCmd } | Out-Null
+    Start-Process -FilePath $electronExe -ArgumentList "`"$appDir`"" -WorkingDirectory $repoRoot
     
     # Wait up to 6 seconds for port 9228 to be ready
     $ready = $false
@@ -90,10 +128,9 @@ if ($hudConn) {
     
     if ($ready) {
         Write-Host "      [OK] Floating HUD Window is active and listening on port $hudPort." -ForegroundColor Green
-        try {
-            $body = '{"prompt":""}'
-            Invoke-RestMethod -Uri "http://127.0.0.1:9228/summon" -Method Post -Body $body -ContentType "application/json" -TimeoutSec 2 -ErrorAction SilentlyContinue | Out-Null
-        } catch {}
+        if (Invoke-HudSummon -port $hudPort) {
+            Write-Host "      [OK] Summon signal delivered to live HUD." -ForegroundColor Green
+        }
     } else {
         Write-Host "      [OK] Floating HUD Window spawned." -ForegroundColor Green
     }

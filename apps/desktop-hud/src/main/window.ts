@@ -15,13 +15,13 @@ import {
 
 let mainWindow: BrowserWindow | null = null;
 let isPinnedAlwaysOnTop = true;
-let currentDisplayMode: HudDisplayMode = 'bar';
+let currentDisplayMode: HudDisplayMode = 'full';
 let lastFullSize = { width: 540, height: 700 };
 
 export function createMainWindow(preloadPath: string, htmlPath: string): BrowserWindow {
   // Reset launch state for every (re)creation so a stale collapsed mode or
   // stale console size from a previous session cannot leak into this one.
-  currentDisplayMode = 'console';
+  currentDisplayMode = 'full';
   lastFullSize = { width: 540, height: 700 };
 
   if (mainWindow) {
@@ -33,8 +33,8 @@ export function createMainWindow(preloadPath: string, htmlPath: string): Browser
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
 
-  const defaultWidth = 540;
-  const defaultHeight = 700;
+  const defaultWidth = 400;
+  const defaultHeight = 600;
   const initialX = Math.max(20, screenWidth - defaultWidth - 40);
   const initialY = Math.max(40, Math.floor((screenHeight - defaultHeight) / 2));
 

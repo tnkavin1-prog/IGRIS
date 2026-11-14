@@ -14,7 +14,7 @@ import type {
   WorkflowStep,
 } from '../main/types.js';
 import { CompactHUD } from './CompactHUD.js';
-import { BrownOrbHUD } from './BrownOrbHUD.js';
+import { EmberHUD } from './EmberHUD.js';
 import { HudIcon } from './HudIcon.js';
 import { AudioController } from './audio-controller.js';
 import { SoundEffectsEngine } from './sound-effects.js';
@@ -52,7 +52,7 @@ export function App() {
       // the HUD opens as a tiny strip or vanishes entirely.
       return resolveInitialDisplayMode(localStorage.getItem('lumen.displayMode'));
     } catch {
-      return 'console';
+      return 'full';
     }
   });
   const [runningWindows, setRunningWindows] = useState<WindowItem[]>([]);
@@ -698,23 +698,30 @@ export function App() {
     setTimeout(() => setExportNotice(null), 3000);
   };
 
-  if (displayMode === 'console') {
+  if (displayMode === 'full') {
     return (
-      <BrownOrbHUD
+      <EmberHUD
         status={status}
         conversation={conversation}
         settings={settings}
+        soundMuted={soundMuted}
+        soundVolume={soundVolume}
+        onMinimize={() => window.geminiHUD?.windowControl.minimize()}
+        onClose={handleClose}
         onStartSession={handleStartSession}
         onStopSession={handleStopSession}
-        onClose={handleClose}
+        onToggleSoundMute={handleToggleSoundMute}
+        onSoundVolumeChange={handleSoundVolumeChange}
+        onAutoApproveChange={handleAutoApproveChange}
+        onWakeWordChange={handleWakeWordChange}
         onCollapseToBar={handleCollapseToBar}
         onCollapseToOrb={handleCollapseToOrb}
-        exportNotice={exportNotice}
+        onOpenConsole={() => setDisplayMode('console')}
       />
     );
   }
 
-  if (displayMode === 'full') {
+  if (displayMode === 'console') {
     return (
       <CompactHUD
         status={status}

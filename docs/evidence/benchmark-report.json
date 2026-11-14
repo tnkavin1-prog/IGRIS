@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-14T06:41:12.452Z",
+  "generatedAt": "2026-11-14T08:59:28.379Z",
   "total": 6,
   "passed": 6,
   "failed": 0,
@@ -9,7 +9,7 @@
       "name": "Basic Windows control",
       "passed": true,
       "details": "launch ok=true",
-      "durationMs": 2
+      "durationMs": 1
     },
     {
       "id": "A2",
@@ -23,28 +23,28 @@
       "name": "Bounded retry",
       "passed": true,
       "details": "attempts=3 max=3",
-      "durationMs": 0
+      "durationMs": 1
     },
     {
       "id": "E2",
       "name": "Checkpoint reload",
       "passed": true,
       "details": "loaded=bench-task",
-      "durationMs": 12
+      "durationMs": 5
     },
     {
       "id": "F",
       "name": "Storage off C:",
       "passed": true,
       "details": "root=E:\\GemetronData",
-      "durationMs": 1
+      "durationMs": 0
     },
     {
       "id": "F2",
       "name": "Temp cleanup",
       "passed": true,
       "details": "removed=1 freed=1000",
-      "durationMs": 8
+      "durationMs": 3
     }
   ]
 }
