@@ -1,8 +1,7 @@
-import { app, ipcMain, globalShortcut, shell } from 'electron';
+import { app, ipcMain, globalShortcut, shell, session } from 'electron';
 import { join } from 'node:path';
 import { appendFileSync, mkdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { CDPClient } from './cdp-client.js';
-import { session } from 'electron';
 import { DATA_ROOT, ICON_PATH, LOGS_DIR, NOTES_DIR, TEMP_DIR } from './runtime-paths.js';
 import { WakeWordService } from './wake-word.js';
 import { startAutoUpdates } from './auto-update.js';
@@ -92,14 +91,19 @@ import { screenGrounding } from './screen-grounding.js';
 // Allow the renderer to access the microphone for voice input. Without this
 // handler Electron denies the permission in packaged builds, which silently
 // breaks wake word and live transcription.
-session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-  const allowed = ['media', 'microphone', 'audioCapture', 'notifications'];
-  callback(allowed.includes(permission));
-});
-session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
-  const allowed = ['media', 'microphone', 'audioCapture', 'notifications'];
-  return allowed.includes(permission);
-});
+//
+// This MUST run after app is ready: `session.defaultSession` throws
+// "Session can only be received when app is ready" if accessed at module
+// load time, which crashes the whole main process before a window is shown.
+function configurePermissions(): void {
+  const allowed = new Set(['media', 'microphone', 'audioCapture', 'notifications']);
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(allowed.has(permission));
+  });
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) =>
+    allowed.has(permission),
+  );
+}
 
 // Register custom Windows URI protocol (e.g. gematron://summon)
 for (const protocol of ['gematron', 'gemetron']) {
@@ -158,6 +162,16 @@ if (!gotLock) {
 
   app.whenReady().then(async () => {
     try {
+      // Must be configured after the app is ready; touching
+      // session.defaultSession at module load crashes the main process.
+      try {
+        configurePermissions();
+      } catch (permErr) {
+        logLine(
+          'hud-startup',
+          `Permission handler setup failed: ${permErr instanceof Error ? permErr.message : String(permErr)}`,
+        );
+      }
       logLine('hud-startup', 'app.whenReady started');
       try {
         const cleanup = cleanupTempDir();
