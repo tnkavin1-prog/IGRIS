@@ -62,6 +62,10 @@ export class AudioController {
   private activeSources: AudioBufferSourceNode[] = [];
   private isCapturing = false;
   private onChunkCallback: ((base64Pcm: string) => void) | null = null;
+  private voiceHangoverFrames = 0;
+  private static readonly HANGOVER_FRAMES = 6; // ~384 ms of speech hangover to avoid cutting trailing consonants
+  private static readonly NOISE_GATE_THRESHOLD = 0.012; // RMS energy threshold to suppress room noise / mic hiss
+  private static readonly ECHO_SUPPRESSION_THRESHOLD = 0.07; // Elevated threshold during assistant audio playback
 
   constructor(onChunk?: (base64Pcm: string) => void) {
     if (onChunk) this.onChunkCallback = onChunk;
@@ -108,6 +112,31 @@ export class AudioController {
         if (!this.isCapturing) return;
         const resampled = this.resampler ? this.resampler.process(e.data) : e.data;
         if (resampled.length === 0) return;
+
+        // Compute RMS energy across this audio buffer
+        let sumSquares = 0;
+        for (let i = 0; i < resampled.length; i++) {
+          const sample = resampled[i] ?? 0;
+          sumSquares += sample * sample;
+        }
+        const rms = Math.sqrt(sumSquares / resampled.length);
+
+        // Acoustic Echo Suppression: when the assistant is actively speaking through the
+        // speakers, raise threshold to eliminate speaker-to-mic bleed and feedback loops.
+        const isSpeakerPlaying = this.activeSources.length > 0;
+        const activeThreshold = isSpeakerPlaying
+          ? AudioController.ECHO_SUPPRESSION_THRESHOLD
+          : AudioController.NOISE_GATE_THRESHOLD;
+
+        if (rms >= activeThreshold) {
+          this.voiceHangoverFrames = AudioController.HANGOVER_FRAMES;
+        } else if (this.voiceHangoverFrames > 0) {
+          this.voiceHangoverFrames--;
+        } else {
+          // Ambient noise / silence: suppress sending to avoid phantom Gemini turns
+          return;
+        }
+
         const pcm16 = this.float32ToInt16(resampled);
         const base64 = this.arrayBufferToBase64(pcm16.buffer);
         if (this.onChunkCallback) {
@@ -133,6 +162,7 @@ export class AudioController {
 
   public stopCapture(): void {
     this.isCapturing = false;
+    this.voiceHangoverFrames = 0;
     if (this.resampler) {
       this.resampler.reset();
       this.resampler = null;

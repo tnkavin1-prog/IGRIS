@@ -57,7 +57,7 @@ function formatModelLabel(modelId: string): string {
 function orbStateFor(status: LiveHUDStatus): EmberOrbState {
   if (status === 'listening') return 'listening';
   if (status === 'speaking') return 'speaking';
-  if (status === 'thinking' || status === 'connecting') return 'thinking';
+  if (status === 'thinking') return 'thinking';
   return 'idle';
 }
 
@@ -116,13 +116,11 @@ export function EmberHUD({
   const lastAssistant =
     [...messages].reverse().find((message) => message.kind === 'assistant')?.text ?? '';
 
-  let transcript: string;
+  let transcript = '';
   if (status === 'speaking' || status === 'thinking') {
     transcript = lastAssistant || lastUser;
   } else if (status === 'listening') {
-    transcript = lastUser || lastAssistant;
-  } else {
-    transcript = lastAssistant || lastUser;
+    transcript = lastUser;
   }
 
   const allWords = transcript.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);

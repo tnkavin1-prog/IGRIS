@@ -105,6 +105,7 @@ export class GeminiLiveService extends EventEmitter {
   private reconnectAttempts = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private manualDisconnect = false;
+  private isSetupComplete = false;
   private static readonly MAX_RECONNECT_ATTEMPTS = 6;
 
   constructor(cdpClient: CDPClient, deps?: GeminiLiveServiceDeps) {
@@ -321,19 +322,17 @@ export class GeminiLiveService extends EventEmitter {
 
     this.setStatus('connecting');
     this.manualDisconnect = false;
+    this.isSetupComplete = false;
 
     try {
       this.socket = new WebSocket(LIVE_WS_URL, { headers: { 'x-goog-api-key': apiKey } });
 
       this.socket.on('open', () => {
         this.reconnectAttempts = 0;
-        this.setStatus('listening');
         this.sendSetup();
         if (process.env.GEMATRON_STREAM_SCREEN === 'true') {
           this.startScreenStream();
         }
-        this.emit('connected', { resumed: Boolean(this.resumeHandle) });
-        this.emitTelemetry();
       });
 
       this.socket.on('message', (data: WebSocket.RawData) => {
@@ -346,6 +345,7 @@ export class GeminiLiveService extends EventEmitter {
 
       this.socket.on('close', (code: number, reason: Buffer) => {
         this.stopScreenStream();
+        this.isSetupComplete = false;
         this.setStatus('closed');
         this.socket = null;
         const detail = { code, reason: reason.toString() };
@@ -397,6 +397,7 @@ export class GeminiLiveService extends EventEmitter {
 
   public disconnect(): void {
     this.manualDisconnect = true;
+    this.isSetupComplete = false;
     this.clearReconnectTimer();
     this.stopScreenStream();
     if (this.socket) {
@@ -567,6 +568,10 @@ export class GeminiLiveService extends EventEmitter {
             {
               text: [
                 'You are Assistant, an advanced Autonomous Multimodal Computer-Use Co-Pilot embedded in a native desktop HUD.',
+                'CONVERSATIONAL INITIATION & SILENCE INVARIANTS (CRITICAL):',
+                '- NEVER speak first, greet the user, state the date/time, or produce any output automatically upon connection.',
+                '- When the user has not spoken or when incoming audio contains silence, ambient room sound, line noise, or breathing, DO NOT respond. DO NOT guess what the user might want. Stay completely silent.',
+                '- Only respond when the user speaks a clear, direct, intentional request or question to you.',
                 'You possess complete human-like, OS-wide autonomous control over Windows: mouse clicking, dragging, moving, hardware mouse wheel scrolling, keyboard typing and hotkeys, window management (maximize, minimize, restore, close), application management, and Chrome browser tabs via CDP.',
                 'COORDINATE SPACE: You see downscaled frames (usually 1024x576) of the desktop. Report click/move coordinates in those frame pixels; the runtime rescales them to the physical desktop. Pass coordinate_space:"physical" only when you are certain your numbers are already desktop pixels.',
                 'FAST-PATH AUTONOMOUS ACTIONS (CRITICAL):',
@@ -1768,6 +1773,14 @@ export class GeminiLiveService extends EventEmitter {
   private async handleServerMessage(rawText: string): Promise<void> {
     try {
       const msg = JSON.parse(rawText) as Record<string, any>;
+
+      // 0. Setup completion acknowledgement
+      if (msg.setupComplete) {
+        this.isSetupComplete = true;
+        this.setStatus('listening');
+        this.emit('connected', { resumed: Boolean(this.resumeHandle) });
+        this.emitTelemetry();
+      }
 
       // 1. Audio and transcript parts
       if (msg.serverContent) {
