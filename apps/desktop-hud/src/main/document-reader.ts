@@ -127,3 +127,85 @@ export function extractDocxText(buffer: Buffer): string {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
+
+/* ------------------------------------------------------------------- xlsx */
+
+/** A1 -> 0, B1 -> 1, AA1 -> 26. */
+export function columnIndexFromName(name: string): number {
+  let index = 0;
+  for (const char of name.toUpperCase()) {
+    const value = char.charCodeAt(0) - 64;
+    if (value < 1 || value > 26) continue;
+    index = index * 26 + value;
+  }
+  return index - 1;
+}
+
+/** Collect the text of every rich-text run in a shared string. */
+function sharedStringText(xml: string): string {
+  const parts = [...xml.matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)].map((match) => match[1] ?? '');
+  return decodeXmlEntities(parts.join(''));
+}
+
+function parseSharedStrings(xml: string): string[] {
+  return [...xml.matchAll(/<si>([\s\S]*?)<\/si>/g)].map((match) =>
+    sharedStringText(match[1] ?? ''),
+  );
+}
+
+function cellValue(inner: string, type: string | undefined, shared: string[]): string {
+  if (type === 'inlineStr') {
+    return sharedStringText(inner);
+  }
+  const raw = /<v(?:\s[^>]*)?>([\s\S]*?)<\/v>/.exec(inner)?.[1];
+  if (raw === undefined) return '';
+  const value = decodeXmlEntities(raw);
+  if (type === 's') {
+    const index = Number.parseInt(value, 10);
+    return Number.isFinite(index) ? (shared[index] ?? '') : '';
+  }
+  if (type === 'b') return value === '1' ? 'TRUE' : 'FALSE';
+  return value;
+}
+
+/**
+ * Read the first worksheet of an `.xlsx` workbook as a rectangular table.
+ *
+ * Excel usually stores strings in `sharedStrings.xml`, so both that table and
+ * inline strings are resolved. Cells that are missing keep their column
+ * position so rows stay aligned with the header.
+ */
+export function extractXlsxRows(buffer: Buffer): string[][] {
+  const entries = readZipEntries(buffer);
+  const worksheetNames = [...entries.keys()]
+    .filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name))
+    .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+  const worksheetName = worksheetNames[0];
+  if (!worksheetName) throw new ZipFormatError('The .xlsx archive has no worksheet part.');
+
+  const sharedEntry = entries.get('xl/sharedStrings.xml');
+  const shared = sharedEntry ? parseSharedStrings(sharedEntry.toString('utf8')) : [];
+  const xml = entries.get(worksheetName)!.toString('utf8');
+
+  const rows: string[][] = [];
+  for (const rowMatch of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
+    const cells: string[] = [];
+    let nextColumn = 0;
+    for (const cellMatch of (rowMatch[1] ?? '').matchAll(
+      /<c\b([^>]*?)\/>|<c\b([^>]*?)>([\s\S]*?)<\/c>/g,
+    )) {
+      const attributes = cellMatch[1] ?? cellMatch[2] ?? '';
+      const inner = cellMatch[3] ?? '';
+      const reference = /\br="([A-Z]+)\d+"/.exec(attributes)?.[1];
+      const column = reference ? columnIndexFromName(reference) : nextColumn;
+      while (cells.length < column) cells.push('');
+      const type = /\bt="([^"]+)"/.exec(attributes)?.[1];
+      cells[column] = cellValue(inner, type, shared);
+      nextColumn = column + 1;
+    }
+    rows.push(cells);
+  }
+  // Pad short rows so the result is rectangular and columns stay aligned.
+  const width = rows.reduce((max, row) => Math.max(max, row.length), 0);
+  return rows.map((row) => [...row, ...Array<string>(width - row.length).fill('')]);
+}

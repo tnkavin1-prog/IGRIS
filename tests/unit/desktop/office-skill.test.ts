@@ -79,6 +79,30 @@ describe('OfficeSkill.createExcelSheet', () => {
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/\.xlsx/);
   });
+
+  it('reads a generated workbook back without Excel installed', async () => {
+    const filePath = join(root, 'read-back.xlsx');
+    await skill.execute('createExcelSheet', {
+      filePath,
+      sheetName: 'Inventory',
+      headers: ['Item', 'Qty'],
+      rows: [
+        ['Widget', 3],
+        ['Gadget, large', 2],
+      ],
+    });
+
+    const result = await skill.execute('readExcelSheet', { filePath });
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({ engine: 'ooxml', rowsCount: 2 });
+    expect(result.data).toMatchObject({
+      headers: ['Item', 'Qty'],
+      rows: [
+        ['Widget', '3'],
+        ['Gadget, large', '2'],
+      ],
+    });
+  });
 });
 
 describe('OfficeSkill verification', () => {

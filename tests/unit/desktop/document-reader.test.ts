@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { deflateRawSync } from 'node:zlib';
 import {
   ZipFormatError,
+  columnIndexFromName,
   decodeXmlEntities,
   extractDocxText,
+  extractXlsxRows,
   readZipEntries,
 } from '../../../apps/desktop-hud/src/main/document-reader.js';
 import {
@@ -128,5 +130,79 @@ describe('extractDocxText', () => {
   it('rejects a real .xlsx since it is not a Word document', () => {
     const workbook = buildXlsx({ headers: ['a'], rows: [] });
     expect(() => extractDocxText(workbook)).toThrow(/word\/document\.xml/);
+  });
+});
+
+describe('columnIndexFromName', () => {
+  it('maps spreadsheet labels to zero-based indexes', () => {
+    expect(columnIndexFromName('A')).toBe(0);
+    expect(columnIndexFromName('Z')).toBe(25);
+    expect(columnIndexFromName('AA')).toBe(26);
+    expect(columnIndexFromName('AB')).toBe(27);
+    expect(columnIndexFromName('BA')).toBe(52);
+  });
+});
+
+describe('extractXlsxRows', () => {
+  it('reads back a generated workbook', () => {
+    const workbook = buildXlsx({
+      sheetName: 'Sales',
+      headers: ['Item', 'Qty', 'Price'],
+      rows: [
+        ['Widget', 3, 9.5],
+        ['Gadget', 2, true],
+      ],
+    });
+    expect(extractXlsxRows(workbook)).toEqual([
+      ['Item', 'Qty', 'Price'],
+      ['Widget', '3', '9.5'],
+      ['Gadget', '2', 'TRUE'],
+    ]);
+  });
+
+  it('keeps columns aligned when a cell is empty', () => {
+    const workbook = buildXlsx({ headers: ['a', '', 'c'], rows: [['', 'b', '']] });
+    expect(extractXlsxRows(workbook)).toEqual([
+      ['a', '', 'c'],
+      ['', 'b', ''],
+    ]);
+  });
+
+  it('resolves shared strings like Excel writes them', () => {
+    const sheet =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' +
+      '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>' +
+      '<row r="2"><c r="A2" t="s"><v>1</v></c><c r="B2"><v>42</v></c></row>' +
+      '</sheetData></worksheet>';
+    const shared =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<si><t>Name</t></si>' +
+      '<si><r><t>Widget</t></r><r><t> &amp; Co</t></r></si>' +
+      '</sst>';
+    const archive = createZip([
+      { name: 'xl/worksheets/sheet1.xml', data: sheet },
+      { name: 'xl/sharedStrings.xml', data: shared, compress: true },
+    ]);
+
+    expect(extractXlsxRows(archive)).toEqual([
+      ['Name', 'Widget & Co'],
+      ['Widget & Co', '42'],
+    ]);
+  });
+
+  it('reads inline strings and self-closing cells', () => {
+    const sheet =
+      '<worksheet><sheetData>' +
+      '<row r="1"><c r="A1" t="inlineStr"><is><t>Hello</t></is></c><c r="B1"/></row>' +
+      '</sheetData></worksheet>';
+    const archive = createZip([{ name: 'xl/worksheets/sheet1.xml', data: sheet }]);
+    expect(extractXlsxRows(archive)).toEqual([['Hello', '']]);
+  });
+
+  it('rejects an archive with no worksheet', () => {
+    const archive = createZip([{ name: 'other.xml', data: '<x/>' }]);
+    expect(() => extractXlsxRows(archive)).toThrow(ZipFormatError);
   });
 });

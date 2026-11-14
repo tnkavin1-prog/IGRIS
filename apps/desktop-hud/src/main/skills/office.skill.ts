@@ -6,6 +6,7 @@ import { TEMP_DIR } from '../runtime-paths.js';
 import os from 'node:os';
 import type { ApplicationSkill, SkillActionDefinition, SkillResult } from '../skill-framework.js';
 import { OOXML_MAGIC, buildDocx, buildXlsx, parseCsv } from '../document-writer.js';
+import { extractXlsxRows } from '../document-reader.js';
 
 const execAsync = promisify(exec);
 
@@ -362,7 +363,30 @@ export class OfficeSkill implements ApplicationSkill {
           return { success: true, data: { filePath, headers: ['A', 'B'], rows: [['1', '2']] } };
         }
         try {
-          const isWorkbook = /\.xlsx?$/i.test(filePath);
+          // Prefer a native read: it needs no Excel installation and keeps the
+          // raw cell values.
+          if (/\.xls[xm]$/i.test(filePath)) {
+            try {
+              const table = extractXlsxRows(await fs.readFile(filePath));
+              const cleaned = table.filter((row) => row.some((cell) => cell.trim().length > 0));
+              const headers = cleaned[0] ?? [];
+              const rows = cleaned.slice(1);
+              return {
+                success: true,
+                data: {
+                  filePath,
+                  headers,
+                  rows,
+                  rowsCount: rows.length,
+                  engine: 'ooxml',
+                },
+              };
+            } catch {
+              /* fall back to Excel below */
+            }
+          }
+
+          const isWorkbook = /\.xls[xm]?$/i.test(filePath);
           let csvText: string;
           if (isWorkbook) {
             // Reading an .xlsx as UTF-8 yields binary noise, so let Excel
