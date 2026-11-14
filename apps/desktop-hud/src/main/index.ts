@@ -2,7 +2,13 @@ import { app, ipcMain, globalShortcut, shell, session } from 'electron';
 import { join } from 'node:path';
 import { appendFileSync, mkdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { CDPClient } from './cdp-client.js';
-import { DATA_ROOT, ICON_PATH, LOGS_DIR, NOTES_DIR, TEMP_DIR } from './runtime-paths.js';
+import {
+  ELECTRON_USER_DATA_DIR,
+  ICON_PATH,
+  LOGS_DIR,
+  NOTES_DIR,
+  TEMP_DIR,
+} from './runtime-paths.js';
 import { WakeWordService } from './wake-word.js';
 import { startAutoUpdates } from './auto-update.js';
 import { cleanupTempDir } from './temp-cleanup.js';
@@ -78,10 +84,9 @@ import { screenGrounding } from './screen-grounding.js';
 // configured data root, otherwise a development run writes Chromium caches
 // and the updater staging area to the system drive.
 {
-  const electronDir = join(DATA_ROOT, 'electron');
   try {
-    mkdirSync(electronDir, { recursive: true });
-    app.setPath('userData', electronDir);
+    mkdirSync(ELECTRON_USER_DATA_DIR, { recursive: true });
+    app.setPath('userData', ELECTRON_USER_DATA_DIR);
     app.setPath('temp', TEMP_DIR);
   } catch {
     /* read-only media: Electron falls back to its own defaults */

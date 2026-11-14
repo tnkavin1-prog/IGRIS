@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-13T12:34:49.272Z",
+  "generatedAt": "2026-11-14T05:28:10.271Z",
   "total": 6,
   "passed": 6,
   "failed": 0,
@@ -9,7 +9,7 @@
       "name": "Basic Windows control",
       "passed": true,
       "details": "launch ok=true",
-      "durationMs": 1
+      "durationMs": 2
     },
     {
       "id": "A2",
@@ -30,21 +30,21 @@
       "name": "Checkpoint reload",
       "passed": true,
       "details": "loaded=bench-task",
-      "durationMs": 4
+      "durationMs": 11
     },
     {
       "id": "F",
       "name": "Storage off C:",
       "passed": true,
       "details": "root=E:\\GemetronData",
-      "durationMs": 1
+      "durationMs": 0
     },
     {
       "id": "F2",
       "name": "Temp cleanup",
       "passed": true,
       "details": "removed=1 freed=1000",
-      "durationMs": 3
+      "durationMs": 5
     }
   ]
 }

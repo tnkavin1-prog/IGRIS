@@ -20,6 +20,9 @@ node_modules/
 .npm-cache/
 .electron-cache/
 .chrome-debug-*/
+# Electron's own Chromium profile written by development builds
+/electron/
+.runtime/
 
 # Build output
 dist/

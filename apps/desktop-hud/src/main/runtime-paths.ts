@@ -85,6 +85,13 @@ export const TEMP_DIR = join(DATA_ROOT, 'temp');
 export const DOWNLOADS_DIR = join(DATA_ROOT, 'downloads');
 export const NOTES_DIR = join(DATA_ROOT, 'notes');
 export const CHROME_PROFILE_DIR = join(DATA_ROOT, '.chrome-debug-profile');
+
+// Electron's own profile (caches, cookies, localStorage). Development builds
+// keep it under a dot-directory so a run never litters the repository root
+// with Chromium cache files.
+export const ELECTRON_USER_DATA_DIR = IS_PACKAGED
+  ? join(DATA_ROOT, 'electron')
+  : join(DATA_ROOT, '.runtime', 'electron');
 export const BRIDGE_ENV_PATH = IS_PACKAGED
   ? join(DATA_ROOT, '.env')
   : join(REPO_ROOT, 'apps', 'local-bridge', '.env');
