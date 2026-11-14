@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildDocx, buildXlsx } from '../../../apps/desktop-hud/src/main/document-writer.js';
+import { OfficeSkill } from '../../../apps/desktop-hud/src/main/skills/office.skill.js';
 
 /**
  * Optional round trip against a real Office installation.
@@ -87,4 +88,36 @@ describe('real Office round trip', () => {
     expect(out).toContain('A1=Item');
     expect(out).toContain('B2=3');
   });
+
+  run(
+    'readExcelSheet reads a generated workbook back as a table',
+    { timeout: 180_000 },
+    async () => {
+      mkdirSync(dir, { recursive: true });
+      const file = join(dir, 'read-back.xlsx');
+      writeFileSync(
+        file,
+        buildXlsx({
+          sheetName: 'Inventory',
+          headers: ['Item', 'Qty'],
+          rows: [
+            ['Widget', 3],
+            ['Gadget, large', 2],
+          ],
+        }),
+      );
+
+      const skill = new OfficeSkill({ mockMode: false });
+      const result = await skill.execute('readExcelSheet', { filePath: file });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toMatchObject({
+        headers: ['Item', 'Qty'],
+        rows: [
+          ['Widget', '3'],
+          ['Gadget, large', '2'],
+        ],
+      });
+    },
+  );
 });

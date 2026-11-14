@@ -192,6 +192,77 @@ export function buildDocx({ title, content }: DocxInput): Buffer {
   ]);
 }
 
+/* ------------------------------------------------------------------ helpers */
+
+/**
+ * Parse RFC 4180 style CSV.
+ *
+ * The previous reader split on commas, so any cell containing a comma or a
+ * quoted newline corrupted the whole table. Excel exports quoted fields, so a
+ * real parser is required to read back a workbook.
+ */
+export function parseCsv(input: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let quoted = false;
+  let index = 0;
+
+  const endField = () => {
+    row.push(field);
+    field = '';
+  };
+  const endRow = () => {
+    endField();
+    rows.push(row);
+    row = [];
+  };
+
+  while (index < input.length) {
+    const char = input[index]!;
+    if (quoted) {
+      if (char === '"') {
+        if (input[index + 1] === '"') {
+          field += '"';
+          index += 2;
+          continue;
+        }
+        quoted = false;
+        index += 1;
+        continue;
+      }
+      field += char;
+      index += 1;
+      continue;
+    }
+    if (char === '"' && field === '') {
+      quoted = true;
+      index += 1;
+      continue;
+    }
+    if (char === ',') {
+      endField();
+      index += 1;
+      continue;
+    }
+    if (char === '\r') {
+      index += 1;
+      continue;
+    }
+    if (char === '\n') {
+      endRow();
+      index += 1;
+      continue;
+    }
+    field += char;
+    index += 1;
+  }
+
+  // Trailing newline should not create an empty row.
+  if (field.length > 0 || row.length > 0) endRow();
+  return rows;
+}
+
 /* ------------------------------------------------------------------- xlsx */
 
 export interface XlsxInput {

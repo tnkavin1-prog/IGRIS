@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { TEMP_DIR } from '../runtime-paths.js';
 import os from 'node:os';
 import type { ApplicationSkill, SkillActionDefinition, SkillResult } from '../skill-framework.js';
-import { OOXML_MAGIC, buildDocx, buildXlsx } from '../document-writer.js';
+import { OOXML_MAGIC, buildDocx, buildXlsx, parseCsv } from '../document-writer.js';
 
 const execAsync = promisify(exec);
 
@@ -362,13 +362,49 @@ export class OfficeSkill implements ApplicationSkill {
           return { success: true, data: { filePath, headers: ['A', 'B'], rows: [['1', '2']] } };
         }
         try {
-          const content = await fs.readFile(filePath, 'utf8');
-          const lines = content.split('\n').filter((l) => l.trim().length > 0);
-          const headers = lines[0]?.split(',') || [];
-          const rows = lines.slice(1).map((l) => l.split(','));
-          return { success: true, data: { filePath, headers, rows } };
+          const isWorkbook = /\.xlsx?$/i.test(filePath);
+          let csvText: string;
+          if (isWorkbook) {
+            // Reading an .xlsx as UTF-8 yields binary noise, so let Excel
+            // export the first worksheet to a temporary CSV and parse that.
+            mkdirSync(TEMP_DIR, { recursive: true });
+            const csvPath = join(TEMP_DIR, `excel-read-${Date.now()}.csv`);
+            try {
+              const script = `
+                $ErrorActionPreference = 'Stop'
+                $excel = New-Object -ComObject Excel.Application
+                $excel.Visible = $false
+                $excel.DisplayAlerts = $false
+                try {
+                  $book = $excel.Workbooks.Open(${psLiteral(filePath)})
+                  $book.SaveAs(${psLiteral(csvPath)}, 6)
+                  $book.Close($false)
+                  Write-Output "OK"
+                } finally {
+                  $excel.Quit()
+                  [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
+                }
+              `;
+              await runPowerShellScript(script, 120_000);
+              csvText = await fs.readFile(csvPath, 'utf8');
+            } finally {
+              await fs.rm(csvPath, { force: true }).catch(() => undefined);
+            }
+          } else {
+            csvText = await fs.readFile(filePath, 'utf8');
+          }
+
+          const table = parseCsv(csvText).filter((line) =>
+            line.some((cell) => cell.trim().length > 0),
+          );
+          const headers = table[0] ?? [];
+          const rows = table.slice(1);
+          return { success: true, data: { filePath, headers, rows, rowsCount: rows.length } };
         } catch (err) {
-          return { success: false, error: (err as Error).message };
+          return {
+            success: false,
+            error: `Could not read the spreadsheet: ${(err as Error).message}`,
+          };
         }
       }
 

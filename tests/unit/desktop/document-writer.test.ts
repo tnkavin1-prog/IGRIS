@@ -7,6 +7,7 @@ import {
   crc32,
   createZip,
   escapeXml,
+  parseCsv,
 } from '../../../apps/desktop-hud/src/main/document-writer.js';
 
 const END_OF_CENTRAL_DIRECTORY = 0x06054b50;
@@ -105,6 +106,40 @@ describe('buildDocx', () => {
   it('strips control characters that would make the XML invalid', () => {
     const docx = buildDocx({ title: 'T', content: 'bad\u0000byte' });
     expect(asText(docx)).toContain('badbyte');
+  });
+});
+
+describe('parseCsv', () => {
+  it('parses plain rows', () => {
+    expect(parseCsv('a,b\n1,2')).toEqual([
+      ['a', 'b'],
+      ['1', '2'],
+    ]);
+  });
+
+  it('handles quoted commas, quotes and newlines', () => {
+    expect(parseCsv('name,note\n"Doe, Jane","said ""hi""\nsecond line"')).toEqual([
+      ['name', 'note'],
+      ['Doe, Jane', 'said "hi"\nsecond line'],
+    ]);
+  });
+
+  it('ignores a trailing newline and CR characters', () => {
+    expect(parseCsv('a,b\r\n1,2\r\n')).toEqual([
+      ['a', 'b'],
+      ['1', '2'],
+    ]);
+  });
+
+  it('preserves empty cells', () => {
+    expect(parseCsv('a,,c\n,2,')).toEqual([
+      ['a', '', 'c'],
+      ['', '2', ''],
+    ]);
+  });
+
+  it('returns nothing for an empty document', () => {
+    expect(parseCsv('')).toEqual([]);
   });
 });
 
