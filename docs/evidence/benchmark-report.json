@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-14T06:08:15.629Z",
+  "generatedAt": "2026-11-14T06:41:12.452Z",
   "total": 6,
   "passed": 6,
   "failed": 0,
@@ -30,7 +30,7 @@
       "name": "Checkpoint reload",
       "passed": true,
       "details": "loaded=bench-task",
-      "durationMs": 8
+      "durationMs": 12
     },
     {
       "id": "F",
@@ -44,7 +44,7 @@
       "name": "Temp cleanup",
       "passed": true,
       "details": "removed=1 freed=1000",
-      "durationMs": 7
+      "durationMs": 8
     }
   ]
 }

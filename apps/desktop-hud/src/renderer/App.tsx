@@ -14,7 +14,7 @@ import type {
   WorkflowStep,
 } from '../main/types.js';
 import { CompactHUD } from './CompactHUD.js';
-import { EmberHUD } from './EmberHUD.js';
+import { BrownOrbHUD } from './BrownOrbHUD.js';
 import { HudIcon } from './HudIcon.js';
 import { AudioController } from './audio-controller.js';
 import { SoundEffectsEngine } from './sound-effects.js';
@@ -698,30 +698,23 @@ export function App() {
     setTimeout(() => setExportNotice(null), 3000);
   };
 
-  if (displayMode === 'full') {
+  if (displayMode === 'console') {
     return (
-      <EmberHUD
+      <BrownOrbHUD
         status={status}
         conversation={conversation}
         settings={settings}
-        soundMuted={soundMuted}
-        soundVolume={soundVolume}
-        onMinimize={() => window.geminiHUD?.windowControl.minimize()}
-        onClose={handleClose}
         onStartSession={handleStartSession}
         onStopSession={handleStopSession}
-        onToggleSoundMute={handleToggleSoundMute}
-        onSoundVolumeChange={handleSoundVolumeChange}
-        onAutoApproveChange={handleAutoApproveChange}
-        onWakeWordChange={handleWakeWordChange}
+        onClose={handleClose}
         onCollapseToBar={handleCollapseToBar}
         onCollapseToOrb={handleCollapseToOrb}
-        onOpenConsole={() => setDisplayMode('console')}
+        exportNotice={exportNotice}
       />
     );
   }
 
-  if (displayMode === 'console') {
+  if (displayMode === 'full') {
     return (
       <CompactHUD
         status={status}
