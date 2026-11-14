@@ -13,12 +13,16 @@
  * in tests.
  */
 
+import { deflateRawSync } from 'node:zlib';
+
 /* --------------------------------------------------------------------- zip */
 
 interface ZipEntry {
   /** Forward-slash path inside the archive. */
   name: string;
   data: string | Uint8Array;
+  /** Deflate the entry. Stored entries are smaller for tiny parts. */
+  compress?: boolean;
 }
 
 const CRC_TABLE = (() => {
@@ -62,19 +66,22 @@ export function createZip(entries: ZipEntry[]): Buffer {
 
   for (const entry of entries) {
     const name = Buffer.from(entry.name, 'utf8');
-    const data = Buffer.from(toBytes(entry.data));
-    const crc = crc32(data);
+    const raw = Buffer.from(toBytes(entry.data));
+    const deflated = entry.compress ? deflateRawSync(raw) : null;
+    const data = deflated ?? raw;
+    const method = deflated ? 8 : 0;
+    const crc = crc32(raw);
 
     const local = Buffer.alloc(30 + name.length);
     local.writeUInt32LE(0x04034b50, 0);
     local.writeUInt16LE(20, 4); // version needed
     local.writeUInt16LE(0, 6); // flags
-    local.writeUInt16LE(0, 8); // method: stored
+    local.writeUInt16LE(method, 8);
     local.writeUInt16LE(dosTime, 10);
     local.writeUInt16LE(dosDate, 12);
     local.writeUInt32LE(crc, 14);
     local.writeUInt32LE(data.length, 18);
-    local.writeUInt32LE(data.length, 22);
+    local.writeUInt32LE(raw.length, 22);
     local.writeUInt16LE(name.length, 26);
     local.writeUInt16LE(0, 28);
     name.copy(local, 30);
@@ -84,12 +91,12 @@ export function createZip(entries: ZipEntry[]): Buffer {
     central.writeUInt16LE(20, 4); // version made by
     central.writeUInt16LE(20, 6); // version needed
     central.writeUInt16LE(0, 8); // flags
-    central.writeUInt16LE(0, 10); // method: stored
+    central.writeUInt16LE(method, 10);
     central.writeUInt16LE(dosTime, 12);
     central.writeUInt16LE(dosDate, 14);
     central.writeUInt32LE(crc, 16);
     central.writeUInt32LE(data.length, 20);
-    central.writeUInt32LE(data.length, 24);
+    central.writeUInt32LE(raw.length, 24);
     central.writeUInt16LE(name.length, 28);
     central.writeUInt16LE(0, 30); // extra
     central.writeUInt16LE(0, 32); // comment

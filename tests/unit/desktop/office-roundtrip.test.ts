@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildDocx, buildXlsx } from '../../../apps/desktop-hud/src/main/document-writer.js';
+import { extractDocxText } from '../../../apps/desktop-hud/src/main/document-reader.js';
 import { OfficeSkill } from '../../../apps/desktop-hud/src/main/skills/office.skill.js';
 
 /**
@@ -120,4 +121,26 @@ describe('real Office round trip', () => {
       });
     },
   );
+
+  run('reads a .docx written by Word itself', { timeout: 120_000 }, () => {
+    mkdirSync(dir, { recursive: true });
+    const file = join(dir, 'word-written.docx');
+    ps(`
+      $ErrorActionPreference = 'Stop'
+      $word = New-Object -ComObject Word.Application
+      $word.Visible = $false
+      try {
+        $doc = $word.Documents.Add()
+        $doc.Content.Text = 'Written by Word. Second sentence.'
+        $doc.SaveAs2('${file}', 16)
+        $doc.Close()
+      } finally {
+        $word.Quit()
+      }
+    `);
+
+    const text = extractDocxText(readFileSync(file));
+    expect(text).toContain('Written by Word.');
+    expect(text).toContain('Second sentence.');
+  });
 });
