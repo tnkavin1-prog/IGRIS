@@ -84,6 +84,7 @@ vi.mock('electron', () => {
 
 import {
   createMainWindow,
+  ensureWindowVisible,
   getDisplayMode,
   setDisplayMode,
 } from '../../../apps/desktop-hud/src/main/window.js';
@@ -173,5 +174,31 @@ describe('HUD display modes', () => {
     expect(call.y + call.height).toBeLessThanOrEqual(
       electronState.workArea.y + electronState.workArea.height,
     );
+  });
+
+  it('recenters a stranded window when the HUD is summoned', () => {
+    createMainWindow('preload.js', 'index.html');
+    electronState.bounds = { x: 5000, y: 5000, width: 74, height: 74 };
+    electronState.setBoundsCalls = [];
+
+    expect(ensureWindowVisible()).toBe(true);
+    const call = electronState.setBoundsCalls.at(-1)!;
+    expect(call.x).toBeGreaterThanOrEqual(electronState.workArea.x);
+    expect(call.y).toBeGreaterThanOrEqual(electronState.workArea.y);
+    expect(call.x + call.width).toBeLessThanOrEqual(
+      electronState.workArea.x + electronState.workArea.width,
+    );
+    expect(call.y + call.height).toBeLessThanOrEqual(
+      electronState.workArea.y + electronState.workArea.height,
+    );
+  });
+
+  it('does not move a window that is already fully visible', () => {
+    createMainWindow('preload.js', 'index.html');
+    electronState.bounds = { x: 1200, y: 200, width: 420, height: 62 };
+    electronState.setBoundsCalls = [];
+
+    expect(ensureWindowVisible()).toBe(false);
+    expect(electronState.setBoundsCalls).toHaveLength(0);
   });
 });

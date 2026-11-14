@@ -1,4 +1,4 @@
-import { app, ipcMain, globalShortcut, shell, session } from 'electron';
+import { app, ipcMain, globalShortcut, shell, session, screen } from 'electron';
 import { join } from 'node:path';
 import { appendFileSync, mkdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { CDPClient } from './cdp-client.js';
@@ -63,6 +63,7 @@ import { exportAuditSession } from './audit-exporter.js';
 import { TrayManager } from './tray-manager.js';
 import {
   createMainWindow,
+  ensureWindowVisible,
   getMainWindow,
   minimizeWindow,
   toggleMaximize,
@@ -225,6 +226,9 @@ if (!gotLock) {
       const summonHUD = () => {
         const w = getMainWindow();
         if (w) {
+          // A previous monitor change, an orb collapse or a dragged window can
+          // leave the HUD off-screen. Summon must always reveal it.
+          ensureWindowVisible();
           if (w.isMinimized()) w.restore();
           w.show();
           w.focus();
@@ -319,9 +323,23 @@ if (!gotLock) {
       // Start background tracking of Chrome tabs
       cdpClient.startTracking(1500);
 
+      // A monitor being unplugged or its resolution changing must never leave
+      // the HUD stranded outside the remaining work area.
+      screen.on('display-removed', () => {
+        ensureWindowVisible();
+      });
+      screen.on('display-metrics-changed', () => {
+        ensureWindowVisible();
+      });
+
       // Start in-Chrome loopback summon server (http://127.0.0.1:9228/summon)
       const controlPort = Number(process.env.GEMATRON_CONTROL_PORT ?? 9228);
-      const controlBound = await controlServer.start(() => getMainWindow(), cdpClient);
+      const controlBound = await controlServer.start(() => {
+        // The in-Chrome summon endpoint reveals the HUD too, so it must not
+        // return a window that is stranded off-screen.
+        ensureWindowVisible();
+        return getMainWindow();
+      }, cdpClient);
       logLine(
         'hud-startup',
         controlBound

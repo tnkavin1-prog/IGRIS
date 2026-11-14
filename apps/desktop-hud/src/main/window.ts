@@ -177,6 +177,21 @@ export function getDisplayMode(): HudDisplayMode {
   return currentDisplayMode;
 }
 
+/**
+ * Move the window back onto its display if it is not fully visible.
+ *
+ * Summon (tray, global shortcut, `gematron://`) must always produce a window
+ * the user can actually see. Returns true when the window had to be moved.
+ */
+export function ensureWindowVisible(margin = 24): boolean {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  const bounds = mainWindow.getBounds();
+  const area = screen.getDisplayMatching(bounds).workArea;
+  if (isRectFullyVisible(bounds, area)) return false;
+  mainWindow.setBounds(clampRectIntoArea(bounds, area, margin), false);
+  return true;
+}
+
 export function setDisplayMode(mode: HudDisplayMode): HudDisplayMode {
   if (!isHudDisplayMode(mode)) mode = 'bar';
   if (!mainWindow || mainWindow.isDestroyed()) {
