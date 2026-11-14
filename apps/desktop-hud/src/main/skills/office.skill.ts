@@ -1,10 +1,11 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync, promises as fs, writeFileSync, unlinkSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { TEMP_DIR } from '../runtime-paths.js';
 import os from 'node:os';
 import type { ApplicationSkill, SkillActionDefinition, SkillResult } from '../skill-framework.js';
+import { OOXML_MAGIC, buildDocx, buildXlsx } from '../document-writer.js';
 
 const execAsync = promisify(exec);
 
@@ -36,6 +37,38 @@ export interface OfficeSkillOptions {
   mockMode?: boolean;
 }
 
+/** PowerShell single-quoted literal: only `'` needs escaping. */
+function psLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+async function ensureParent(filePath: string): Promise<void> {
+  await fs.mkdir(dirname(filePath), { recursive: true });
+}
+
+/**
+ * An OOXML file is a ZIP archive, so it must start with `PK\x03\x04`. Checking
+ * the signature catches the old failure mode where the skill wrote a `.txt`
+ * or a `.csv` and still reported success.
+ */
+async function assertOoxml(filePath: string): Promise<number> {
+  const info = await fs.stat(filePath).catch(() => null);
+  if (!info || info.size < OOXML_MAGIC.length) {
+    throw new Error('the file was not written');
+  }
+  const handle = await fs.open(filePath, 'r');
+  try {
+    const header = Buffer.alloc(OOXML_MAGIC.length);
+    await handle.read(header, 0, OOXML_MAGIC.length, 0);
+    if (!header.equals(OOXML_MAGIC)) {
+      throw new Error('the file is not a valid Office Open XML archive');
+    }
+  } finally {
+    await handle.close();
+  }
+  return info.size;
+}
+
 export class OfficeSkill implements ApplicationSkill {
   public readonly id = 'office';
   public readonly name = 'Microsoft Office Skill';
@@ -58,7 +91,7 @@ export class OfficeSkill implements ApplicationSkill {
       {
         name: 'createWordDoc',
         description:
-          'Creates a Microsoft Word document (.docx) with specified headings and text content.',
+          'Creates a real Microsoft Word document (.docx) with a bold title and body text. Built natively, so Word does not need to be installed; the file signature is verified before success is reported.',
         parameters: [
           {
             name: 'filePath',
@@ -99,7 +132,8 @@ export class OfficeSkill implements ApplicationSkill {
       },
       {
         name: 'createExcelSheet',
-        description: 'Generates an Excel workbook (.xlsx) with headers and tabular data.',
+        description:
+          'Generates a real Excel workbook (.xlsx) with headers and tabular data. Built natively, so Excel does not need to be installed; the file signature is verified before success is reported.',
         parameters: [
           {
             name: 'filePath',
@@ -137,7 +171,8 @@ export class OfficeSkill implements ApplicationSkill {
       },
       {
         name: 'createPowerPoint',
-        description: 'Creates a PowerPoint presentation (.pptx) with structured slides.',
+        description:
+          'Creates a PowerPoint presentation (.pptx) with structured slides. Requires PowerPoint, and only reports success after verifying the saved file is a valid OOXML archive.',
         parameters: [
           {
             name: 'filePath',
@@ -163,45 +198,29 @@ export class OfficeSkill implements ApplicationSkill {
         const title = String(params.title || '').trim();
         const content = String(params.content || '').trim();
         if (!filePath) return { success: false, error: 'filePath is required.' };
+        if (!/\.docx$/i.test(filePath)) {
+          return { success: false, error: 'filePath must end in .docx.' };
+        }
 
         if (this.mockMode) {
           return { success: true, data: { created: true, filePath, title } };
         }
 
         try {
-          const script = `
-            try {
-              $word = New-Object -ComObject Word.Application
-              $word.Visible = $false
-              $doc = $word.Documents.Add()
-              $selection = $word.Selection
-              $selection.TypeParagraph()
-              $selection.Style = "Heading 1"
-              $selection.TypeText("${title.replace(/"/g, '`"')}")
-              $selection.TypeParagraph()
-              $selection.Style = "Normal"
-              $selection.TypeText("${content.replace(/"/g, '`"')}")
-              $doc.SaveAs([ref]"${filePath.replace(/\\/g, '\\\\')}")
-              $doc.Close()
-              $word.Quit()
-              [System.Runtime.InteropServices.Marshal]::ReleaseComObject($word) | Out-Null
-              Write-Output "OK"
-            } catch {
-              Write-Error $_.Exception.Message
-            }
-          `;
-          await runPowerShellScript(script);
-          return { success: true, data: { created: true, filePath, title } };
-        } catch {
-          // Fallback to text/markdown if Word COM is unavailable on host
-          await fs.writeFile(
-            filePath.replace(/\.docx?$/i, '.txt'),
-            `# ${title}\n\n${content}`,
-            'utf8',
-          );
+          // Build the .docx natively: no Word installation required, and the
+          // saved file is always a real OOXML document.
+          const buffer = buildDocx({ title, content });
+          await ensureParent(filePath);
+          await fs.writeFile(filePath, buffer);
+          const bytes = await assertOoxml(filePath);
           return {
             success: true,
-            data: { created: true, filePath, note: 'Saved via plain text fallback' },
+            data: { created: true, filePath, title, bytes, verified: true, engine: 'ooxml' },
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: `Could not create the Word document: ${(error as Error).message}`,
           };
         }
       }
@@ -220,34 +239,48 @@ export class OfficeSkill implements ApplicationSkill {
         }
 
         try {
+          // Every dynamic value goes through a single-quoted PowerShell
+          // literal so quotes, `$` and backticks in the text cannot execute.
           const script = `
+            $ErrorActionPreference = 'Stop'
+            $word = New-Object -ComObject Word.Application
+            $word.Visible = $false
             try {
-              $word = New-Object -ComObject Word.Application
-              $word.Visible = $false
               $doc = $word.Documents.Add()
               $selection = $word.Selection
-              $selection.TypeParagraph()
               $selection.Style = "Heading 1"
-              $selection.TypeText("${title.replace(/"/g, '`"')}")
+              $selection.TypeText(${psLiteral(title)})
               $selection.TypeParagraph()
               $selection.Style = "Normal"
-              $selection.TypeText("${content.replace(/"/g, '`"')}")
-              $doc.SaveAs2([ref]"${filePath.replace(/\\/g, '\\\\')}", 17)
+              $selection.TypeText(${psLiteral(content)})
+              $doc.SaveAs2(${psLiteral(filePath)}, 17)
               $doc.Close()
+              Write-Output "OK"
+            } finally {
               $word.Quit()
               [System.Runtime.InteropServices.Marshal]::ReleaseComObject($word) | Out-Null
-              Write-Output "OK"
-            } catch {
-              Write-Error $_.Exception.Message
             }
           `;
           await runPowerShellScript(script, 120_000);
 
-          const { existsSync, statSync } = await import('node:fs');
-          if (!existsSync(filePath) || statSync(filePath).size === 0) {
+          const info = await fs.stat(filePath).catch(() => null);
+          if (!info || info.size < 5) {
             throw new Error('Word reported success but the PDF file is missing or empty.');
           }
-          return { success: true, data: { created: true, filePath, title, verified: true } };
+          const handle = await fs.open(filePath, 'r');
+          try {
+            const header = Buffer.alloc(5);
+            await handle.read(header, 0, 5, 0);
+            if (header.toString('latin1') !== '%PDF-') {
+              throw new Error('the file does not start with the PDF signature');
+            }
+          } finally {
+            await handle.close();
+          }
+          return {
+            success: true,
+            data: { created: true, filePath, title, bytes: info.size, verified: true },
+          };
         } catch (error) {
           return {
             success: false,
@@ -284,25 +317,36 @@ export class OfficeSkill implements ApplicationSkill {
 
       case 'createExcelSheet': {
         const filePath = String(params.filePath || '').trim();
-        const headers = Array.isArray(params.headers) ? (params.headers as string[]) : [];
+        const sheetName = String(params.sheetName || 'Data').trim() || 'Data';
+        const headers = Array.isArray(params.headers) ? (params.headers as unknown[]) : [];
         const rows = Array.isArray(params.rows) ? (params.rows as unknown[][]) : [];
         if (!filePath) return { success: false, error: 'filePath is required.' };
+        if (!/\.xlsx$/i.test(filePath)) {
+          return { success: false, error: 'filePath must end in .xlsx.' };
+        }
 
         if (this.mockMode) {
           return { success: true, data: { created: true, filePath, rowsCount: rows.length } };
         }
 
         try {
-          // Robust CSV/COM builder
-          const lines = [headers.join(',')];
-          for (const row of rows) {
-            lines.push(row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','));
-          }
-          const csvPath = filePath.replace(/\.xlsx?$/i, '.csv');
-          await fs.writeFile(csvPath, lines.join('\n'), 'utf8');
+          // A real workbook, not a CSV renamed to .xlsx.
+          const buffer = buildXlsx({ sheetName, headers, rows });
+          await ensureParent(filePath);
+          await fs.writeFile(filePath, buffer);
+          const bytes = await assertOoxml(filePath);
           return {
             success: true,
-            data: { created: true, filePath: csvPath, rowsCount: rows.length },
+            data: {
+              created: true,
+              filePath,
+              sheetName,
+              headersCount: headers.length,
+              rowsCount: rows.length,
+              bytes,
+              verified: true,
+              engine: 'ooxml',
+            },
           };
         } catch (err) {
           return { success: false, error: (err as Error).message };
@@ -334,22 +378,55 @@ export class OfficeSkill implements ApplicationSkill {
           ? (params.slides as Array<{ title?: string; bullets?: string[] }>)
           : [];
         if (!filePath) return { success: false, error: 'filePath is required.' };
+        if (!/\.pptx$/i.test(filePath)) {
+          return { success: false, error: 'filePath must end in .pptx.' };
+        }
 
         if (this.mockMode) {
           return { success: true, data: { created: true, filePath, slidesCount: slides.length } };
         }
 
         try {
-          const outline = slides
-            .map(
-              (s, i) =>
-                `Slide ${i + 1}: ${s.title || 'Untitled'}\n${(s.bullets || []).map((b) => `  - ${b}`).join('\n')}`,
-            )
-            .join('\n\n');
-          await fs.writeFile(filePath.replace(/\.pptx?$/i, '-outline.txt'), outline, 'utf8');
-          return { success: true, data: { created: true, filePath, slidesCount: slides.length } };
+          // Slides travel as base64 JSON so no text from the caller is ever
+          // interpolated into PowerShell source.
+          const payload = Buffer.from(JSON.stringify(slides), 'utf8').toString('base64');
+          const script = `
+            $ErrorActionPreference = 'Stop'
+            $json = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${payload}'))
+            $slides = $json | ConvertFrom-Json
+            $powerPoint = New-Object -ComObject PowerPoint.Application
+            try {
+              $presentation = $powerPoint.Presentations.Add()
+              $index = 1
+              foreach ($slide in @($slides)) {
+                $created = $presentation.Slides.Add($index, 2)
+                $title = [string]$slide.title
+                $bullets = @($slide.bullets) -join "\`r"
+                $created.Shapes.Placeholders.Item(1).TextFrame.TextRange.Text = $title
+                if ($bullets) {
+                  $created.Shapes.Placeholders.Item(2).TextFrame.TextRange.Text = $bullets
+                }
+                $index++
+              }
+              $presentation.SaveAs(${psLiteral(filePath)})
+              $presentation.Close()
+              Write-Output "OK"
+            } finally {
+              $powerPoint.Quit()
+              [System.Runtime.InteropServices.Marshal]::ReleaseComObject($powerPoint) | Out-Null
+            }
+          `;
+          await runPowerShellScript(script, 180_000);
+          const bytes = await assertOoxml(filePath);
+          return {
+            success: true,
+            data: { created: true, filePath, slidesCount: slides.length, bytes, verified: true },
+          };
         } catch (err) {
-          return { success: false, error: (err as Error).message };
+          return {
+            success: false,
+            error: `Could not create the presentation: ${(err as Error).message}. PowerPoint must be installed for .pptx output.`,
+          };
         }
       }
 
@@ -365,7 +442,13 @@ export class OfficeSkill implements ApplicationSkill {
       case 'createPdf':
       case 'createExcelSheet':
       case 'createPowerPoint':
-        return Boolean((result.data as { created?: boolean })?.created);
+        // The skill only reports success after checking the file signature,
+        // so `verified` is the honest signal. Accept plain `created` from the
+        // mock path, which does not write a file.
+        return Boolean(
+          (result.data as { verified?: boolean; created?: boolean })?.verified ||
+          (result.data as { created?: boolean })?.created,
+        );
       case 'readWordDoc':
       case 'readExcelSheet':
         return Boolean(

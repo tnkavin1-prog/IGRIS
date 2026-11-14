@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-14T05:41:06.485Z",
+  "generatedAt": "2026-11-14T05:46:25.302Z",
   "total": 6,
   "passed": 6,
   "failed": 0,
@@ -16,7 +16,7 @@
       "name": "Open document",
       "passed": true,
       "details": "ok=false error=Document not found: C:\\fake\\doc.pdf",
-      "durationMs": 0
+      "durationMs": 1
     },
     {
       "id": "E",
@@ -30,7 +30,7 @@
       "name": "Checkpoint reload",
       "passed": true,
       "details": "loaded=bench-task",
-      "durationMs": 9
+      "durationMs": 7
     },
     {
       "id": "F",
