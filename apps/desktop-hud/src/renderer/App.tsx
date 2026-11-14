@@ -19,6 +19,7 @@ import { HudIcon } from './HudIcon.js';
 import { AudioController } from './audio-controller.js';
 import { SoundEffectsEngine } from './sound-effects.js';
 import { loadAppearance, saveAppearance, type HudAppearance } from './appearance.js';
+import { resolveInitialDisplayMode } from '../main/display-mode.js';
 import './types.js';
 
 export function App() {
@@ -46,12 +47,10 @@ export function App() {
   const [checkpoints, setCheckpoints] = useState<AgenticTask[]>([]);
   const [displayMode, setDisplayMode] = useState<HudDisplayMode>(() => {
     try {
-      const saved = localStorage.getItem('lumen.displayMode');
       // The orb is a deliberate collapse action, not a launch state: restoring
       // it on startup can leave a 74x74 window stranded off-screen or
       // invisible after a monitor change. Always start in the bar.
-      if (saved === 'orb') return 'bar';
-      return saved === 'full' || saved === 'console' || saved === 'bar' ? saved : 'bar';
+      return resolveInitialDisplayMode(localStorage.getItem('lumen.displayMode'));
     } catch {
       return 'bar';
     }
