@@ -155,10 +155,21 @@ export class GeminiLiveService extends EventEmitter {
     this.settings = this.loadInitialSettings();
     this.workflowEngine.setAutoApprove(this.settings.autoApprove);
     autonomousAgent.configure(
-      new GeminiVisionPlanner(() => ({
-        apiKey: this.settings.apiKey,
-        model: process.env.GEMINI_AGENT_MODEL || 'gemini-2.5-flash',
-      })),
+      new GeminiVisionPlanner(
+        () => ({
+          apiKey: this.settings.apiKey,
+          model: process.env.GEMINI_AGENT_MODEL || 'gemini-2.5-flash',
+        }),
+        {
+          // A second model keeps autonomous planning alive when the primary
+          // model is rate limited or temporarily unavailable.
+          fallbackModels: (process.env.GEMINI_AGENT_FALLBACK_MODEL || '')
+            .split(',')
+            .map((model) => model.trim())
+            .filter(Boolean),
+          baseUrl: process.env.GEMINI_AGENT_BASE_URL,
+        },
+      ),
       {
         computerVision: this.computerVision,
         appManager: this.appManager,

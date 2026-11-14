@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-14T05:34:48.768Z",
+  "generatedAt": "2026-11-14T05:41:06.485Z",
   "total": 6,
   "passed": 6,
   "failed": 0,
@@ -9,7 +9,7 @@
       "name": "Basic Windows control",
       "passed": true,
       "details": "launch ok=true",
-      "durationMs": 2
+      "durationMs": 1
     },
     {
       "id": "A2",
@@ -37,7 +37,7 @@
       "name": "Storage off C:",
       "passed": true,
       "details": "root=E:\\GemetronData",
-      "durationMs": 0
+      "durationMs": 1
     },
     {
       "id": "F2",
