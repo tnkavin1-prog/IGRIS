@@ -35,13 +35,14 @@ export function isHudDisplayMode(value: unknown): value is HudDisplayMode {
 /**
  * The display mode to launch with, given the persisted value.
  *
- * The orb is a deliberate collapse action, not a launch state: restoring it on
- * startup can leave a 74x74 window stranded off-screen or invisible after a
- * monitor change, which reads to the user as "the window disappeared". Launch
- * in the bar instead; the orb stays one click away.
+ * Only the full window (console/full) is a real launch state: the bar and the
+ * orb are deliberate collapse actions, and restoring either on startup is what
+ * made the floating window appear to vanish or open as a tiny strip. Launch
+ * into the console (the main floating window) so the user always gets the full
+ * interface first; collapsing stays one click away.
  */
 export function resolveInitialDisplayMode(saved: unknown): HudDisplayMode {
-  return saved === 'full' || saved === 'console' || saved === 'bar' ? saved : 'bar';
+  return saved === 'full' || saved === 'console' ? saved : 'console';
 }
 
 /** True when the rect lies entirely inside the work area. */

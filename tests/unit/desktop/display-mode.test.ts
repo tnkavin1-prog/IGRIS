@@ -15,21 +15,26 @@ describe('resolveInitialDisplayMode', () => {
   it('never launches into the orb', () => {
     // The orb is a deliberate collapse action; restoring it at startup is
     // what made the floating window appear to vanish.
-    expect(resolveInitialDisplayMode('orb')).toBe('bar');
+    expect(resolveInitialDisplayMode('orb')).toBe('console');
   });
 
-  it('restores the persistent modes', () => {
-    expect(resolveInitialDisplayMode('bar')).toBe('bar');
+  it('never launches into the bar either', () => {
+    // The bar is a collapsed state too. The main floating window must be the
+    // primary launch surface, so a saved bar does not survive a restart.
+    expect(resolveInitialDisplayMode('bar')).toBe('console');
+  });
+
+  it('restores the full window modes', () => {
     expect(resolveInitialDisplayMode('full')).toBe('full');
     expect(resolveInitialDisplayMode('console')).toBe('console');
   });
 
-  it('falls back to the bar for missing or corrupt values', () => {
-    expect(resolveInitialDisplayMode(null)).toBe('bar');
-    expect(resolveInitialDisplayMode(undefined)).toBe('bar');
-    expect(resolveInitialDisplayMode('')).toBe('bar');
-    expect(resolveInitialDisplayMode('nonsense')).toBe('bar');
-    expect(resolveInitialDisplayMode(42)).toBe('bar');
+  it('falls back to the console for missing or corrupt values', () => {
+    expect(resolveInitialDisplayMode(null)).toBe('console');
+    expect(resolveInitialDisplayMode(undefined)).toBe('console');
+    expect(resolveInitialDisplayMode('')).toBe('console');
+    expect(resolveInitialDisplayMode('nonsense')).toBe('console');
+    expect(resolveInitialDisplayMode(42)).toBe('console');
   });
 });
 

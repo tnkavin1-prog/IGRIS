@@ -47,12 +47,12 @@ export function App() {
   const [checkpoints, setCheckpoints] = useState<AgenticTask[]>([]);
   const [displayMode, setDisplayMode] = useState<HudDisplayMode>(() => {
     try {
-      // The orb is a deliberate collapse action, not a launch state: restoring
-      // it on startup can leave a 74x74 window stranded off-screen or
-      // invisible after a monitor change. Always start in the bar.
+      // Only the full window is a real launch state; the bar and orb are
+      // deliberate collapse actions that must not be restored on startup, or
+      // the HUD opens as a tiny strip or vanishes entirely.
       return resolveInitialDisplayMode(localStorage.getItem('lumen.displayMode'));
     } catch {
-      return 'bar';
+      return 'console';
     }
   });
   const [runningWindows, setRunningWindows] = useState<WindowItem[]>([]);

@@ -19,6 +19,11 @@ let currentDisplayMode: HudDisplayMode = 'bar';
 let lastFullSize = { width: 540, height: 700 };
 
 export function createMainWindow(preloadPath: string, htmlPath: string): BrowserWindow {
+  // Reset launch state for every (re)creation so a stale collapsed mode or
+  // stale console size from a previous session cannot leak into this one.
+  currentDisplayMode = 'console';
+  lastFullSize = { width: 540, height: 700 };
+
   if (mainWindow) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
@@ -28,10 +33,8 @@ export function createMainWindow(preloadPath: string, htmlPath: string): Browser
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
 
-  currentDisplayMode = 'bar';
-
-  const defaultWidth = 420;
-  const defaultHeight = 62;
+  const defaultWidth = 540;
+  const defaultHeight = 700;
   const initialX = Math.max(20, screenWidth - defaultWidth - 40);
   const initialY = Math.max(40, Math.floor((screenHeight - defaultHeight) / 2));
 
