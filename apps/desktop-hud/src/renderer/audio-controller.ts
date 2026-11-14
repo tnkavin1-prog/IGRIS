@@ -190,6 +190,9 @@ export class AudioController {
       source.connect(this.audioCtxOut.destination);
 
       const now = this.audioCtxOut.currentTime;
+      if (this.nextPlayTime < now || this.nextPlayTime - now > 0.3) {
+        this.nextPlayTime = now + 0.02;
+      }
       const startTime = Math.max(now, this.nextPlayTime);
       source.start(startTime);
       this.nextPlayTime = startTime + audioBuffer.duration;

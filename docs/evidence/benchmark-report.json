@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-14T08:59:28.379Z",
+  "generatedAt": "2026-11-14T10:16:34.186Z",
   "total": 6,
   "passed": 6,
   "failed": 0,
@@ -23,21 +23,21 @@
       "name": "Bounded retry",
       "passed": true,
       "details": "attempts=3 max=3",
-      "durationMs": 1
+      "durationMs": 0
     },
     {
       "id": "E2",
       "name": "Checkpoint reload",
       "passed": true,
       "details": "loaded=bench-task",
-      "durationMs": 5
+      "durationMs": 6
     },
     {
       "id": "F",
       "name": "Storage off C:",
       "passed": true,
       "details": "root=E:\\GemetronData",
-      "durationMs": 0
+      "durationMs": 1
     },
     {
       "id": "F2",
