@@ -340,6 +340,19 @@ if (!gotLock) {
         if (!isQuitting && trayReady && liveService.currentSettings.minimizeToTray) {
           win.hide();
         }
+        cdpClient.suspendTracking();
+      });
+
+      win.on('hide', () => {
+        cdpClient.suspendTracking();
+      });
+
+      win.on('show', () => {
+        cdpClient.resumeTracking();
+      });
+
+      win.on('restore', () => {
+        cdpClient.resumeTracking();
       });
 
       // Start background tracking of Chrome tabs

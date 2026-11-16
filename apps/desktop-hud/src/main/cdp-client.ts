@@ -74,6 +74,9 @@ export class CDPClient extends EventEmitter {
   private currentActiveTab: ChromeTabInfo | null = null;
   private isConnected = false;
   private messageSeq = 1;
+  private trackingGeneration = 0;
+  private backoffDelay = 500;
+  private isSuspended = false;
 
   constructor(port = 9222, host = '127.0.0.1') {
     super();
@@ -87,9 +90,13 @@ export class CDPClient extends EventEmitter {
 
   public startTracking(intervalMs = 1500): void {
     if (this.pollInterval) return;
-    void this.pollTabs();
+    this.isSuspended = false;
+    this.backoffDelay = 500;
+    this.trackingGeneration++;
+    void this.pollTabsGuarded(this.trackingGeneration);
     this.pollInterval = setInterval(() => {
-      void this.pollTabs();
+      if (this.isSuspended) return;
+      void this.pollTabsGuarded(this.trackingGeneration);
     }, intervalMs);
   }
 
@@ -97,6 +104,34 @@ export class CDPClient extends EventEmitter {
     if (this.pollInterval) {
       clearInterval(this.pollInterval);
       this.pollInterval = null;
+    }
+    this.trackingGeneration++;
+    this.isSuspended = false;
+    this.backoffDelay = 500;
+  }
+
+  public suspendTracking(): void {
+    this.isSuspended = true;
+  }
+
+  public resumeTracking(): void {
+    this.isSuspended = false;
+    this.backoffDelay = 500;
+    if (this.pollInterval) {
+      void this.pollTabsGuarded(this.trackingGeneration);
+    }
+  }
+
+  private async pollTabsGuarded(generation: number): Promise<void> {
+    if (generation !== this.trackingGeneration) return;
+    if (this.isSuspended) return;
+    try {
+      await this.pollTabs();
+      this.backoffDelay = 500; // Reset backoff on success
+    } catch {
+      // Exponential backoff: 500ms → 1s → 2s → 4s → 8s → 15s
+      this.backoffDelay = Math.min(this.backoffDelay * 2, 15000);
+      // Don't reschedule immediately; the interval will retry
     }
   }
 
