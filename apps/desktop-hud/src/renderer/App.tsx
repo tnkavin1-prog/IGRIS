@@ -20,6 +20,8 @@ import { AudioController } from './audio-controller.js';
 import { SoundEffectsEngine } from './sound-effects.js';
 import { loadAppearance, saveAppearance, type HudAppearance } from './appearance.js';
 import { resolveInitialDisplayMode } from '../main/display-mode.js';
+import { useModeTransition } from './hooks/useModeTransition.js';
+import { ResizeHandles } from './ResizeHandles.js';
 import './types.js';
 
 export function App() {
@@ -82,6 +84,7 @@ export function App() {
   const lastEscapeTimeRef = useRef(0);
   const displayModeRef = useRef(displayMode);
   const statusRef = useRef(status);
+  const sessionGenerationRef = useRef(0);
   const currentTaskRef = useRef(currentTask);
   useEffect(() => {
     currentTaskRef.current = currentTask;
@@ -133,7 +136,14 @@ export function App() {
         void window.geminiHUD.gemini.sendAudioChunk(chunk);
       }
     });
+    audioCtrl.setVolume(settings.soundVolume ?? 0.5);
+    audioCtrl.setMuted(settings.soundEffectsEnabled === false);
     audioControllerRef.current = audioCtrl;
+    audioCtrl.onError = (message) => {
+      setExportNotice(message);
+      handleStopSession();
+    };
+    let captureEpoch = 0;
 
     const soundEngine = new SoundEffectsEngine({
       volume: settings.soundVolume ?? 0.5,
@@ -154,11 +164,13 @@ export function App() {
         if (typeof st.soundVolume === 'number') {
           setSoundVolume(st.soundVolume);
           soundEngine.setVolume(st.soundVolume);
+          audioCtrl.setVolume(st.soundVolume);
         }
         if (typeof st.soundEffectsEnabled === 'boolean') {
           const isMuted = !st.soundEffectsEnabled;
           setSoundMuted(isMuted);
           soundEngine.setMuted(isMuted);
+          audioCtrl.setMuted(isMuted);
         }
       })
       .catch(() => undefined);
@@ -219,13 +231,21 @@ export function App() {
 
     cleanups.push(
       window.geminiHUD.gemini.onStatusChanged((newStatus) => {
+        statusRef.current = newStatus;
         setStatus(newStatus);
         if (newStatus === 'listening') {
-          soundEngine.play('system_online');
-        } else if (newStatus === 'idle' || newStatus === 'closed' || newStatus === 'error') {
+          const epoch = captureEpoch;
+          void audioCtrl.startCapture().then((started) => {
+            if (started || epoch !== captureEpoch || statusRef.current === 'idle') return;
+            setExportNotice(
+              audioCtrl.lastError ?? 'Microphone unavailable. Check your input device.',
+            );
+            handleStopSession();
+          });
+        } else if (['connecting', 'idle', 'closed', 'error'].includes(newStatus)) {
+          captureEpoch++;
+          if (newStatus !== 'connecting') sessionGenerationRef.current++;
           audioCtrl.stopCapture();
-          // Drop any audio that was already queued so the agent goes fully
-          // silent the moment the session ends or the window is closed.
           audioCtrl.clearPlayback();
         }
       }),
@@ -240,7 +260,7 @@ export function App() {
           if (!last) return [...prev, msg];
 
           // Merge assistant streaming fragments into a single coherent paragraph
-          if (msg.kind === 'assistant' && last.kind === 'assistant') {
+          if (msg.kind === 'assistant' && last.kind === 'assistant' && msg.id === last.id) {
             const incoming = msg.text || '';
             let existing = last.text || '';
             if (existing && incoming) {
@@ -264,7 +284,7 @@ export function App() {
           }
 
           // Merge consecutive user speech fragments into a single coherent paragraph
-          if (msg.kind === 'user' && last.kind === 'user') {
+          if (msg.kind === 'user' && last.kind === 'user' && msg.id === last.id) {
             const incoming = msg.text || '';
             let existing = last.text || '';
             if (existing && incoming) {
@@ -301,6 +321,12 @@ export function App() {
     cleanups.push(
       window.geminiHUD.gemini.onAudioChunk((chunk) => {
         audioCtrl.playChunk(chunk.data);
+      }),
+    );
+
+    cleanups.push(
+      window.geminiHUD.gemini.onError((message) => {
+        setExportNotice(message);
       }),
     );
 
@@ -452,7 +478,11 @@ export function App() {
     cleanups.push(() => window.removeEventListener('pointerdown', unlockAudio));
 
     return () => {
+      captureEpoch++;
+      sessionGenerationRef.current++;
+      audioCtrl.onError = null;
       audioCtrl.stopCapture();
+      audioCtrl.clearPlayback();
       soundEngine.close();
       if (crosshairTimerRef.current) clearTimeout(crosshairTimerRef.current);
       if (bboxTimerRef.current) clearTimeout(bboxTimerRef.current);
@@ -503,25 +533,46 @@ export function App() {
       ['connecting', 'listening', 'speaking', 'thinking'].includes(statusRef.current)
     )
       return;
-    void soundEngineRef.current?.unlock();
+    const generation = ++sessionGenerationRef.current;
     statusRef.current = 'connecting';
     setStatus('connecting');
-    const ok = await window.geminiHUD.gemini.connect();
-    if (ok && !(await audioControllerRef.current?.startCapture())) {
-      await window.geminiHUD.gemini.disconnect();
-      setExportNotice('Microphone unavailable. Check Windows microphone permissions.');
-    } else if (!ok) {
-      statusRef.current = 'error';
-      setStatus('error');
+    setExportNotice(null);
+    try {
+      await soundEngineRef.current?.unlock();
+      if (generation !== sessionGenerationRef.current) return;
+      const outputReady = await audioControllerRef.current?.unlock();
+      if (generation !== sessionGenerationRef.current) return;
+      if (!outputReady) {
+        statusRef.current = 'idle';
+        setStatus('idle');
+        setExportNotice('Audio output unavailable. Check the Windows output device.');
+        return;
+      }
+      const ok = await window.geminiHUD.gemini.connect();
+      if (generation !== sessionGenerationRef.current) return;
+      if (!ok) {
+        statusRef.current = 'error';
+        setStatus('error');
+        setExportNotice('Could not connect to Gemini. Check your API key and network.');
+      }
+    } catch (error) {
+      if (generation !== sessionGenerationRef.current) return;
+      handleStopSession();
+      setExportNotice(
+        `Could not start voice: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   };
 
   const handleStopSession = () => {
-    if (!window.geminiHUD) return;
-    window.geminiHUD.gemini.disconnect();
+    sessionGenerationRef.current++;
     audioControllerRef.current?.stopCapture();
     audioControllerRef.current?.clearPlayback();
+    statusRef.current = 'idle';
     setStatus('idle');
+    void window.geminiHUD?.gemini.disconnect().catch(() => {
+      setExportNotice('Could not disconnect Gemini. Use the emergency stop shortcut.');
+    });
   };
 
   // Closing the floating window must end the voice session too: otherwise the
@@ -645,6 +696,7 @@ export function App() {
   const handleToggleSoundMute = () => {
     if (!soundEngineRef.current) return;
     const nextMuted = soundEngineRef.current.toggleMute();
+    audioControllerRef.current?.setMuted(nextMuted);
     setSoundMuted(nextMuted);
     setSettings((prev) => ({ ...prev, soundEffectsEnabled: !nextMuted }));
     void window.geminiHUD?.gemini.updateSettings({ soundEffectsEnabled: !nextMuted });
@@ -655,6 +707,7 @@ export function App() {
   const handleSoundVolumeChange = (vol: number) => {
     if (!soundEngineRef.current) return;
     soundEngineRef.current.setVolume(vol);
+    audioControllerRef.current?.setVolume(vol);
     setSoundVolume(vol);
     setSettings((prev) => ({ ...prev, soundVolume: vol }));
     void window.geminiHUD?.gemini.updateSettings({ soundVolume: vol });
@@ -698,7 +751,10 @@ export function App() {
     setTimeout(() => setExportNotice(null), 3000);
   };
 
-  if (displayMode === 'full') {
+  // Use mode transition hook for animated surface morphing
+  const renderMode = useModeTransition(displayMode);
+
+  if (renderMode === 'full') {
     return (
       <EmberHUD
         status={status}
@@ -706,6 +762,8 @@ export function App() {
         settings={settings}
         soundMuted={soundMuted}
         soundVolume={soundVolume}
+        isPinned={isPinned}
+        onTogglePin={handleTogglePin}
         onMinimize={() => window.geminiHUD?.windowControl.minimize()}
         onClose={handleClose}
         onStartSession={handleStartSession}
@@ -721,57 +779,60 @@ export function App() {
     );
   }
 
-  if (displayMode === 'console') {
+  if (renderMode === 'console') {
     return (
-      <CompactHUD
-        status={status}
-        conversation={conversation}
-        blackboardLesson={blackboardLesson}
-        activeTab={activeTab}
-        chromeConnected={chromeConnected}
-        settings={settings}
-        isPinned={isPinned}
-        isMaximized={isMaximized}
-        currentTask={currentTask}
-        pendingApproval={pendingApproval}
-        crosshair={crosshair}
-        boundingBox={boundingBox}
-        telemetry={telemetry}
-        onTogglePin={handleTogglePin}
-        onToggleMaximize={handleToggleMaximize}
-        onMinimize={() => window.geminiHUD?.windowControl.minimize()}
-        onClose={handleClose}
-        onCollapseToBar={handleCollapseToBar}
-        onCollapseToOrb={handleCollapseToOrb}
-        onOpenEmber={() => setDisplayMode('full')}
-        onStartSession={handleStartSession}
-        onStopSession={handleStopSession}
-        onSendText={handleSendText}
-        onSelectSampleLesson={(sample) => setBlackboardLesson(sample)}
-        onExportSession={handleExportSession}
-        onSwitchTab={(tabId) => window.geminiHUD?.cdp.switchTab(tabId)}
-        onLaunchChrome={() => window.geminiHUD?.cdp.launchChrome()}
-        onApproveStep={handleApproveStep}
-        onRejectStep={handleRejectStep}
-        onScanDesktop={handleScanDesktop}
-        onShowWindows={handleShowWindows}
-        onStartAutonomousTask={handleStartAutonomousTask}
-        onEmergencyStop={() => handleEmergencyStop('HUD emergency button pressed')}
-        onPauseWorkflow={handlePauseWorkflow}
-        onResumeWorkflow={handleResumeWorkflow}
-        exportNotice={exportNotice}
-        runningWindows={runningWindows}
-        onFocusWindow={handleFocusWindow}
-        onRefreshWindows={handleRefreshWindows}
-        soundMuted={soundMuted}
-        soundVolume={soundVolume}
-        onToggleSoundMute={handleToggleSoundMute}
-        onSoundVolumeChange={handleSoundVolumeChange}
-        appearance={appearance}
-        onAppearanceChange={setAppearance}
-        onAutoApproveChange={handleAutoApproveChange}
-        onWakeWordChange={handleWakeWordChange}
-      />
+      <>
+        <CompactHUD
+          status={status}
+          conversation={conversation}
+          blackboardLesson={blackboardLesson}
+          activeTab={activeTab}
+          chromeConnected={chromeConnected}
+          settings={settings}
+          isPinned={isPinned}
+          isMaximized={isMaximized}
+          currentTask={currentTask}
+          pendingApproval={pendingApproval}
+          crosshair={crosshair}
+          boundingBox={boundingBox}
+          telemetry={telemetry}
+          onTogglePin={handleTogglePin}
+          onToggleMaximize={handleToggleMaximize}
+          onMinimize={() => window.geminiHUD?.windowControl.minimize()}
+          onClose={handleClose}
+          onCollapseToBar={handleCollapseToBar}
+          onCollapseToOrb={handleCollapseToOrb}
+          onOpenEmber={() => setDisplayMode('full')}
+          onStartSession={handleStartSession}
+          onStopSession={handleStopSession}
+          onSendText={handleSendText}
+          onSelectSampleLesson={(sample) => setBlackboardLesson(sample)}
+          onExportSession={handleExportSession}
+          onSwitchTab={(tabId) => window.geminiHUD?.cdp.switchTab(tabId)}
+          onLaunchChrome={() => window.geminiHUD?.cdp.launchChrome()}
+          onApproveStep={handleApproveStep}
+          onRejectStep={handleRejectStep}
+          onScanDesktop={handleScanDesktop}
+          onShowWindows={handleShowWindows}
+          onStartAutonomousTask={handleStartAutonomousTask}
+          onEmergencyStop={() => handleEmergencyStop('HUD emergency button pressed')}
+          onPauseWorkflow={handlePauseWorkflow}
+          onResumeWorkflow={handleResumeWorkflow}
+          exportNotice={exportNotice}
+          runningWindows={runningWindows}
+          onFocusWindow={handleFocusWindow}
+          onRefreshWindows={handleRefreshWindows}
+          soundMuted={soundMuted}
+          soundVolume={soundVolume}
+          onToggleSoundMute={handleToggleSoundMute}
+          onSoundVolumeChange={handleSoundVolumeChange}
+          appearance={appearance}
+          onAppearanceChange={setAppearance}
+          onAutoApproveChange={handleAutoApproveChange}
+          onWakeWordChange={handleWakeWordChange}
+        />
+        <ResizeHandles />
+      </>
     );
   }
 
@@ -780,14 +841,14 @@ export function App() {
     status === 'closed' ? 'Idle' : status.charAt(0).toUpperCase() + status.slice(1);
 
   return (
-    <div className={`agent-shell ember-ambient${isLive ? ' voice' : ''}`} data-mode={displayMode}>
-      {displayMode === 'orb' ? (
+    <div className={`agent-shell ember-ambient${isLive ? ' voice' : ''}`} data-mode={renderMode}>
+      {renderMode === 'orb' ? (
         <div className="orbwrap glass app-drag-region">
           <button
             type="button"
             className="orb"
-            aria-label="Open bar"
-            onClick={handleCollapseToBar}
+            aria-label="Open full HUD"
+            onClick={() => setDisplayMode('full')}
           />
           <span className="odot" aria-hidden="true" />
         </div>

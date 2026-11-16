@@ -345,4 +345,18 @@ const api = {
 
 export type GeminiHUDAPI = typeof api;
 
+const hudWindowSub = <T,>(channel: string, cb: (p: T) => void) => {
+  const h = (_e: unknown, p: T) => cb(p);
+  ipcRenderer.on(channel, h);
+  return () => ipcRenderer.removeListener(channel, h);
+};
+
 contextBridge.exposeInMainWorld('geminiHUD', api);
+contextBridge.exposeInMainWorld('hudWindow', {
+  beginGesture: (req: unknown) => ipcRenderer.send('hud:gesture-start', req),
+  endGesture: () => ipcRenderer.send('hud:gesture-end'),
+  setIgnoreMouse: (ignore: boolean) => ipcRenderer.send('hud:set-ignore-mouse', ignore),
+  onModeChanged: (cb: (p: unknown) => void) => hudWindowSub('hud:mode-changed', cb),
+  onVisibility: (cb: (p: { visible: boolean }) => void) => hudWindowSub('hud:visibility', cb),
+});
+

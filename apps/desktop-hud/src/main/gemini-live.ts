@@ -89,6 +89,14 @@ export class GeminiLiveService extends EventEmitter {
   private videoReader = new VideoReader();
   private browserGateway: BrowserGateway;
   private executionGuard = new ExecutionGuard();
+  private toolQueue: Promise<void> = Promise.resolve();
+  private executionGeneration = 0;
+  private pendingToolIds = new Set<string>();
+  private cancelledToolIds = new Set<string>();
+  private stoppingOperations: Promise<{ stopped: boolean; task: any }> = Promise.resolve({
+    stopped: false,
+    task: null,
+  });
   private workflowEngine: AgenticWorkflowEngine;
   private memoryStore: JarvisMemoryStore;
   private hardwareMonitor: HardwareMonitorService;
@@ -106,6 +114,8 @@ export class GeminiLiveService extends EventEmitter {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private manualDisconnect = false;
   private isSetupComplete = false;
+  private setupTimer: NodeJS.Timeout | null = null;
+  private serverGoingAway = false;
   private static readonly MAX_RECONNECT_ATTEMPTS = 6;
 
   constructor(cdpClient: CDPClient, deps?: GeminiLiveServiceDeps) {
@@ -297,23 +307,27 @@ export class GeminiLiveService extends EventEmitter {
   public async emergencyStop(
     reason = 'Emergency killswitch activated',
   ): Promise<{ stopped: boolean; task: any }> {
-    await autonomousAgent.stopSession();
-    const res = await this.workflowEngine.emergencyStop(reason);
+    this.disconnect();
+    const res = await this.stoppingOperations;
     this.emit('conversation-message', {
       id: `sys_kill_${Date.now()}`,
       kind: 'system',
-      title: '🚨 EMERGENCY KILLSWITCH ACTIVATED',
-      text: `${reason}. All autonomous operations halted, queues cleared, input states safely released.`,
+      title: 'EMERGENCY STOP ACTIVATED',
+      text: `${reason}. Session ended, pending commands cancelled, and input release requested. Actions already sent to an application cannot be undone.`,
       at: Date.now(),
     } as ConversationMessage);
     return res;
   }
 
   public async connect(): Promise<boolean> {
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+    if (
+      this.socket &&
+      (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)
+    ) {
       return true;
     }
 
+    this.clearReconnectTimer();
     const apiKey = this.settings.apiKey;
     if (!apiKey) {
       this.emitError('API key is missing. Enter a Gemini API key in HUD Settings.');
@@ -325,36 +339,49 @@ export class GeminiLiveService extends EventEmitter {
     this.isSetupComplete = false;
 
     try {
-      this.socket = new WebSocket(LIVE_WS_URL, { headers: { 'x-goog-api-key': apiKey } });
+      const socket = new WebSocket(LIVE_WS_URL, { headers: { 'x-goog-api-key': apiKey } });
+      this.socket = socket;
+      this.serverGoingAway = false;
+      this.setupTimer = setTimeout(() => {
+        if (this.socket !== socket || this.isSetupComplete) return;
+        this.emitError(
+          'Gemini did not finish connecting within 15 seconds. Check your network and retry.',
+        );
+        socket.terminate();
+      }, 15_000);
+      this.setupTimer.unref?.();
 
-      this.socket.on('open', () => {
-        this.reconnectAttempts = 0;
-        this.sendSetup();
-        if (process.env.GEMATRON_STREAM_SCREEN === 'true') {
-          this.startScreenStream();
-        }
+      socket.on('open', () => {
+        if (this.socket === socket) this.sendSetup();
       });
 
-      this.socket.on('message', (data: WebSocket.RawData) => {
-        void this.handleServerMessage(data.toString());
+      socket.on('message', (data: WebSocket.RawData) => {
+        if (this.socket === socket) void this.handleServerMessage(data.toString());
       });
 
-      this.socket.on('error', (err: Error) => {
-        this.emitError(`Live WebSocket error: ${err.message}`);
+      socket.on('error', (err: Error) => {
+        if (this.socket === socket) this.emitError(`Live WebSocket error: ${err.message}`);
       });
 
-      this.socket.on('close', (code: number, reason: Buffer) => {
+      socket.on('close', (code: number, reason: Buffer) => {
+        if (this.socket !== socket) return;
+        this.clearSetupTimer();
         this.stopScreenStream();
         this.isSetupComplete = false;
-        this.setStatus('closed');
         this.socket = null;
+        this.cancelPendingOperations();
         const detail = { code, reason: reason.toString() };
         this.emit('disconnected', detail);
-        this.emitTelemetry();
-        // 1000 = normal closure. Anything else (including the 1006 abnormal
-        // close produced by dropped networks) triggers resumption.
-        if (!this.manualDisconnect && code !== 1000) {
+        if ([1007, 1008, 1003].includes(code)) {
+          this.resumeHandle = null;
+          this.setStatus('error');
+          this.emitError(
+            `Gemini rejected the session (${code}): ${detail.reason || 'Check the API key and Live model.'}`,
+          );
+        } else if (!this.manualDisconnect && (code !== 1000 || this.serverGoingAway)) {
           this.scheduleReconnect();
+        } else {
+          this.setStatus(this.manualDisconnect ? 'idle' : 'closed');
         }
       });
 
@@ -375,9 +402,11 @@ export class GeminiLiveService extends EventEmitter {
   private scheduleReconnect(): void {
     if (this.manualDisconnect || this.reconnectTimer) return;
     if (this.reconnectAttempts >= GeminiLiveService.MAX_RECONNECT_ATTEMPTS) {
+      this.setStatus('error');
       this.emitError('Live session ended and automatic reconnect gave up. Start a new session.');
       return;
     }
+    this.setStatus('connecting');
     const attempt = this.reconnectAttempts++;
     const delayMs = Math.min(30_000, 1_000 * 2 ** attempt);
     this.emit('reconnect-scheduled', { attempt: attempt + 1, delayMs });
@@ -395,16 +424,43 @@ export class GeminiLiveService extends EventEmitter {
     }
   }
 
+  private clearSetupTimer(): void {
+    if (this.setupTimer) clearTimeout(this.setupTimer);
+    this.setupTimer = null;
+  }
+
+  private cancelPendingOperations(): void {
+    this.executionGeneration++;
+    this.pendingToolIds.clear();
+    this.cancelledToolIds.clear();
+    this.stoppingOperations = Promise.all([
+      autonomousAgent.stopSession(),
+      this.workflowEngine.emergencyStop('Voice session ended'),
+    ])
+      .then(([, result]) => result)
+      .catch((error) => {
+        console.error('[GeminiLive] Failed to release input after stopping:', error);
+        return { stopped: false, task: this.workflowEngine.getCurrentTask() };
+      });
+  }
+
   public disconnect(): void {
+    this.cancelPendingOperations();
     this.manualDisconnect = true;
     this.isSetupComplete = false;
     this.clearReconnectTimer();
+    this.clearSetupTimer();
     this.stopScreenStream();
-    if (this.socket) {
+    const socket = this.socket;
+    this.socket = null;
+    this.resumeHandle = null;
+    this.reconnectAttempts = 0;
+    this.currentAssistantTurnId = null;
+    this.currentUserTurnId = null;
+    if (socket) {
       try {
-        this.socket.close();
+        socket.close();
       } catch {}
-      this.socket = null;
     }
     this.setStatus('idle');
     this.emitTelemetry();
@@ -414,14 +470,15 @@ export class GeminiLiveService extends EventEmitter {
     if (this.screenStreamTimer) return;
     const interval = intervalMs ?? this.screenStreamInterval();
     this.screenStreamTimer = setInterval(async () => {
-      if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+      const socket = this.socket;
+      if (!socket || socket.readyState !== WebSocket.OPEN || !this.isSetupComplete) return;
       try {
         const shot = await this.computerVision.captureScreen(undefined, {
           maxWidth: 1024,
           maxHeight: 576,
           quality: 70,
         });
-        if (shot?.data) {
+        if (shot?.data && this.socket === socket) {
           this.rememberFrame(shot);
           this.sendImageFrame(shot.data);
         }
@@ -467,20 +524,9 @@ export class GeminiLiveService extends EventEmitter {
   }
 
   public sendText(text: string): boolean {
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN || !this.isSetupComplete) {
       return false;
     }
-
-    // Auto-capture live screen on user interaction so Gemini always has fresh visual context
-    void this.computerVision
-      .captureScreen(undefined, { maxWidth: 1024, maxHeight: 576, quality: 75 })
-      .then((shot) => {
-        if (shot?.data) {
-          this.rememberFrame(shot);
-          this.sendImageFrame(shot.data);
-        }
-      })
-      .catch(() => undefined);
 
     const msg = {
       clientContent: {
@@ -505,7 +551,7 @@ export class GeminiLiveService extends EventEmitter {
   }
 
   public sendAudioChunk(base64Pcm: string): void {
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN || !this.isSetupComplete) return;
 
     const msg = {
       realtimeInput: {
@@ -519,7 +565,7 @@ export class GeminiLiveService extends EventEmitter {
   }
 
   public sendImageFrame(base64Jpeg: string): void {
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN || !this.isSetupComplete) return;
 
     const msg = {
       realtimeInput: {
@@ -535,8 +581,7 @@ export class GeminiLiveService extends EventEmitter {
   private sendSetup(): void {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
 
-    const rawModel =
-      process.env.GEMINI_LIVE_MODEL || this.settings.modelId || 'gemini-3.8-live';
+    const rawModel = process.env.GEMINI_LIVE_MODEL || this.settings.modelId || 'gemini-3.8-live';
     const model = rawModel.startsWith('models/') ? rawModel : `models/${rawModel}`;
     const isExtendedThinking = model.includes('extended-thinking');
 
@@ -563,15 +608,24 @@ export class GeminiLiveService extends EventEmitter {
         },
         inputAudioTranscription: {},
         outputAudioTranscription: {},
+        realtimeInputConfig: {
+          automaticActivityDetection: {
+            disabled: false,
+            startOfSpeechSensitivity: 'START_SENSITIVITY_HIGH',
+            endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
+            prefixPaddingMs: 200,
+            silenceDurationMs: 500,
+          },
+        },
         systemInstruction: {
           parts: [
             {
               text: [
                 'You are Assistant, an advanced Autonomous Multimodal Computer-Use Co-Pilot embedded in a native desktop HUD.',
                 'CONVERSATIONAL INITIATION & SILENCE INVARIANTS (CRITICAL):',
-                '- NEVER speak first, greet the user, state the date/time, or produce any output automatically upon connection.',
-                '- When the user has not spoken or when incoming audio contains silence, ambient room sound, line noise, or breathing, DO NOT respond. DO NOT guess what the user might want. Stay completely silent.',
-                '- Only respond when the user speaks a clear, direct, intentional request or question to you.',
+                '- Wait for the user to speak after connecting. Do not produce an unsolicited greeting or announcement.',
+                '- Do not respond to silence, ambient room sound, line noise, or breathing. Do not guess what the user might want.',
+                '- Respond naturally to speech addressed to you, including greetings such as "hello", questions, and requests. If speech is unclear, ask a brief clarification instead of inventing a command.',
                 'You possess complete human-like, OS-wide autonomous control over Windows: mouse clicking, dragging, moving, hardware mouse wheel scrolling, keyboard typing and hotkeys, window management (maximize, minimize, restore, close), application management, and Chrome browser tabs via CDP.',
                 'COORDINATE SPACE: You see downscaled frames (usually 1024x576) of the desktop. Report click/move coordinates in those frame pixels; the runtime rescales them to the physical desktop. Pass coordinate_space:"physical" only when you are certain your numbers are already desktop pixels.',
                 'FAST-PATH AUTONOMOUS ACTIONS (CRITICAL):',
@@ -591,7 +645,7 @@ export class GeminiLiveService extends EventEmitter {
                 '- When asked to CLICK something IN CHROME: call browser_click({ selector: "..." }) with a CSS selector, or click_element_by_text({ text: "..." }) for text-based clicking.',
                 '- When asked to CLOSE a Chrome tab: call browser_close_tab({ tab_id: "..." }).',
                 '- When asked to explain or derive concepts in math/physics: invoke teach_visual_blackboard.',
-                '- When asked to do ANY complex multi-step autonomous task (e.g. "Open Blender, download a scene, add shaders, render", "Open Chrome, search, download a file, open it", "Do a 10-minute Blender project"): IMMEDIATELY call autonomous_goal({ goal: "..." }). This runs the full Observe → Think → Act → Verify loop without asking you or the user for permission at each step.',
+                '- When asked to do ANY complex multi-step autonomous task (e.g. "Open Blender, download a scene, add shaders, render", "Open Chrome, search, download a file, open it", "Do a 10-minute Blender project"): IMMEDIATELY call autonomous_goal({ goal: "..." }). This runs the Observe → Think → Act → Verify loop. Respect approval requirements and report blockers instead of bypassing them.',
                 '- When asked to OPEN BLENDER: call open_blender({ blendFile: "..." }). This launches the actual Blender GUI window on Windows, not headless scripts.',
                 '- When asked to DOWNLOAD a file/scene from the web: call download_scene({ url: "..." }). It saves to the project downloads folder.',
                 '- When asked to CLICK a UI element by description in any app (Blender, Chrome, Notepad): call click_element_on_screen({ description: "..." }).',
@@ -608,7 +662,7 @@ export class GeminiLiveService extends EventEmitter {
                 '- If you need to visually observe the user desktop screen to answer a question, inspect UI, or locate an element, IMMEDIATELY call computer_use_screenshot({}). Screen capture is on-demand for low-latency voice, so invoke the tool whenever visual context is required.',
                 '- Always observe the actual visual screen before asserting whether an application is open or visible. If the desktop wallpaper is showing and no application window is visible on screen, it is NOT open.',
                 '- If the user tells you an app is NOT open, NEVER argue or claim it is open. Immediately call launch_application({ app_name: "..." }) or switch_active_window({ window_title: "..." }) to bring it up.',
-                'Keep your spoken responses ultra-concise, natural, confident, and direct (under 10 words: e.g. "Maximized.", "Scrolling down.", "Screenshot captured.", "Done."). Execute physical tools without hesitation.',
+                'Keep spoken replies concise and natural. Answer ordinary questions directly; expand when the user asks for explanation. Confirm actions only after successful tool results. Clearly explain failures or required approvals; never claim an unverified action succeeded.',
                 this.memoryStore.buildSystemContextPrompt(),
               ].join('\n\n'),
             },
@@ -1441,10 +1495,9 @@ export class GeminiLiveService extends EventEmitter {
                   properties: {
                     url: {
                       type: 'STRING',
-                      description: 'URL to open in the new tab (e.g. https://www.google.com)',
+                      description: 'Optional URL; omit it to open a blank tab.',
                     },
                   },
-                  required: ['url'],
                 },
               },
               {
@@ -1776,7 +1829,10 @@ export class GeminiLiveService extends EventEmitter {
 
       // 0. Setup completion acknowledgement
       if (msg.setupComplete) {
+        this.clearSetupTimer();
         this.isSetupComplete = true;
+        this.reconnectAttempts = 0;
+        if (process.env.GEMATRON_STREAM_SCREEN === 'true') this.startScreenStream();
         this.setStatus('listening');
         this.emit('connected', { resumed: Boolean(this.resumeHandle) });
         this.emitTelemetry();
@@ -1851,7 +1907,12 @@ export class GeminiLiveService extends EventEmitter {
       // 3. Session lifecycle: resumption handles and graceful go-away
       if (msg.sessionResumptionUpdate) {
         const update = msg.sessionResumptionUpdate;
-        if (typeof update.newHandle === 'string' && update.newHandle) {
+        if (update.resumable === false) this.resumeHandle = null;
+        if (
+          update.resumable !== false &&
+          typeof update.newHandle === 'string' &&
+          update.newHandle
+        ) {
           this.resumeHandle = update.newHandle;
           this.emit('session-resumption-update', {
             handle: update.newHandle,
@@ -1864,10 +1925,13 @@ export class GeminiLiveService extends EventEmitter {
         this.emit('session-go-away', {
           timeLeft: msg.goAway.timeLeft ?? null,
         });
-        // The server is about to close the connection; reconnect immediately
-        // using the resumption handle instead of waiting for the close event.
-        this.clearReconnectTimer();
-        if (!this.manualDisconnect) this.scheduleReconnect();
+        this.serverGoingAway = true;
+      }
+
+      if (msg.toolCallCancellation?.ids) {
+        for (const id of msg.toolCallCancellation.ids) {
+          if (this.pendingToolIds.has(id)) this.cancelledToolIds.add(id);
+        }
       }
 
       // 4. Tool Calls
@@ -1880,14 +1944,42 @@ export class GeminiLiveService extends EventEmitter {
     }
   }
 
-  private async handleToolCalls(
+  private handleToolCalls(
     calls: Array<{ id: string; name: string; args: Record<string, any> }>,
   ): Promise<void> {
+    const generation = this.executionGeneration;
+    const socket = this.socket;
+    calls.forEach((call) => this.pendingToolIds.add(call.id));
+    const run = this.toolQueue.then(async () => {
+      await this.stoppingOperations;
+      await this.executeToolCalls(calls, generation, socket);
+    });
+    this.toolQueue = run.catch(() => undefined);
+    return run.finally(() => {
+      if (generation !== this.executionGeneration) return;
+      calls.forEach((call) => {
+        this.pendingToolIds.delete(call.id);
+        this.cancelledToolIds.delete(call.id);
+      });
+    });
+  }
+
+  private async executeToolCalls(
+    calls: Array<{ id: string; name: string; args: Record<string, any> }>,
+    generation: number,
+    socket: WebSocket | null,
+  ): Promise<void> {
+    const isActive = (id: string) =>
+      generation === this.executionGeneration &&
+      socket === this.socket &&
+      !this.cancelledToolIds.has(id);
+    if (generation !== this.executionGeneration || socket !== this.socket) return;
     this.currentAssistantTurnId = null;
     this.currentUserTurnId = null;
     const responses: Array<{ id: string; name: string; response: Record<string, any> }> = [];
 
     for (const call of calls) {
+      if (!isActive(call.id)) continue;
       this.auditor.logAudit('tool:started', 'operator', { tool: call.name.slice(0, 128) });
       this.emit('conversation-message', {
         id: `tool_${Date.now()}`,
@@ -1901,6 +1993,12 @@ export class GeminiLiveService extends EventEmitter {
 
       try {
         const result = await this.executionGuard.execute(call.name, call.args, async () => {
+          if (!isActive(call.id)) throw new Error('Tool call cancelled before execution.');
+          if (autonomousAgent.isSessionRunning()) {
+            throw new Error(
+              'An autonomous task owns the computer. Stop it before issuing another action.',
+            );
+          }
           let result: Record<string, any>;
 
           switch (call.name) {
@@ -2283,7 +2381,7 @@ export class GeminiLiveService extends EventEmitter {
                 this.rememberFrame(shot);
               }
 
-              if (call.args.feed_to_vision !== false) {
+              if (isActive(call.id) && call.args.feed_to_vision !== false) {
                 this.sendImageFrame(shot.data);
               }
 
@@ -2396,7 +2494,7 @@ export class GeminiLiveService extends EventEmitter {
               // see them; the tool response itself carries only metadata.
               for (const frame of analysis.frames.slice(0, 3)) {
                 const data = frame.data ?? (await readFileBase64(frame.path));
-                if (data) this.sendImageFrame(data);
+                if (data && isActive(call.id)) this.sendImageFrame(data);
               }
               break;
             }
@@ -2713,7 +2811,7 @@ export class GeminiLiveService extends EventEmitter {
 
             case 'capture_viewport': {
               const shot = await this.cdpClient.captureScreenshot();
-              this.sendImageFrame(shot.data);
+              if (isActive(call.id)) this.sendImageFrame(shot.data);
               result = {
                 success: true,
                 message:
@@ -3045,9 +3143,15 @@ export class GeminiLiveService extends EventEmitter {
           return result;
         });
 
+        if (!isActive(call.id)) continue;
+        const succeeded =
+          result.success !== false &&
+          result.ok !== false &&
+          result.verified !== false &&
+          !result.error;
         this.auditor.logAudit('tool:completed', 'operator', {
           tool: call.name.slice(0, 128),
-          success: result.success !== false && !result.error,
+          success: succeeded,
           deduplicated: result.deduplicated === true,
         });
         responses.push({
@@ -3060,11 +3164,13 @@ export class GeminiLiveService extends EventEmitter {
           id: `tool_${Date.now()}`,
           kind: 'tool',
           name: call.name,
-          title: `Completed: ${call.name}`,
-          status: 'ok',
+          title: `${succeeded ? 'Completed' : 'Failed'}: ${call.name}`,
+          detail: succeeded ? undefined : String(result.error || 'The action was not verified.'),
+          status: succeeded ? 'ok' : 'error',
           at: Date.now(),
         } as ConversationMessage);
       } catch (toolErr) {
+        if (!isActive(call.id)) continue;
         this.auditor.logAudit('tool:failed', 'operator', { tool: call.name.slice(0, 128) });
         responses.push({
           id: call.id,
@@ -3084,11 +3190,12 @@ export class GeminiLiveService extends EventEmitter {
       }
     }
 
-    if (this.socket && this.socket.readyState === WebSocket.OPEN && responses.length > 0) {
-      this.socket.send(
+    const activeResponses = responses.filter((response) => isActive(response.id));
+    if (socket && socket.readyState === WebSocket.OPEN && activeResponses.length > 0) {
+      socket.send(
         JSON.stringify({
           toolResponse: {
-            functionResponses: responses,
+            functionResponses: activeResponses,
           },
         }),
       );
@@ -3176,7 +3283,10 @@ export class GeminiLiveService extends EventEmitter {
       bridgeUrl: 'http://127.0.0.1:47821',
       soundEffectsEnabled: true,
       soundVolume: 0.5,
-      minimizeToTray: true,
+      // Closing the HUD window must actually exit. Background operation is
+      // opt-in (minimize-to-tray), never the default: a hidden-but-running
+      // Electron process with no visible way to quit looked like a ghost.
+      minimizeToTray: false,
       wakeWordEnabled: this.memoryStore.getPreferences().wakeWordEnabled === true,
     };
   }

@@ -1,6 +1,10 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { ConversationMessage, HUDSettings, LiveHUDStatus } from '../main/types.js';
 import { EmberOrb, type EmberOrbState } from './EmberOrb.js';
+import { HudIcon } from './HudIcon.js';
+import { useWindowDrag } from './hooks/useWindowDrag.js';
+import { useClickThrough } from './hooks/useClickThrough.js';
+import { installGrain } from './grain.js';
 
 export interface EmberHUDProps {
   status: LiveHUDStatus;
@@ -8,6 +12,9 @@ export interface EmberHUDProps {
   settings: HUDSettings;
   soundMuted: boolean;
   soundVolume: number;
+  isPinned: boolean;
+  onTogglePin: () => void;
+  notice?: string | null;
   onMinimize: () => void;
   onClose: () => void;
   onStartSession: () => void;
@@ -86,6 +93,9 @@ export function EmberHUD({
   settings,
   soundMuted,
   soundVolume,
+  isPinned,
+  onTogglePin,
+  notice,
   onMinimize,
   onClose,
   onStartSession,
@@ -99,6 +109,7 @@ export function EmberHUD({
   onOpenConsole,
 }: EmberHUDProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
+  const sheetRef = useRef<HTMLDialogElement>(null);
   const [statusVisible, setStatusVisible] = useState(true);
   const [reveal, setReveal] = useState(false);
 
@@ -111,21 +122,30 @@ export function EmberHUD({
   const statusLabel = statusTextFor(status);
   const modelLabel = formatModelLabel(settings.modelId);
 
-  const messages = conversation.filter((message) => message.text?.trim());
-  const lastUser = [...messages].reverse().find((message) => message.kind === 'user')?.text ?? '';
-  const lastAssistant =
-    [...messages].reverse().find((message) => message.kind === 'assistant')?.text ?? '';
-
-  let transcript = '';
-  if (status === 'speaking' || status === 'thinking') {
-    transcript = lastAssistant || lastUser;
-  } else if (status === 'listening') {
-    transcript = lastUser;
-  }
-
-  const allWords = transcript.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
-  const clipped = allWords.slice(0, 18);
-  const display = clipped.join(' ') + (allWords.length > clipped.length ? '…' : '');
+  const { clipped, display } = useMemo(() => {
+    let lastUser = '';
+    let lastAssistant = '';
+    for (let i = conversation.length - 1; i >= 0 && !(lastUser && lastAssistant); i--) {
+      const m = conversation[i];
+      if (!m) continue;
+      const t = m.text?.trim();
+      if (!t) continue;
+      if (m.kind === 'user' && !lastUser) lastUser = t;
+      else if (m.kind === 'assistant' && !lastAssistant) lastAssistant = t;
+    }
+    const transcript =
+      status === 'speaking' || status === 'thinking'
+        ? lastAssistant || lastUser
+        : status === 'listening'
+          ? lastUser
+          : '';
+    const words = transcript.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+    const clipped = words.slice(0, 18);
+    return {
+      clipped,
+      display: clipped.join(' ') + (words.length > clipped.length ? '…' : ''),
+    };
+  }, [conversation, status]);
 
   useEffect(() => {
     setStatusVisible(true);
@@ -145,15 +165,14 @@ export function EmberHUD({
 
   useEffect(() => {
     if (!sheetOpen) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setSheetOpen(false);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    const dialog = sheetRef.current;
+    dialog?.showModal();
+    return () => dialog?.close();
   }, [sheetOpen]);
 
   const hint =
-    status === 'error'
+    notice ??
+    (status === 'error'
       ? 'signal lost · click the orb to retry'
       : status === 'connecting'
         ? 'connecting…'
@@ -163,7 +182,7 @@ export function EmberHUD({
             ? 'speaking · click the orb to stop'
             : status === 'thinking'
               ? 'thinking…'
-              : 'click the orb to speak';
+              : 'click the orb to speak');
 
   const handleOrb = () => {
     if (isLive) onStopSession();
@@ -180,10 +199,64 @@ export function EmberHUD({
     }
   };
 
+  useClickThrough();
+
+  const grainRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (grainRef.current) installGrain(grainRef.current);
+  }, []);
+
+  const surfaceDrag = useWindowDrag();
+  const orbDrag = useWindowDrag({ onClick: handleOrb, ignoreSelector: '' });
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+      if (e.key === ',') {
+        e.preventDefault();
+        setSheetOpen(true);
+      } else if (e.key === '2') {
+        e.preventDefault();
+        onCollapseToBar();
+      } else if (e.key === '3') {
+        e.preventDefault();
+        onCollapseToOrb();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCollapseToBar, onCollapseToOrb]);
+
+  const onSheetClick = (e: React.MouseEvent<HTMLDialogElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const inside =
+      e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    if (!inside) setSheetOpen(false);
+  };
+
   return (
     <div className="ember-root">
-      <div className="window" data-state={orbState}>
-
+      <div className="window" data-state={orbState} {...surfaceDrag}>
+        <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {statusLabel}
+        </div>
+        <p className="sr-only" aria-live="polite" aria-atomic="true">
+          {display}
+        </p>
+        <div className="em-util">
+          <button
+            type="button"
+            className="uc"
+            title="Settings"
+            aria-label="Open settings"
+            aria-expanded={sheetOpen}
+            aria-haspopup="dialog"
+            aria-controls="ember-settings"
+            onClick={() => setSheetOpen(true)}
+          >
+            <HudIcon name="sliders" size={17} />
+          </button>
+        </div>
         <div className="win-controls">
           <button type="button" className="wc" aria-label="Minimize" onClick={onMinimize}>
             –
@@ -193,25 +266,21 @@ export function EmberHUD({
           </button>
         </div>
 
-        <div className={`status ${statusVisible ? 'vis' : ''}`}>{statusLabel}</div>
-
-        <div
-          className="orb-wrap"
-          role="button"
-          tabIndex={0}
-          aria-label={isLive ? 'Stop session' : 'Talk to Gematron'}
-          onClick={handleOrb}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              handleOrb();
-            }
-          }}
-        >
-          <EmberOrb state={orbState} />
+        <div className={`status ${statusVisible ? 'vis' : ''}`} aria-hidden="true">
+          {statusLabel}
         </div>
 
-        <div className={`transcript ${reveal ? 'show' : ''}`} aria-live="polite">
+        <button
+          type="button"
+          className="orb-wrap"
+          role="button"
+          aria-label={isLive ? 'Stop session' : 'Talk to Gematron'}
+          {...orbDrag}
+        >
+          <EmberOrb state={orbState} />
+        </button>
+
+        <div className={`transcript ${reveal ? 'show' : ''}`} aria-hidden="true">
           {clipped.map((word, index) => (
             <Fragment key={`${index}-${word}`}>
               <span style={{ transitionDelay: `${index * 70}ms` }}>{word}</span>
@@ -238,11 +307,21 @@ export function EmberHUD({
         </div>
 
         {sheetOpen && (
-          <aside className="em-sheet" aria-label="Settings">
+          <dialog
+            ref={sheetRef}
+            id="ember-settings"
+            className="em-sheet"
+            aria-labelledby="ember-settings-title"
+            onClick={onSheetClick}
+            onCancel={() => setSheetOpen(false)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') event.stopPropagation();
+            }}
+          >
             <div className="em-sheet-head">
               <div>
-                <h2>System &amp; controls</h2>
-                <p>Everything Gematron can see, hear and touch</p>
+                <h2 id="ember-settings-title">Settings</h2>
+                <p>Your window, voice &amp; controls</p>
               </div>
               <button
                 type="button"
@@ -253,6 +332,50 @@ export function EmberHUD({
               >
                 ×
               </button>
+            </div>
+
+            <div className="em-section">
+              <div className="em-section-label">Window size</div>
+              <div className="em-layouts" role="group" aria-label="Window size">
+                <button
+                  type="button"
+                  className="on"
+                  aria-pressed="true"
+                  onClick={() => setSheetOpen(false)}
+                >
+                  <HudIcon name="expand" size={22} />
+                  <span>Full window</span>
+                  <small>400 × 600</small>
+                </button>
+                <button type="button" aria-pressed="false" onClick={onCollapseToBar}>
+                  <HudIcon name="bari" size={22} />
+                  <span>Compact bar</span>
+                  <small>420 × 62</small>
+                </button>
+                <button type="button" aria-pressed="false" onClick={onCollapseToOrb}>
+                  <HudIcon name="orbi" size={22} />
+                  <span>Mini orb</span>
+                  <small>74 × 74</small>
+                </button>
+              </div>
+              <p className="em-layout-hint">
+                Click the mini orb to expand to the bar, then its orb to return here.
+              </p>
+              <div className="em-card">
+                <div className="em-row">
+                  <div>
+                    Always on top
+                    <small>Keep Gematron above other windows</small>
+                  </div>
+                  <button
+                    type="button"
+                    className={`em-switch ${isPinned ? 'on' : ''}`}
+                    aria-label="Toggle always on top"
+                    aria-pressed={isPinned}
+                    onClick={onTogglePin}
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="em-section">
@@ -268,20 +391,6 @@ export function EmberHUD({
                     {status === 'error' ? 'Offline' : isLive ? 'Online' : 'Standby'}
                   </span>
                 </div>
-                <div className="em-row">
-                  <span>Display</span>
-                  <div className="em-seg" role="group" aria-label="Display mode">
-                    <button type="button" className="on" aria-pressed="true">
-                      Full
-                    </button>
-                    <button type="button" onClick={onCollapseToBar} aria-pressed="false">
-                      Bar
-                    </button>
-                    <button type="button" onClick={onCollapseToOrb} aria-pressed="false">
-                      Orb
-                    </button>
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -290,8 +399,8 @@ export function EmberHUD({
               <div className="em-card">
                 <div className="em-row">
                   <div>
-                    Acoustic sound
-                    <small>Gematron speaks replies aloud</small>
+                    Spoken replies &amp; sounds
+                    <small>Mute output without stopping the microphone</small>
                   </div>
                   <button
                     type="button"
@@ -329,10 +438,6 @@ export function EmberHUD({
                     onClick={() => onWakeWordChange(!settings.wakeWordEnabled)}
                   />
                 </div>
-                <div className="em-row">
-                  <span>Push-to-talk</span>
-                  <kbd>Ctrl + Space</kbd>
-                </div>
               </div>
             </div>
 
@@ -341,8 +446,8 @@ export function EmberHUD({
               <div className="em-card">
                 <div className="em-row">
                   <div>
-                    Smart approve
-                    <small>Safe actions run; risky ones ask first</small>
+                    Automatic approval
+                    <small>Skip workflow approval prompts. Use with care.</small>
                   </div>
                   <button
                     type="button"
@@ -358,11 +463,11 @@ export function EmberHUD({
             <button type="button" className="em-sheet-btn" onClick={onOpenConsole}>
               Open advanced console
             </button>
-            <div className="em-sheet-foot">Ctrl+Space talk · Ctrl+K commands · Esc stop</div>
-          </aside>
+            <div className="em-sheet-foot">Esc closes settings · Ctrl+Alt+K emergency stop</div>
+          </dialog>
         )}
+        <div className="grain" ref={grainRef} aria-hidden="true" />
       </div>
-      <div className="grain" aria-hidden="true" />
     </div>
   );
 }

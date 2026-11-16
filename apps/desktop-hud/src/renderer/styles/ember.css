@@ -113,6 +113,8 @@
 
 .ember-root .em-util {
   left: 14px;
+  opacity: 1;
+  transform: none;
 }
 
 .ember-root .window:hover .win-controls,
@@ -300,6 +302,13 @@
 .ember-root .em-sheet {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  box-sizing: border-box;
   z-index: 50;
   border-radius: 28px;
   padding: 18px 22px 20px;
@@ -513,20 +522,21 @@
   cursor: pointer;
 }
 
-.ember-root .em-seg {
-  display: flex;
-  gap: 2px;
-  padding: 3px;
-  border-radius: 10px;
-  border: 1px solid var(--em-line);
-  background: rgba(255, 255, 255, 0.03);
+.ember-root .em-layouts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.ember-root .em-seg button {
-  border: 0;
-  border-radius: 7px;
-  padding: 5px 9px;
-  background: transparent;
+.ember-root .em-layouts button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 4px;
+  border: 1px solid var(--em-line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
   color: var(--em-dim);
   font-family: inherit;
   font-size: 11px;
@@ -534,16 +544,31 @@
   cursor: pointer;
   transition:
     background 0.2s,
-    color 0.2s;
+    color 0.2s,
+    border-color 0.2s;
 }
 
-.ember-root .em-seg button:hover {
-  color: var(--em-text);
+.ember-root .em-layouts button small {
+  font-size: 10px;
+  opacity: 0.7;
 }
 
-.ember-root .em-seg button.on {
-  background: rgba(245, 224, 196, 0.1);
+.ember-root .em-layouts button:hover,
+.ember-root .em-layouts button.on {
+  border-color: rgba(232, 185, 138, 0.45);
+  background: rgba(201, 111, 74, 0.12);
   color: var(--em-champagne);
+}
+
+.ember-root .em-sheet .em-layout-hint {
+  margin: 10px 2px;
+  line-height: 1.5;
+}
+
+.ember-root .uc:focus-visible,
+.ember-root .em-sheet :is(button, input):focus-visible {
+  outline: 2px solid var(--em-champagne);
+  outline-offset: 2px;
 }
 
 .ember-root .em-sheet kbd {
@@ -679,6 +704,253 @@
   background: var(--em-amber);
   border-color: #141110;
   box-shadow: 0 0 8px rgba(232, 185, 138, 0.8);
+
+/* ==========================================================================
+   CLASSIC HUD — original/original floating window styles
+   Scoped to .classic-root so they never leak into EmberHUD.
+   ========================================================================== */
+
+.classic-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #0a0a0a;
+  font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  color: #e0e0e0;
+  user-select: none;
+}
+
+.classic-root * { box-sizing: border-box; }
+
+.classic-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #121212;
+  border-bottom: 1px solid #222;
+  -webkit-app-region: drag;
+}
+
+.classic-brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.classic-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #00ff41;
+  box-shadow: 0 0 6px #00ff41;
+  animation: classic-blink 1.2s ease-in-out infinite;
+}
+
+@keyframes classic-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.classic-brand b {
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #e0e0e0;
+}
+
+.classic-divider {
+  font-size: 11px;
+  color: #444;
+  margin: 0 4px;
+}
+
+.classic-model {
+  font-size: 11px;
+  color: #888;
+}
+
+.classic-status {
+  font-size: 11px;
+  color: #00ff41;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.classic-spacer { flex: 1; }
+
+.classic-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #1a1a1a;
+  color: #e0e0e0;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  transition: all 0.2s;
+  -webkit-app-region: no-drag;
+}
+
+.classic-btn:hover { background: #2a2a2a; border-color: #444; }
+.classic-btn.on { border-color: #00ff41; color: #00ff41; }
+.classic-btn.close:hover { border-color: #ff4444; color: #ff4444; }
+.classic-btn.classic-kill {
+  padding: 0 10px;
+  border-color: #ff4444;
+  color: #ff4444;
+  font-weight: 700;
+  font-family: inherit;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  width: auto;
+}
+.classic-btn.classic-kill:hover { background: rgba(255, 68, 68, 0.15); }
+
+.classic-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 12px;
+}
+
+.classic-chat {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: #333 #0a0a0a;
+}
+
+.classic-chat::-webkit-scrollbar { width: 6px; }
+.classic-chat::-webkit-scrollbar-track { background: #0a0a0a; }
+.classic-chat::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+.classic-empty {
+  font-size: 12px;
+  color: #555;
+  font-style: italic;
+  margin-top: 20px;
+  text-align: center;
+}
+
+.classic-msg {
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 4px 6px;
+  border-radius: 4px;
+  max-width: 90%;
+  animation: classic-fadein 0.3s ease;
+}
+
+@keyframes classic-fadein {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.classic-msg.user { align-self: flex-end; background: #1a1a1a; border: 1px solid #333; color: #fff; }
+.classic-msg.assistant { align-self: flex-start; background: #121212; border: 1px solid #222; color: #e0e0e0; }
+.classic-msg.system { align-self: center; font-size: 10px; color: #ffaa00; font-weight: 700; text-transform: uppercase; }
+.classic-msg.live { align-self: flex-start; color: #00ff41; font-weight: 600; }
+
+.classic-msg-kind {
+  font-size: 10px;
+  font-weight: 800;
+  margin-right: 6px;
+}
+.classic-msg.user .classic-msg-kind { color: #00ff41; }
+.classic-msg.assistant .classic-msg-kind { color: #0088ff; }
+
+.classic-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 0;
+  border-top: 1px solid #222;
+  -webkit-app-region: no-drag;
+}
+
+.classic-input {
+  flex: 1;
+  background: #0a0a0a;
+  border: 1px solid #333;
+  color: #e0e0e0;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+  -webkit-app-region: no-drag;
+}
+
+.classic-input:focus { border-color: #00ff41; }
+
+.classic-send {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #1a1a1a;
+  color: #e0e0e0;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  -webkit-app-region: no-drag;
+}
+.classic-send:hover { border-color: #00ff41; color: #00ff41; }
+
+.classic-mic {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid #333;
+  background: #1a1a1a;
+  color: #e0e0e0;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  -webkit-app-region: no-drag;
+}
+.classic-mic:hover { border-color: #00ff41; color: #00ff41; }
+.classic-mic.on { border-color: #00ff41; color: #00ff41; background: rgba(0, 255, 65, 0.1); }
+
+.classic-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: #121212;
+  border-top: 1px solid #222;
+  font-size: 11px;
+  color: #666;
+  -webkit-app-region: drag;
+}
+
+.classic-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 2px 8px;
+  color: #888;
+  -webkit-app-region: no-drag;
+}
+
+.classic-foot { -webkit-app-region: drag; }
+.classic-foot * { -webkit-app-region: no-drag; }
 }
 
 .ember-ambient[data-mode="bar"] .bar {

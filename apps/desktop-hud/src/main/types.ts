@@ -58,6 +58,7 @@ export interface HUDSettings {
   soundVolume?: number;
   minimizeToTray?: boolean;
   wakeWordEnabled?: boolean;
+  classicMode?: boolean;
 }
 
 export interface WorkflowAuditScreenshot {
