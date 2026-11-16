@@ -96,11 +96,7 @@ export class CDPClient extends EventEmitter {
     this.backoffDelay = 500;
     this.trackingGeneration++;
     this.rerunRequested = false;
-    void this.pollTabsGuarded(this.trackingGeneration);
-    this.pollInterval = setInterval(() => {
-      if (this.isSuspended) return;
-      void this.pollTabsGuarded(this.trackingGeneration);
-    }, intervalMs);
+    void this.pollTabsGuarded(this.trackingGeneration, intervalMs);
   }
 
   public stopTracking(): void {
@@ -119,18 +115,18 @@ export class CDPClient extends EventEmitter {
     this.isSuspended = false;
     this.backoffDelay = 500;
     if (this.pollInterval) {
-      void this.pollTabsGuarded(this.trackingGeneration);
+      void this.pollTabsGuarded(this.trackingGeneration, 0);
     }
   }
 
   public clearPollTimer(): void {
     if (this.pollInterval) {
-      clearInterval(this.pollInterval);
+      clearTimeout(this.pollInterval);
       this.pollInterval = null;
     }
   }
 
-  private async pollTabsGuarded(generation: number): Promise<void> {
+  private async pollTabsGuarded(generation: number, intervalMs: number): Promise<void> {
     if (generation !== this.trackingGeneration) return;
     if (this.isSuspended) return;
     if (this.pollInFlight) {
@@ -147,7 +143,13 @@ export class CDPClient extends EventEmitter {
       this.pollInFlight = false;
       if (this.rerunRequested && this.pollInterval && !this.isSuspended) {
         this.rerunRequested = false;
-        void this.pollTabsGuarded(this.trackingGeneration);
+        void this.pollTabsGuarded(this.trackingGeneration, 0);
+        return;
+      }
+      if (!this.isSuspended && this.pollInterval) {
+        this.pollInterval = setTimeout(() => {
+          void this.pollTabsGuarded(this.trackingGeneration, intervalMs);
+        }, intervalMs);
       }
     }
   }
