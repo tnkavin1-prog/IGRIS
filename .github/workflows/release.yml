@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm test
+
+      - name: Production build (desktop)
+        run: npm run build:prod --workspace apps/desktop-hud
+
+      - name: Package Windows installer
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: npm run dist:desktop --workspace apps/desktop-hud
+
+      - name: Verify Authenticode signature
+        shell: pwsh
+        run: |
+          Get-AuthenticodeSignature .\release\desktop\win-unpacked\Gemetron.exe | Select-Object Status, SignerCertificate
+          Get-AuthenticodeSignature .\release\desktop\Gemetron-Setup-*.exe | Select-Object Status, SignerCertificate
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release/desktop/win-unpacked/**
+            release/desktop/Gemetron-Setup-*.exe
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

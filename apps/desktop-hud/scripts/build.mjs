@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const root = join(dirname(__filename), '..');
 const dist = join(root, 'dist');
+const isProd = process.env.NODE_ENV === 'production';
 
 async function main() {
   console.log('Building Standalone Native Desktop HUD (Electron)...');
@@ -14,53 +15,59 @@ async function main() {
   rmSync(dist, { recursive: true, force: true });
   mkdirSync(dist, { recursive: true });
 
-  // 1. Bundle Electron Main Process
-  await build({
-    entryPoints: [join(root, 'src', 'main', 'index.ts')],
-    outfile: join(dist, 'main.cjs'),
+  const commonOptions = {
     bundle: true,
     platform: 'node',
     target: 'node20',
     format: 'cjs',
     external: ['electron', 'ws', 'electron-updater'],
     logLevel: 'warning',
+    sourcemap: isProd ? 'external' : false,
+    minify: isProd,
+  };
+
+  // 1. Bundle Electron Main Process
+  await build({
+    ...commonOptions,
+    entryPoints: [join(root, 'src', 'main', 'index.ts')],
+    outfile: join(dist, 'main.cjs'),
   });
 
   // 2. Bundle Preload Script
   await build({
+    ...commonOptions,
     entryPoints: [join(root, 'src', 'main', 'preload.ts')],
     outfile: join(dist, 'preload.cjs'),
-    bundle: true,
-    platform: 'node',
-    target: 'node20',
-    format: 'cjs',
     external: ['electron'],
-    logLevel: 'warning',
   });
 
   // 3. Bundle React Renderer
   await build({
-    entryPoints: [join(root, 'src', 'renderer', 'main.tsx')],
-    outfile: join(dist, 'renderer.js'),
     bundle: true,
     platform: 'browser',
     target: 'chrome120',
     format: 'esm',
     logLevel: 'warning',
+    sourcemap: isProd ? 'external' : false,
+    minify: isProd,
     define: {
       'process.env.NODE_ENV': '"production"',
     },
+    entryPoints: [join(root, 'src', 'renderer', 'main.tsx')],
+    outfile: join(dist, 'renderer.js'),
   });
 
   // 4. Bundle mic capture AudioWorklet (separate file: CSP forbids blob: worklets)
   await build({
-    entryPoints: [join(root, 'src', 'renderer', 'capture-worklet.ts')],
-    outfile: join(dist, 'capture-worklet.js'),
     bundle: true,
     platform: 'browser',
     target: 'chrome120',
     format: 'iife',
     logLevel: 'warning',
+    sourcemap: isProd ? 'external' : false,
+    minify: isProd,
+    entryPoints: [join(root, 'src', 'renderer', 'capture-worklet.ts')],
+    outfile: join(dist, 'capture-worklet.js'),
   });
 
   // 5. Copy HTML & CSS assets

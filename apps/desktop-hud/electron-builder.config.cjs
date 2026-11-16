@@ -20,6 +20,9 @@ module.exports = {
     target: [{ target: 'nsis', arch: ['x64'] }],
     icon: '../../assets/icons/jarvis.ico',
     artifactName: 'Gemetron-Setup-${version}-${arch}.${ext}',
+    // Authenticode signing is controlled by environment variables.
+    // electron-builder reads CSC_LINK and CSC_KEY_PASSWORD automatically.
+    // Never hard-code certificate passwords in this file.
   },
   nsis: {
     oneClick: false,
