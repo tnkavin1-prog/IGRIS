@@ -1,170 +1,331 @@
-import { BrowserWindow, screen } from 'electron';
-import { appendFileSync, mkdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
-import { join } from 'node:path';
-import { LOGS_DIR } from './runtime-paths.js';
-
-const RENDERER_LOG = join(LOGS_DIR, 'renderer.log');
+import {
+  BrowserWindow,
+  app,
+  ipcMain,
+  powerMonitor,
+  screen,
+  systemPreferences,
+  type IpcMainEvent,
+} from 'electron';
+import { ICON_PATH } from './runtime-paths.js';
+import { appendRendererLog } from './renderer-log.js';
+import { HUD_IPC, type GestureRequest, type ModeChangedPayload } from './hud-window-ipc.js';
 import type { HudDisplayMode } from './types.js';
 import {
-  DISPLAY_PRESETS,
+  MODE_TRANSITION_MS,
+  SHADOW_INSET,
+  anchorFor,
   clampRectIntoArea,
+  consoleWindowLimits,
+  inflateRect,
+  intersectRect,
   isHudDisplayMode,
-  isRectFullyVisible,
-  resizePreservingRightEdge,
+  recoverRect,
+  resizeAnchored,
+  resizeRectByEdge,
+  resolveInitialDisplayMode,
+  roundRect,
+  sameRect,
+  snapRectToArea,
+  surfaceSizeOf,
+  windowSizeFor,
+  type Rect,
+  type ResizeEdge,
 } from './display-mode.js';
+import {
+  flushWindowState,
+  loadWindowState,
+  saveWindowStateSoon,
+  type WindowState,
+} from './window-state.js';
+
+/** Remember where the user parked each mode (drag-placed modes only). */
+const REMEMBER_PER_MODE = true;
+const GESTURE_TICK_MS = 16;
+const GESTURE_MAX_MS = 120_000;
+const SNAP_THRESHOLD = 18;
+const SNAP_MARGIN = 12;
+const GROW_DELAY_MS = 16; // lets the renderer pin the old surface size first
 
 let mainWindow: BrowserWindow | null = null;
 let isPinnedAlwaysOnTop = true;
+let windowDismissed = false;
 let currentDisplayMode: HudDisplayMode = 'full';
-let lastFullSize = { width: 540, height: 700 };
+let state: WindowState = loadWindowStateSafe();
+const userPlacedModes = new Set<HudDisplayMode>();
+let shrinkTimer: NodeJS.Timeout | undefined;
+let stopDisplayWatchers: (() => void) | null = null;
+let ipcRegistered = false;
+
+interface ActiveGesture {
+  req: GestureRequest;
+  startCursor: { x: number; y: number };
+  startBounds: Rect;
+  last: Rect;
+  startedAt: number;
+  timer: NodeJS.Timeout;
+}
+let gesture: ActiveGesture | null = null;
+
+/* ------------------------------------------------------------------ */
+/* helpers                                                             */
+/* ------------------------------------------------------------------ */
+
+function loadWindowStateSafe(): WindowState {
+  try {
+    return loadWindowState();
+  } catch {
+    return { version: 1, mode: 'full', pinned: true, positions: {} };
+  }
+}
+
+const allWorkAreas = (): Rect[] => screen.getAllDisplays().map((d) => d.workArea);
+
+function alive(win: BrowserWindow | null): win is BrowserWindow {
+  return !!win && !win.isDestroyed();
+}
+
+function send(channel: string, payload: unknown): void {
+  const win = mainWindow;
+  if (alive(win) && !win.webContents.isDestroyed()) win.webContents.send(channel, payload);
+}
+
+function persist(): void {
+  state = { ...state, mode: currentDisplayMode, pinned: isPinnedAlwaysOnTop };
+  saveWindowStateSoon(state);
+}
+
+function richAnimations(): boolean {
+  try {
+    return systemPreferences.getAnimationSettings().shouldRenderRichAnimation;
+  } catch {
+    return true;
+  }
+}
+
+/** setBounds + mixed-DPI drift fix (Electron can land 1px off at fractional scales). */
+function applyBounds(win: BrowserWindow, rect: Rect): void {
+  const r = roundRect(rect);
+  win.setBounds(r, false);
+  const got = win.getBounds();
+  if (got.width !== r.width || got.height !== r.height) win.setBounds(r, false);
+}
+
+function fadeTo(win: BrowserWindow, target: number, ms: number, done?: () => void): void {
+  const start = win.getOpacity();
+  const t0 = Date.now();
+  const step = () => {
+    if (win.isDestroyed()) return;
+    const p = Math.min(1, (Date.now() - t0) / ms);
+    const eased = 1 - Math.pow(1 - p, 3);
+    win.setOpacity(start + (target - start) * eased);
+    if (p < 1) setTimeout(step, 16);
+    else done?.();
+  };
+  step();
+}
+
+/** Always-on-top that survives focus changes / shell restarts / resume. */
+function assertTopmost(): void {
+  const win = mainWindow;
+  if (!alive(win) || !isPinnedAlwaysOnTop) return;
+  win.setAlwaysOnTop(true, 'screen-saver'); // highest non-exclusive z-band on Windows
+  win.moveTop(); // z-order only, does not steal focus
+}
+
+/* ------------------------------------------------------------------ */
+/* creation                                                            */
+/* ------------------------------------------------------------------ */
+
+function initialBounds(mode: HudDisplayMode): Rect {
+  const size = windowSizeFor(mode, state.consoleSize);
+  const primary = screen.getPrimaryDisplay().workArea; // NOTE: honour x/y origin
+  const fallback: Rect = {
+    x: primary.x + primary.width - size.width - 40 + SHADOW_INSET,
+    y: primary.y + Math.max(40, Math.floor((primary.height - size.height) / 2)),
+    ...size,
+  };
+  const saved = state.positions[mode];
+  const rect = saved ? { ...saved, ...size } : fallback;
+  return recoverRect(rect, allWorkAreas(), 24);
+}
 
 export function createMainWindow(preloadPath: string, htmlPath: string): BrowserWindow {
-  // Reset launch state for every (re)creation so a stale collapsed mode or
-  // stale console size from a previous session cannot leak into this one.
-  currentDisplayMode = 'full';
-  lastFullSize = { width: 540, height: 700 };
-
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
+  // Singleton guard FIRST: a second summon must not reset live mode state.
+  if (alive(mainWindow)) {
+    presentWindow();
     return mainWindow;
   }
 
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+  state = loadWindowStateSafe();
+  isPinnedAlwaysOnTop = state.pinned;
+  windowDismissed = false;
+  currentDisplayMode = resolveInitialDisplayMode(state.mode);
+  userPlacedModes.clear();
+  for (const k of Object.keys(state.positions)) {
+    if (isHudDisplayMode(k)) userPlacedModes.add(k);
+  }
 
-  const defaultWidth = 400;
-  const defaultHeight = 600;
-  const initialX = Math.max(20, screenWidth - defaultWidth - 40);
-  const initialY = Math.max(40, Math.floor((screenHeight - defaultHeight) / 2));
+  const b = initialBounds(currentDisplayMode);
 
-  mainWindow = new BrowserWindow({
-    width: defaultWidth,
-    height: defaultHeight,
-    minWidth: 74,
-    minHeight: 74,
-    x: initialX,
-    y: initialY,
+  const win = new BrowserWindow({
+    ...b,
+    minWidth: 1, // geometry is owned by display-mode.ts; never juggle min sizes
+    minHeight: 1,
+    show: true,
     frame: false,
     transparent: true,
-    alwaysOnTop: true,
     backgroundColor: '#00000000',
-    hasShadow: true,
-    resizable: false,
+    hasShadow: false, // no-op on transparent Windows windows; shadow is CSS
+    roundedCorners: false, // keep DWM from clipping the transparent gutter
+    alwaysOnTop: isPinnedAlwaysOnTop,
+    resizable: false, // resize is driven by our own handles (see gestures)
+    maximizable: false,
+    fullscreenable: false,
     skipTaskbar: false,
     title: 'Gematron',
+    icon: ICON_PATH,
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: false, // P2: bundle preload and flip to true
       backgroundThrottling: false,
+      spellcheck: false,
     },
   });
+  mainWindow = win;
+  assertTopmost();
 
-  // Ensure window floats above other windows including full screen/maximized Chrome
-  mainWindow.setAlwaysOnTop(true);
+  registerWindowIpc();
+  stopDisplayWatchers = watchDisplays();
+  app.once('before-quit', flushWindowState);
 
-  mainWindow.once('ready-to-show', () => {
-    if (mainWindow) {
-      // Guarantee the window is visible on the primary display even if a
-      // previous session left it off-screen (monitor change, orb collapse).
-      const area = screen.getPrimaryDisplay().workArea;
-      const bounds = mainWindow.getBounds();
-      if (!isRectFullyVisible(bounds, area)) {
-        mainWindow.setBounds(clampRectIntoArea(bounds, area, 40), false);
-      }
-      mainWindow.show();
-      mainWindow.focus();
-      mainWindow.setAlwaysOnTop(true);
-      mainWindow.moveTop();
-    }
+  win.once('ready-to-show', () => {
+    appendRendererLog(`[Window] ready-to-show (dismissed=${windowDismissed})`);
+    if (!windowDismissed) presentWindow();
+  });
+  // If the renderer never reports ready (load failure), still surface the window.
+  setTimeout(() => {
+    appendRendererLog(
+      `[Window] startup fallback (alive=${alive(win)}, dismissed=${windowDismissed}, visible=${alive(win) ? win.isVisible() : false})`,
+    );
+    if (alive(win) && !windowDismissed && !win.isVisible()) presentWindow();
+  }, 3000);
+  // A startup fallback must never undo a close action made during startup.
+  win.on('close', () => {
+    appendRendererLog('[Window] close event');
+    windowDismissed = true;
+  });
+  win.on('show', () => appendRendererLog('[Window] show event'));
+  win.on('hide', () => appendRendererLog('[Window] hide event'));
+
+  win.on('moved', () => {
+    // Native moves (Win+Shift+arrows, accessibility tools). Our own drag uses gestures.
+    if (gesture) return;
+    ensureWindowVisible(24);
+    const nb = win.getBounds();
+    state = { ...state, positions: { ...state.positions, [currentDisplayMode]: { x: nb.x, y: nb.y } } };
+    userPlacedModes.add(currentDisplayMode);
+    persist();
+  });
+  win.on('blur', () => setTimeout(assertTopmost, 150));
+  const emitVisibility = (visible: boolean) => send(HUD_IPC.visibility, { visible });
+  win.on('show', () => emitVisibility(true));
+  win.on('restore', () => emitVisibility(true));
+  win.on('hide', () => emitVisibility(false));
+  win.on('minimize', () => emitVisibility(false));
+
+  // Lock down navigation: a floating assistant never navigates or spawns windows.
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
+
+  win.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+    appendRendererLog(`[Renderer] [lvl ${level}] ${message} (${sourceId}:${line})`);
+  });
+  win.webContents.on('did-fail-load', (_e, code, desc) => {
+    appendRendererLog(`[DesktopHUD] Failed to load HTML: ${code} - ${desc}`);
+    console.error(`[DesktopHUD] Failed to load HTML: ${code} - ${desc}`);
+  });
+  win.webContents.on('render-process-gone', (_e, details) => {
+    appendRendererLog(`[DesktopHUD] Render process gone: ${JSON.stringify(details)}`);
+    console.error('[DesktopHUD] Render process gone:', details);
   });
 
-  mainWindow.webContents.on('console-message', (_, level, message, line, sourceId) => {
-    const lineStr = `[${new Date().toISOString()}] [Renderer] [lvl ${level}] ${message} (${sourceId}:${line})\n`;
-    try {
-      try {
-        const s = statSync(RENDERER_LOG);
-        if (s.size >= 5 * 1024 * 1024) {
-          try {
-            unlinkSync(`${RENDERER_LOG}.1`);
-          } catch {}
-          renameSync(RENDERER_LOG, `${RENDERER_LOG}.1`);
-        }
-      } catch {}
-      mkdirSync(LOGS_DIR, { recursive: true });
-      appendFileSync(RENDERER_LOG, lineStr, 'utf8');
-    } catch {}
-    console.log(`[Renderer Console] [${level}] ${message} (${sourceId}:${line})`);
-  });
-
-  mainWindow.webContents.on('did-fail-load', (_, errorCode, errorDescription) => {
-    const errStr = `[${new Date().toISOString()}] [DesktopHUD] Failed to load HTML: ${errorCode} - ${errorDescription}\n`;
-    try {
-      try {
-        const s = statSync(RENDERER_LOG);
-        if (s.size >= 5 * 1024 * 1024) {
-          try {
-            unlinkSync(`${RENDERER_LOG}.1`);
-          } catch {}
-          renameSync(RENDERER_LOG, `${RENDERER_LOG}.1`);
-        }
-      } catch {}
-      mkdirSync(LOGS_DIR, { recursive: true });
-      appendFileSync(RENDERER_LOG, errStr, 'utf8');
-    } catch {}
-    console.error(`[DesktopHUD] Failed to load HTML: ${errorCode} - ${errorDescription}`);
-  });
-
-  mainWindow.webContents.on('render-process-gone', (_, details) => {
-    const goneStr = `[${new Date().toISOString()}] [DesktopHUD] Render process gone: ${JSON.stringify(details)}\n`;
-    try {
-      try {
-        const s = statSync(RENDERER_LOG);
-        if (s.size >= 5 * 1024 * 1024) {
-          try {
-            unlinkSync(`${RENDERER_LOG}.1`);
-          } catch {}
-          renameSync(RENDERER_LOG, `${RENDERER_LOG}.1`);
-        }
-      } catch {}
-      mkdirSync(LOGS_DIR, { recursive: true });
-      appendFileSync(RENDERER_LOG, goneStr, 'utf8');
-    } catch {}
-    console.error(`[DesktopHUD] Render process gone:`, details);
-  });
-
-  mainWindow.loadFile(htmlPath);
-  mainWindow.show();
-  mainWindow.focus();
-
-  mainWindow.on('closed', () => {
+  win.on('closed', () => {
+    appendRendererLog('[Window] closed event');
+    stopDisplayWatchers?.();
+    stopDisplayWatchers = null;
+    endGesture();
+    if (shrinkTimer) clearTimeout(shrinkTimer);
+    flushWindowState();
     mainWindow = null;
   });
 
-  return mainWindow;
+  void win.loadFile(htmlPath);
+  return win;
 }
 
 export function getMainWindow(): BrowserWindow | null {
   return mainWindow;
 }
 
-export function toggleMaximize(): boolean {
-  if (!mainWindow) return false;
-  if (mainWindow.isMaximized()) {
-    mainWindow.unmaximize();
-    return false;
-  } else {
-    mainWindow.maximize();
-    return true;
+/* ------------------------------------------------------------------ */
+/* summon / dismiss (call these from tray, global shortcut, gematron://) */
+/* ------------------------------------------------------------------ */
+
+export function presentWindow(opts: { focus?: boolean } = {}): void {
+  const win = mainWindow;
+  if (!alive(win)) return;
+  appendRendererLog(`[Window] present requested (visible=${win.isVisible()})`);
+  windowDismissed = false;
+  if (win.isMinimized()) win.restore();
+  ensureWindowVisible(24);
+
+  // A fade-out interrupted by minimize/restore can leave a visible HWND at
+  // zero opacity. Explicit summons must reset opacity, not trust isVisible().
+  win.setOpacity(1);
+  if (!win.isVisible()) {
+    if (opts.focus === false) win.showInactive();
+    else win.show();
   }
+  if (opts.focus !== false) win.focus();
+  assertTopmost();
+  appendRendererLog(`[Window] visibility restored (visible=${win.isVisible()}, opacity=${win.getOpacity()}, minimized=${win.isMinimized()})`);
+}
+
+export function hideWindow(): void {
+  const win = mainWindow;
+  if (!alive(win) || !win.isVisible()) return;
+  fadeTo(win, 0, 110, () => {
+    if (win.isDestroyed()) return;
+    win.hide();
+    win.setOpacity(1);
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* legacy controls                                                     */
+/* ------------------------------------------------------------------ */
+
+export function toggleMaximize(): boolean {
+  const win = mainWindow;
+  if (!alive(win) || currentDisplayMode !== 'console') return false;
+  if (win.isMaximized()) {
+    win.unmaximize();
+    return false;
+  }
+  win.maximize();
+  return true;
 }
 
 export function toggleAlwaysOnTop(): boolean {
-  if (!mainWindow) return isPinnedAlwaysOnTop;
+  const win = mainWindow;
+  if (!alive(win)) return isPinnedAlwaysOnTop;
   isPinnedAlwaysOnTop = !isPinnedAlwaysOnTop;
-  mainWindow.setAlwaysOnTop(isPinnedAlwaysOnTop);
+  if (isPinnedAlwaysOnTop) assertTopmost();
+  else win.setAlwaysOnTop(false);
+  persist();
   return isPinnedAlwaysOnTop;
 }
 
@@ -180,56 +341,221 @@ export function getDisplayMode(): HudDisplayMode {
   return currentDisplayMode;
 }
 
+/* ------------------------------------------------------------------ */
+/* visibility / recovery                                               */
+/* ------------------------------------------------------------------ */
+
 /**
- * Move the window back onto its display if it is not fully visible.
- *
- * Summon (tray, global shortcut, `gematron://`) must always produce a window
- * the user can actually see. Returns true when the window had to be moved.
+ * Pull the window back onto a display if it is off-screen, straddling two
+ * displays, or the wrong size (mixed-DPI drift). Returns true if bounds changed.
  */
 export function ensureWindowVisible(margin = 24): boolean {
-  if (!mainWindow || mainWindow.isDestroyed()) return false;
-  const bounds = mainWindow.getBounds();
-  const area = screen.getDisplayMatching(bounds).workArea;
-  if (isRectFullyVisible(bounds, area)) return false;
-  mainWindow.setBounds(clampRectIntoArea(bounds, area, margin), false);
+  const win = mainWindow;
+  if (!alive(win) || gesture) return false;
+  const bounds = win.getBounds();
+  const size =
+    currentDisplayMode === 'console'
+      ? { width: bounds.width, height: bounds.height }
+      : windowSizeFor(currentDisplayMode);
+  const next = roundRect(recoverRect({ x: bounds.x, y: bounds.y, ...size }, allWorkAreas(), margin));
+  if (sameRect(next, bounds)) return false;
+  applyBounds(win, next);
+  persist();
   return true;
 }
 
+function watchDisplays(): () => void {
+  let t: NodeJS.Timeout | undefined;
+  const schedule = () => {
+    if (t) clearTimeout(t);
+    t = setTimeout(() => {
+      ensureWindowVisible(24);
+      assertTopmost();
+    }, 250); // displays settle in bursts; debounce
+  };
+  const bus = screen as unknown as NodeJS.EventEmitter;
+  const pm = powerMonitor as unknown as NodeJS.EventEmitter;
+  const screenEvents = ['display-added', 'display-removed', 'display-metrics-changed'];
+  const powerEvents = ['resume', 'unlock-screen'];
+  screenEvents.forEach((e) => bus.on(e, schedule));
+  powerEvents.forEach((e) => pm.on(e, schedule));
+  return () => {
+    if (t) clearTimeout(t);
+    screenEvents.forEach((e) => bus.removeListener(e, schedule));
+    powerEvents.forEach((e) => pm.removeListener(e, schedule));
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* display modes (animated)                                            */
+/* ------------------------------------------------------------------ */
+
 export function setDisplayMode(mode: HudDisplayMode): HudDisplayMode {
   if (!isHudDisplayMode(mode)) mode = 'bar';
-  if (!mainWindow || mainWindow.isDestroyed()) {
+  const win = mainWindow;
+  if (!alive(win)) {
     currentDisplayMode = mode;
     return mode;
   }
-  const win = mainWindow;
-  const previousMode = currentDisplayMode;
-  if (previousMode === 'console' && mode !== 'console') {
-    const b = win.getBounds();
-    if (!win.isMaximized()) {
-      lastFullSize = { width: Math.max(380, b.width), height: Math.max(480, b.height) };
-    }
-  }
-  currentDisplayMode = mode;
+  if (mode === currentDisplayMode) return mode;
+
+  endGesture();
+  if (shrinkTimer) clearTimeout(shrinkTimer);
   if (win.isMaximized()) win.unmaximize();
 
-  const preset = DISPLAY_PRESETS[mode];
-  const target = {
-    width: mode === 'console' ? lastFullSize.width : preset.width,
-    height: mode === 'console' ? Math.min(lastFullSize.height, 900) : preset.height,
-  };
-
+  const from = currentDisplayMode;
   const bounds = win.getBounds();
-  const display = screen.getDisplayMatching(bounds);
-  const next = resizePreservingRightEdge(bounds, target, display.workArea);
+  if (from === 'console') state = { ...state, consoleSize: { width: bounds.width, height: bounds.height } };
+  currentDisplayMode = mode;
 
-  win.setResizable(true);
-  if (mode === 'console') win.setMinimumSize(380, 480);
-  else if (mode === 'full') win.setMinimumSize(400, 600);
-  else if (mode === 'bar') win.setMinimumSize(420, 62);
-  else win.setMinimumSize(74, 74);
-  win.setBounds(next, false);
-  win.setResizable(mode === 'console');
-  win.setMaximizable(mode === 'console');
+  const workArea = screen.getDisplayMatching(bounds).workArea;
+  const area = inflateRect(workArea, SHADOW_INSET);
+  const size = windowSizeFor(mode, state.consoleSize);
+  const anchor = anchorFor(bounds, area);
+
+  const saved = REMEMBER_PER_MODE && userPlacedModes.has(mode) ? state.positions[mode] : undefined;
+  const next = roundRect(
+    saved
+      ? recoverRect({ ...saved, ...size }, allWorkAreas(), 0)
+      : resizeAnchored(bounds, size, area, 0, anchor),
+  );
+
+  const growing = next.width * next.height >= bounds.width * bounds.height;
+  const durationMs = richAnimations() ? MODE_TRANSITION_MS : 0;
+  const payload: ModeChangedPayload = {
+    from,
+    to: mode,
+    growing,
+    anchorX: anchor.x,
+    anchorY: anchor.y,
+    fromSurface: surfaceSizeOf(bounds),
+    toSurface: surfaceSizeOf(next),
+    durationMs,
+  };
+  send(HUD_IPC.modeChanged, payload);
+
+  // Grow: enlarge the (transparent) window first, the surface then morphs into it.
+  // Shrink: let the surface morph down first, then drop the window around it.
+  const delay = durationMs === 0 ? 0 : growing || saved ? GROW_DELAY_MS : durationMs + 40;
+  shrinkTimer = setTimeout(() => {
+    if (!alive(win)) return;
+    applyBounds(win, next);
+    persist();
+  }, delay);
 
   return currentDisplayMode;
+}
+
+/* ------------------------------------------------------------------ */
+/* drag / resize gestures (main-process cursor polling)                */
+/* ------------------------------------------------------------------ */
+/*
+ * Why not -webkit-app-region: drag regions swallow pointer events (no
+ * click-vs-drag), cannot snap, and frameless windows change size when dragged
+ * across mixed-DPI monitors. Polling screen.getCursorScreenPoint() in main
+ * and re-asserting the exact size every tick fixes all three.
+ */
+
+const EDGES = new Set(['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']);
+
+function parseGesture(v: unknown): GestureRequest | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  if (o.kind === 'move') return { kind: 'move', snap: o.snap !== false };
+  if (o.kind === 'resize' && typeof o.edge === 'string' && EDGES.has(o.edge)) {
+    return { kind: 'resize', edge: o.edge as ResizeEdge };
+  }
+  return null;
+}
+
+function beginGesture(req: GestureRequest): void {
+  const win = mainWindow;
+  if (!alive(win)) return;
+  endGesture();
+  if (req.kind === 'resize' && currentDisplayMode !== 'console') return;
+  win.setIgnoreMouseEvents(false);
+  const startBounds = win.getBounds();
+  gesture = {
+    req,
+    startCursor: screen.getCursorScreenPoint(),
+    startBounds,
+    last: startBounds,
+    startedAt: Date.now(),
+    timer: setInterval(tickGesture, GESTURE_TICK_MS),
+  };
+}
+
+function tickGesture(): void {
+  const g = gesture;
+  const win = mainWindow;
+  if (!g || !alive(win) || Date.now() - g.startedAt > GESTURE_MAX_MS) {
+    endGesture();
+    return;
+  }
+  const cursor = screen.getCursorScreenPoint();
+  const dx = cursor.x - g.startCursor.x;
+  const dy = cursor.y - g.startCursor.y;
+  let next: Rect;
+
+  if (g.req.kind === 'move') {
+    const wa = screen.getDisplayNearestPoint(cursor).workArea; // follows the cursor across monitors
+    next = { ...g.startBounds, x: g.startBounds.x + dx, y: g.startBounds.y + dy };
+    if (g.req.snap !== false) {
+      next = snapRectToArea(next, wa, { threshold: SNAP_THRESHOLD, margin: SNAP_MARGIN }).rect;
+    }
+    next = clampRectIntoArea(next, inflateRect(wa, SHADOW_INSET));
+  } else {
+    const wa = screen.getDisplayMatching(g.startBounds).workArea;
+    const { min, max } = consoleWindowLimits();
+    next = intersectRect(
+      resizeRectByEdge(g.startBounds, g.req.edge, dx, dy, min, max),
+      inflateRect(wa, SHADOW_INSET),
+    );
+  }
+
+  next = roundRect(next);
+  if (sameRect(next, g.last)) return;
+  g.last = next;
+  win.setBounds(next, false); // always passes full size => no DPI size drift
+}
+
+function endGesture(): void {
+  const g = gesture;
+  if (!g) return;
+  gesture = null;
+  clearInterval(g.timer);
+  const win = mainWindow;
+  if (!alive(win)) return;
+  const b = win.getBounds();
+  if (g.req.kind === 'move') {
+    state = { ...state, positions: { ...state.positions, [currentDisplayMode]: { x: b.x, y: b.y } } };
+    userPlacedModes.add(currentDisplayMode);
+  } else {
+    state = { ...state, consoleSize: { width: b.width, height: b.height } };
+  }
+  persist();
+}
+
+function fromMainWindow(e: IpcMainEvent): boolean {
+  return !!mainWindow && !mainWindow.isDestroyed() && e.sender === mainWindow.webContents;
+}
+
+function registerWindowIpc(): void {
+  if (ipcRegistered) return;
+  ipcRegistered = true;
+
+  ipcMain.on(HUD_IPC.gestureStart, (e, payload: unknown) => {
+    if (!fromMainWindow(e)) return;
+    const req = parseGesture(payload);
+    if (req) beginGesture(req);
+  });
+  ipcMain.on(HUD_IPC.gestureEnd, (e) => {
+    if (fromMainWindow(e)) endGesture();
+  });
+  // Click-through in the transparent gutter (renderer hit-tests, we toggle).
+  ipcMain.on(HUD_IPC.setIgnoreMouse, (e, ignore: unknown) => {
+    if (!fromMainWindow(e) || gesture || !alive(mainWindow)) return;
+    if (ignore === true) mainWindow.setIgnoreMouseEvents(true, { forward: true });
+    else mainWindow.setIgnoreMouseEvents(false);
+  });
 }

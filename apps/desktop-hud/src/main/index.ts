@@ -71,6 +71,7 @@ import {
   toggleAlwaysOnTop,
   setDisplayMode,
   getDisplayMode,
+  presentWindow,
 } from './window.js';
 import type {
   FindTextOptions,
@@ -112,15 +113,22 @@ function configurePermissions(): void {
 }
 
 // Register custom Windows URI protocol (e.g. gematron://summon)
-for (const protocol of ['gematron', 'gemetron']) {
-  if (process.defaultApp) {
-    if (process.argv.length >= 2 && process.argv[1]) {
-      app.setAsDefaultProtocolClient(protocol, process.execPath, [process.argv[1]]);
+// Protocol registration is deferred until the Electron app is ready.
+// Moving this inside app.whenReady() prevents a module-load-time crash
+// that killed the main process before createMainWindow() could run.
+void app.whenReady().then(() => {
+  for (const protocol of ['gematron', 'gemetron']) {
+    try {
+      if (process.defaultApp && process.argv.length >= 2 && process.argv[1]) {
+        app.setAsDefaultProtocolClient(protocol, process.execPath, [process.argv[1]]);
+      } else {
+        app.setAsDefaultProtocolClient(protocol);
+      }
+    } catch (err) {
+      console.warn(`[hud] Failed to register "${protocol}" protocol client:`, err);
     }
-  } else {
-    app.setAsDefaultProtocolClient(protocol);
   }
-}
+});
 
 // Strictly Singleton: ensure only ONE instance exists across the OS
 const gotLock = app.requestSingleInstanceLock();
@@ -145,6 +153,9 @@ if (!gotLock) {
   let liveService: GeminiLiveService;
   const wakeWord = new WakeWordService();
   let stopAutoUpdates = () => {};
+  // True only when the system tray actually initialised. Hiding the window
+  // without a tray would leave an unreachable background process.
+  let trayReady = false;
 
   app.on('before-quit', () => {
     logLine('hud-startup', `app before-quit fired (isQuitting: ${isQuitting})`);
@@ -208,6 +219,7 @@ if (!gotLock) {
 
       const win = createMainWindow(preloadPath, htmlPath);
       logLine('hud-startup', 'MainWindow created');
+      presentWindow();
       stopAutoUpdates = startAutoUpdates();
       try {
         liveService.input.setDisplayMetrics(liveService.vision.getDisplayMetrics());
@@ -241,7 +253,7 @@ if (!gotLock) {
         const w = getMainWindow();
         if (w) {
           if (w.isVisible() && w.isFocused()) {
-            if (liveService.currentSettings.minimizeToTray) {
+            if (trayReady && liveService.currentSettings.minimizeToTray) {
               w.hide();
             } else {
               w.minimize();
@@ -299,23 +311,23 @@ if (!gotLock) {
           },
         },
       });
-      trayManager.init();
+      trayReady = trayManager.init();
 
-      // Minimize-to-tray window event hooks
-      win.on('close', (e) => {
-        if (!isQuitting && liveService.currentSettings.minimizeToTray) {
-          // End the Gemini Live session before hiding: a hidden HUD must not
-          // keep listening to the microphone or speaking replies from the tray.
-          try {
-            liveService.disconnect();
-          } catch {}
-          e.preventDefault();
-          win.hide();
-        }
+      // Closing the HUD window always means "quit".
+      // Tray background mode is opt-in and is reached through Minimize, never
+      // through the close button. Previously X only called win.hide(), so the
+      // process survived with no visible window and had to be killed from Task
+      // Manager, and any summon (hotkey / tray / :9228) made it reappear.
+      win.on('close', () => {
+        isQuitting = true;
+        // A quitting HUD must not keep the microphone open.
+        try {
+          liveService.disconnect();
+        } catch {}
       });
 
       win.on('minimize', () => {
-        if (liveService.currentSettings.minimizeToTray) {
+        if (!isQuitting && trayReady && liveService.currentSettings.minimizeToTray) {
           win.hide();
         }
       });
@@ -752,7 +764,7 @@ if (!gotLock) {
       'hud-startup',
       `app window-all-closed fired (minimizeToTray: ${liveService?.currentSettings?.minimizeToTray})`,
     );
-    if (!isQuitting && liveService?.currentSettings?.minimizeToTray) {
+    if (!isQuitting && trayReady && liveService?.currentSettings?.minimizeToTray) {
       return;
     }
     try {
