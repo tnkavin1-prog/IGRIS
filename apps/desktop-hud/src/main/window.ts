@@ -54,9 +54,6 @@ const GROW_DELAY_MS = 16;
 const STARTUP_GUARD_INTERVAL_MS = 400;
 const STARTUP_GUARD_MAX_MS = 10_000;
 
-// Renderer paint probe interval.
-const PAINT_PROBE_INTERVAL_MS = 2500;
-
 // DPI scale factor cache.
 let DPI_SCALE = 1;
 
