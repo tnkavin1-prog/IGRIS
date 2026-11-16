@@ -46,6 +46,29 @@ jobs:
           Get-AuthenticodeSignature .\release\desktop\win-unpacked\Gemetron.exe | Select-Object Status, SignerCertificate
           Get-AuthenticodeSignature .\release\desktop\Gemetron-Setup-*.exe | Select-Object Status, SignerCertificate
 
+      - name: Verify release manifest
+        shell: pwsh
+        run: |
+          $manifest = Get-Content .\apps\desktop-hud\dist\manifest.json | ConvertFrom-Json
+          $errors = @()
+          foreach ($file in $manifest.files.Keys) {
+            $fullPath = Join-Path .\apps\desktop-hud\dist $file
+            if (-not (Test-Path $fullPath)) {
+              $errors += "Missing file: $file"
+              continue
+            }
+            $actualHash = Get-FileHash $fullPath -Algorithm SHA256 | Select-Object -ExpandProperty Hash
+            $expectedHash = $manifest.files[$file].sha256
+            if ($actualHash -ne $expectedHash) {
+              $errors += "Checksum mismatch: $file (expected $expectedHash, got $actualHash)"
+            }
+          }
+          if ($errors.Count -gt 0) {
+            $errors | Write-Error
+            exit 1
+          }
+          Write-Host "Manifest verification passed: $($manifest.files.Count) files verified"
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v1
         with:

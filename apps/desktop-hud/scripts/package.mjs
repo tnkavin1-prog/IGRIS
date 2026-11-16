@@ -44,6 +44,7 @@ for (const [source, target, output] of [
 const bundle = spawnSync(process.execPath, [join(desktop, 'scripts/build.mjs')], {
   stdio: 'inherit',
   cwd: root,
+  env: { ...process.env, NODE_ENV: 'production' },
 });
 if (bundle.status !== 0) throw new Error('Desktop bundle failed.');
 if (!process.env.CSC_LINK) process.env.CSC_IDENTITY_AUTO_DISCOVERY = 'false';
