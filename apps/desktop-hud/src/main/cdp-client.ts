@@ -1091,6 +1091,7 @@ export class CDPClient extends EventEmitter {
         this.isConnected = false;
         this.emit('connection-changed', false);
       }
+      throw new Error('CDP poll failed');
     }
   }
 }
