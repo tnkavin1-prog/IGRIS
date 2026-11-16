@@ -72,6 +72,7 @@ import {
   setDisplayMode,
   getDisplayMode,
   presentWindow,
+  getWindowDiagnostics,
 } from './window.js';
 import type {
   FindTextOptions,
@@ -515,6 +516,7 @@ if (!gotLock) {
     setDisplayMode(mode as 'orb' | 'bar' | 'full' | 'console'),
   );
   ipcMain.handle('window:get-display-mode', () => getDisplayMode());
+  ipcMain.handle('window:diagnostics', () => getWindowDiagnostics());
 
   // Read-only CDP queries never launch Chrome. Mutations that create or navigate
   // tabs use the same attach-first gateway as voice commands.
