@@ -539,6 +539,47 @@ if (!gotLock) {
     }
   }
 
+  // Security boundary: payload size limit (1MB per argument)
+  const MAX_PAYLOAD_BYTES = 1024 * 1024;
+  function validatePayloadSize(...args: any[]): void {
+    for (const arg of args) {
+      const size = JSON.stringify(arg).length;
+      if (size > MAX_PAYLOAD_BYTES) {
+        throw new Error(`IPC payload exceeds ${MAX_PAYLOAD_BYTES} byte limit`);
+      }
+    }
+  }
+
+  // Security boundary: per-channel rate limiting (100 calls per minute)
+  const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+  const RATE_LIMIT_MAX_CALLS = 100;
+  const channelCallCounts = new Map<string, { count: number; resetAt: number }>();
+  function checkRateLimit(channel: string): void {
+    const now = Date.now();
+    let entry = channelCallCounts.get(channel);
+    if (!entry || now > entry.resetAt) {
+      entry = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
+      channelCallCounts.set(channel, entry);
+    }
+    entry.count++;
+    if (entry.count > RATE_LIMIT_MAX_CALLS) {
+      throw new Error(`Rate limit exceeded for channel: ${channel}`);
+    }
+  }
+
+  // Track child processes for supervision
+  const supervisedProcesses = new Set<{ pid: number; kill: () => void }>();
+  function cleanupSupervisedProcesses(): void {
+    for (const proc of supervisedProcesses) {
+      try {
+        proc.kill();
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
+    supervisedProcesses.clear();
+  }
+
   function handleHud(
     channel: string,
     handler: (event: Electron.IpcMainInvokeEvent, ...args: any[]) => unknown,
@@ -547,6 +588,8 @@ if (!gotLock) {
       if (!isTrustedHudFrame(event)) {
         throw new Error('Blocked IPC from untrusted renderer: ' + channel);
       }
+      validatePayloadSize(...args);
+      checkRateLimit(channel);
       return handler(event, ...args);
     });
   }
@@ -820,6 +863,7 @@ if (!gotLock) {
     } catch {
       /* ignore */
     }
+    cleanupSupervisedProcesses();
     trayManager?.destroy();
     controlServer?.stop?.();
     cdpClient?.stopTracking?.();
