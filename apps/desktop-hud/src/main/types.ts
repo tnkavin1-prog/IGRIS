@@ -311,6 +311,13 @@ export interface HardwareTelemetry {
   activeProcessCount: number;
   uptimeSeconds: number;
   timestamp: number;
+  gpuInfo?: {
+    name: string;
+    adapterRam: number;
+    driverVersion: string;
+    status: string;
+  };
+  memoryPressureState?: 'normal' | 'warning' | 'critical';
 }
 
 export type WindowTilingLayout = 'side-by-side' | 'maximize-target' | 'grid-2x2';

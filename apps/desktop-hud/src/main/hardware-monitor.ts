@@ -128,6 +128,8 @@ export class HardwareMonitorService extends EventEmitter {
         activeProcessCount: this.mockOverrides.activeProcessCount ?? 142,
         uptimeSeconds: this.mockOverrides.uptimeSeconds ?? 18450,
         timestamp: Date.now(),
+        gpuInfo: this.mockOverrides.gpuInfo ?? undefined,
+        memoryPressureState: this.memoryPressureState,
       };
 
       this.lastMetrics = metrics;
@@ -179,6 +181,8 @@ export class HardwareMonitorService extends EventEmitter {
         activeProcessCount: this.mockOverrides.activeProcessCount ?? this.cachedProcessCount,
         uptimeSeconds: this.mockOverrides.uptimeSeconds ?? uptimeSeconds,
         timestamp: now,
+        gpuInfo: this.mockOverrides.gpuInfo ?? await this.sampleGpuInfo(),
+        memoryPressureState: this.memoryPressureState,
       };
 
       this.lastMetrics = metrics;
@@ -253,5 +257,32 @@ export class HardwareMonitorService extends EventEmitter {
         // Fallback to default count
       }
     }
+  }
+
+  private async sampleGpuInfo(): Promise<HardwareTelemetry['gpuInfo'] | undefined> {
+    if (process.platform !== 'win32') return undefined;
+    try {
+      const { stdout } = await execAsync(
+        'wmic path win32_VideoController get name,AdapterRAM,DriverVersion,Status /format:csv',
+        { timeout: 5000 },
+      );
+      if (!stdout.trim()) return undefined;
+      const lines = stdout.trim().split(/\r?\n/).filter((l) => l.trim().length > 0);
+      if (lines.length < 2) return undefined;
+      // Skip header line, take first video controller
+      const parts = lines[1]?.split(',');
+      if (!parts) return undefined;
+      if (parts.length >= 4) {
+        return {
+          name: parts[0]?.trim() || 'Unknown',
+          adapterRam: parseInt(parts[1]?.trim() || '0', 10),
+          driverVersion: parts[2]?.trim() || 'Unknown',
+          status: parts[3]?.trim() || 'Unknown',
+        };
+      }
+    } catch {
+      // GPU info unavailable
+    }
+    return undefined;
   }
 }

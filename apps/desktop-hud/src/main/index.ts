@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { appendFileSync, mkdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { CDPClient } from './cdp-client.js';
+import { HardwareMonitorService } from './hardware-monitor.js';
 import {
   ELECTRON_USER_DATA_DIR,
   ICON_PATH,
@@ -186,6 +187,7 @@ if (!gotLock) {
 
   const cdpClient = new CDPClient(9222, '127.0.0.1');
   let controlServer: ControlServer;
+  let hardwareMonitor: HardwareMonitorService;
 
   app.whenReady().then(async () => {
     try {
@@ -213,6 +215,9 @@ if (!gotLock) {
       }
       liveService = new GeminiLiveService(cdpClient);
       logLine('hud-startup', 'GeminiLiveService created');
+      hardwareMonitor = new HardwareMonitorService();
+      hardwareMonitor.start();
+      logLine('hud-startup', 'HardwareMonitor created');
       const controlAuth = new ControlAuthService();
       controlServer = new ControlServer(
         Number(process.env.GEMATRON_CONTROL_PORT ?? 9228),
@@ -606,6 +611,15 @@ if (!gotLock) {
   );
   handleHud('window:get-display-mode', () => getDisplayMode());
   handleHud('window:diagnostics', () => getWindowDiagnostics());
+  handleHud('hardware:diagnostics', () => {
+    const metrics = hardwareMonitor.getLastMetrics();
+    return {
+      metrics,
+      pressureState: hardwareMonitor.getMemoryPressureState(),
+      pressureThresholds: hardwareMonitor.getMemoryPressureThresholds(),
+      timestamp: Date.now(),
+    };
+  });
 
   // Read-only CDP queries never launch Chrome. Mutations that create or navigate
   // tabs use the same attach-first gateway as voice commands.
