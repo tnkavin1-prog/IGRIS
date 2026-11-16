@@ -77,6 +77,8 @@ export class CDPClient extends EventEmitter {
   private trackingGeneration = 0;
   private backoffDelay = 500;
   private isSuspended = false;
+  private pollInFlight = false;
+  private rerunRequested = false;
 
   constructor(port = 9222, host = '127.0.0.1') {
     super();
@@ -93,6 +95,7 @@ export class CDPClient extends EventEmitter {
     this.isSuspended = false;
     this.backoffDelay = 500;
     this.trackingGeneration++;
+    this.rerunRequested = false;
     void this.pollTabsGuarded(this.trackingGeneration);
     this.pollInterval = setInterval(() => {
       if (this.isSuspended) return;
@@ -101,13 +104,11 @@ export class CDPClient extends EventEmitter {
   }
 
   public stopTracking(): void {
-    if (this.pollInterval) {
-      clearInterval(this.pollInterval);
-      this.pollInterval = null;
-    }
+    this.clearPollTimer();
     this.trackingGeneration++;
     this.isSuspended = false;
     this.backoffDelay = 500;
+    this.rerunRequested = false;
   }
 
   public suspendTracking(): void {
@@ -122,16 +123,32 @@ export class CDPClient extends EventEmitter {
     }
   }
 
+  public clearPollTimer(): void {
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
+  }
+
   private async pollTabsGuarded(generation: number): Promise<void> {
     if (generation !== this.trackingGeneration) return;
     if (this.isSuspended) return;
+    if (this.pollInFlight) {
+      this.rerunRequested = true;
+      return;
+    }
+    this.pollInFlight = true;
     try {
       await this.pollTabs();
-      this.backoffDelay = 500; // Reset backoff on success
+      this.backoffDelay = 500;
     } catch {
-      // Exponential backoff: 500ms → 1s → 2s → 4s → 8s → 15s
       this.backoffDelay = Math.min(this.backoffDelay * 2, 15000);
-      // Don't reschedule immediately; the interval will retry
+    } finally {
+      this.pollInFlight = false;
+      if (this.rerunRequested && this.pollInterval && !this.isSuspended) {
+        this.rerunRequested = false;
+        void this.pollTabsGuarded(this.trackingGeneration);
+      }
     }
   }
 
