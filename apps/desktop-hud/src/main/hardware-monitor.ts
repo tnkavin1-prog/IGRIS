@@ -27,6 +27,11 @@ export class HardwareMonitorService extends EventEmitter {
   private lastProcessCountSampleTime: number = 0;
   private mockOverrides: Partial<HardwareTelemetry> = {};
 
+  // Memory pressure thresholds (resource governor)
+  private memoryWarningThresholdPercent = 85;
+  private memoryCriticalThresholdPercent = 95;
+  private memoryPressureState: 'normal' | 'warning' | 'critical' = 'normal';
+
   constructor(options: HardwareMonitorOptions = {}) {
     super();
     this.mockMode = options.mockMode ?? process.platform !== 'win32';
@@ -49,6 +54,22 @@ export class HardwareMonitorService extends EventEmitter {
 
   public getLastMetrics(): HardwareTelemetry | null {
     return this.lastMetrics;
+  }
+
+  public getMemoryPressureState(): 'normal' | 'warning' | 'critical' {
+    return this.memoryPressureState;
+  }
+
+  public getMemoryPressureThresholds(): { warning: number; critical: number } {
+    return {
+      warning: this.memoryWarningThresholdPercent,
+      critical: this.memoryCriticalThresholdPercent,
+    };
+  }
+
+  public setMemoryPressureThresholds(warning: number, critical: number): void {
+    this.memoryWarningThresholdPercent = warning;
+    this.memoryCriticalThresholdPercent = critical;
   }
 
   /**
@@ -162,6 +183,26 @@ export class HardwareMonitorService extends EventEmitter {
 
       this.lastMetrics = metrics;
       this.emit('metrics-updated', metrics);
+
+      // Memory pressure detection (resource governor)
+      const prevPressure = this.memoryPressureState;
+      if (memoryUsagePercent >= this.memoryCriticalThresholdPercent) {
+        this.memoryPressureState = 'critical';
+      } else if (memoryUsagePercent >= this.memoryWarningThresholdPercent) {
+        this.memoryPressureState = 'warning';
+      } else {
+        this.memoryPressureState = 'normal';
+      }
+      if (prevPressure !== this.memoryPressureState) {
+        this.emit('memory-pressure', {
+          state: this.memoryPressureState,
+          memoryUsagePercent,
+          memoryTotal,
+          memoryUsed,
+          memoryFree,
+          timestamp: now,
+        });
+      }
       return metrics;
     } catch (err) {
       this.emit('error', err as Error);

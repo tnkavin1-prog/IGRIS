@@ -97,6 +97,9 @@ export class GeminiLiveService extends EventEmitter {
     stopped: false,
     task: null,
   });
+  private websocketBufferedAmountHighWaterMark = 1024 * 1024; // 1 MB
+  private websocketBufferedAmountLowWaterMark = 512 * 1024; // 512 KB
+  private websocketBackpressured = false;
   private workflowEngine: AgenticWorkflowEngine;
   private memoryStore: JarvisMemoryStore;
   private hardwareMonitor: HardwareMonitorService;
@@ -473,6 +476,16 @@ export class GeminiLiveService extends EventEmitter {
       const socket = this.socket;
       if (!socket || socket.readyState !== WebSocket.OPEN || !this.isSetupComplete) return;
       try {
+        // Monitor WebSocket buffer pressure
+        if (socket.bufferedAmount > this.websocketBufferedAmountHighWaterMark) {
+          this.websocketBackpressured = true;
+        } else if (
+          socket.bufferedAmount < this.websocketBufferedAmountLowWaterMark
+        ) {
+          this.websocketBackpressured = false;
+        }
+        if (this.websocketBackpressured) return;
+
         const shot = await this.computerVision.captureScreen(undefined, {
           maxWidth: 1024,
           maxHeight: 576,
@@ -528,6 +541,13 @@ export class GeminiLiveService extends EventEmitter {
       return false;
     }
 
+    // WebSocket backpressure: reject sends when buffer is too full
+    if (this.socket.bufferedAmount > this.websocketBufferedAmountHighWaterMark) {
+      this.websocketBackpressured = true;
+      return false;
+    }
+    this.websocketBackpressured = false;
+
     const msg = {
       clientContent: {
         turns: [
@@ -553,6 +573,13 @@ export class GeminiLiveService extends EventEmitter {
   public sendAudioChunk(base64Pcm: string): void {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN || !this.isSetupComplete) return;
 
+    // WebSocket backpressure: reject sends when buffer is too full
+    if (this.socket.bufferedAmount > this.websocketBufferedAmountHighWaterMark) {
+      this.websocketBackpressured = true;
+      return;
+    }
+    this.websocketBackpressured = false;
+
     const msg = {
       realtimeInput: {
         audio: {
@@ -566,6 +593,13 @@ export class GeminiLiveService extends EventEmitter {
 
   public sendImageFrame(base64Jpeg: string): void {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN || !this.isSetupComplete) return;
+
+    // WebSocket backpressure: reject sends when buffer is too full
+    if (this.socket.bufferedAmount > this.websocketBufferedAmountHighWaterMark) {
+      this.websocketBackpressured = true;
+      return;
+    }
+    this.websocketBackpressured = false;
 
     const msg = {
       realtimeInput: {
