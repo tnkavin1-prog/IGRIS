@@ -350,6 +350,7 @@ export function createMainWindow(preloadPath: string, htmlPath: string): Browser
       spellcheck: false,
       // GPU acceleration for fast rendering.
       offscreen: false,
+      enablePreferredSizeMode: true,
     },
   });
   mainWindow = win;

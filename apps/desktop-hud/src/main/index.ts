@@ -82,6 +82,14 @@ import type {
 } from './types.js';
 import { screenGrounding } from './screen-grounding.js';
 
+// GPU acceleration flags for transparent overlay rendering.
+// Must be set before app.ready / app.whenReady.
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('disable-gpu-driver-bug-workarounds');
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
+app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor');
+
 // Electron keeps its own caches, cookies and local storage under the
 // userData directory. Both it and the temporary directory must follow the
 // configured data root, otherwise a development run writes Chromium caches
