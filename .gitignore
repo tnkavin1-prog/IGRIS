@@ -78,3 +78,7 @@ docs/api/
 # Vendored agent skills and their upstream checkout (third-party, MIT).
 .opencode/skills/
 .opencode/vendor/
+
+# Superpowers plan execution scratch (not product source)
+.superpowers/
+
