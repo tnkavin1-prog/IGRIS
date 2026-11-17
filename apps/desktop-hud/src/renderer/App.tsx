@@ -20,6 +20,7 @@ import { AudioController } from './audio-controller.js';
 import { SoundEffectsEngine } from './sound-effects.js';
 import { loadAppearance, saveAppearance, type HudAppearance } from './appearance.js';
 import { resolveInitialDisplayMode } from '../main/display-mode.js';
+import { getPendingApproval } from '../main/workflow-recovery.js';
 import { useModeTransition } from './hooks/useModeTransition.js';
 import { ResizeHandles } from './ResizeHandles.js';
 import './types.js';
@@ -200,7 +201,10 @@ export function App() {
       .catch(() => undefined);
     window.geminiHUD.workflow
       .getCurrentTask()
-      .then(setCurrentTask)
+      .then((task) => {
+        setCurrentTask(task);
+        setPendingApproval(getPendingApproval(task));
+      })
       .catch(() => undefined);
     window.geminiHUD.workflow
       .listCheckpoints()
@@ -513,7 +517,10 @@ export function App() {
     const ok = await window.geminiHUD?.workflow.resumeCheckpoint(taskId).catch(() => false);
     if (ok) {
       const task = await window.geminiHUD?.workflow.getCurrentTask().catch(() => null);
-      if (task) setCurrentTask(task);
+      if (task) {
+        setCurrentTask(task);
+        setPendingApproval(getPendingApproval(task));
+      }
       setCheckpoints((prev) => prev.filter((cp) => cp.id !== taskId));
     }
   };
@@ -640,16 +647,36 @@ export function App() {
 
   const handleApproveStep = async (taskId: string, stepId: string) => {
     if (!window.geminiHUD) return;
+    const approved = await window.geminiHUD.workflow.approveStep(taskId, stepId);
+    if (!approved) {
+      const task = await window.geminiHUD.workflow.getCurrentTask().catch(() => null);
+      if (task) {
+        setCurrentTask(task);
+        setPendingApproval(getPendingApproval(task));
+      }
+      setExportNotice('Approval could not be saved. The task was not retried.');
+      setTimeout(() => setExportNotice(null), 3000);
+      return;
+    }
     setPendingApproval(null);
-    await window.geminiHUD.workflow.approveStep(taskId, stepId);
     setExportNotice('Step Approved & Resumed');
     setTimeout(() => setExportNotice(null), 2500);
   };
 
   const handleRejectStep = async (taskId: string, stepId: string) => {
     if (!window.geminiHUD) return;
+    const rejected = await window.geminiHUD.workflow.rejectStep(taskId, stepId, 'Rejected by user');
+    if (!rejected) {
+      const task = await window.geminiHUD.workflow.getCurrentTask().catch(() => null);
+      if (task) {
+        setCurrentTask(task);
+        setPendingApproval(getPendingApproval(task));
+      }
+      setExportNotice('Rejection could not be saved. Approval remains pending.');
+      setTimeout(() => setExportNotice(null), 3000);
+      return;
+    }
     setPendingApproval(null);
-    await window.geminiHUD.workflow.rejectStep(taskId, stepId, 'Rejected by user');
     setExportNotice('Step Execution Denied');
     setTimeout(() => setExportNotice(null), 2500);
   };
@@ -745,9 +772,13 @@ export function App() {
   const handleStartAutonomousTask = async (goal: string) => {
     if (!window.geminiHUD) return;
     const task = await window.geminiHUD.workflow.createTask(goal);
-    await window.geminiHUD.workflow.startTask(task.id);
-    setCurrentTask(task);
-    setExportNotice(`Pipeline Launched: ${goal}`);
+    const started = await window.geminiHUD.workflow.startTask(task.id);
+    setCurrentTask(started);
+    if (started.status === 'failed') {
+      setExportNotice(started.error || 'Task could not start because its checkpoint was not saved.');
+    } else {
+      setExportNotice('Pipeline Launched: ' + goal);
+    }
     setTimeout(() => setExportNotice(null), 3000);
   };
 

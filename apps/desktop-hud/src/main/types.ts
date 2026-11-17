@@ -275,6 +275,8 @@ export interface WorkflowStep {
   riskLevel?: StepRisk;
   /** Set only after the user explicitly approved this step in the HUD. */
   approvedByUser?: boolean;
+  /** True when the external action may have occurred but its outcome was not verified. */
+  outcomeUncertain?: boolean;
   result?: any;
   error?: string;
   startedAt?: number;

@@ -24,9 +24,9 @@ describe('resolveInitialDisplayMode', () => {
     expect(resolveInitialDisplayMode('bar')).toBe('full');
   });
 
-  it('restores the full window modes', () => {
+  it('always launches into the full window, including after a saved console session', () => {
     expect(resolveInitialDisplayMode('full')).toBe('full');
-    expect(resolveInitialDisplayMode('console')).toBe('console');
+    expect(resolveInitialDisplayMode('console')).toBe('full');
   });
 
   it('falls back to full mode for missing or corrupt values', () => {

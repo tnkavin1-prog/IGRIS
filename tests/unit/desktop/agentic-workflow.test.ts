@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { TaskCheckpointStore } from '../../../apps/desktop-hud/src/main/task-checkpoint.js';
 import { AgenticWorkflowEngine } from '../../../apps/desktop-hud/src/main/agentic-workflow.js';
 import { CDPClient } from '../../../apps/desktop-hud/src/main/cdp-client.js';
 import { NativeInputService } from '../../../apps/desktop-hud/src/main/native-input.js';
@@ -263,6 +265,240 @@ describe('AgenticWorkflowEngine', () => {
     expect(cur?.steps[0]?.status).toBe('failed');
   });
 
+  describe('crash-safe workflow checkpoints', () => {
+    it('persists a rejected approval so it cannot reappear after restart', async () => {
+      const dir = mkdtempSync(join(TEMP_DIR, 'workflow-reject-persist-'));
+      try {
+        const checkpointedEngine = new AgenticWorkflowEngine({
+          cdpClient,
+          nativeInput,
+          computerVision,
+          appManager,
+          clipboardService,
+          checkpointDir: dir,
+        });
+        const task = checkpointedEngine.createTask('Reject pending launch', [
+          {
+            description: 'Launch Notepad',
+            actionType: 'launch_app',
+            params: { appName: 'notepad' },
+            requiresApproval: true,
+          },
+        ]);
+
+        await checkpointedEngine.startTask(task.id);
+        await vi.waitFor(() =>
+          expect(checkpointedEngine.getCurrentTask()?.status).toBe('waiting_approval'),
+        );
+
+        expect(await checkpointedEngine.rejectStep(task.id, task.steps[0]!.id)).toBe(true);
+        expect(new TaskCheckpointStore({ dir }).load(task.id)?.status).toBe('failed');
+
+        const restartedEngine = new AgenticWorkflowEngine({
+          cdpClient,
+          nativeInput,
+          computerVision,
+          appManager,
+          clipboardService,
+          checkpointDir: dir,
+        });
+        expect(restartedEngine.listCheckpoints()).toHaveLength(0);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('writes the running-step checkpoint before calling the external action', async () => {
+      const dir = mkdtempSync(join(TEMP_DIR, 'workflow-write-ahead-'));
+      try {
+        const store = new TaskCheckpointStore({ dir });
+        const checkpointedEngine = new AgenticWorkflowEngine({
+          cdpClient,
+          nativeInput,
+          computerVision,
+          appManager,
+          clipboardService,
+          checkpointDir: dir,
+        });
+        let savedBeforeAction = false;
+        const launch = vi.spyOn(appManager, 'launchApplication').mockImplementation(async () => {
+          const saved = store.load(task.id);
+          savedBeforeAction = saved?.status === 'running' && saved.steps[0]?.status === 'running';
+          return { ok: true, appName: 'notepad' };
+        });
+        const task = checkpointedEngine.createTask('Launch Notepad safely', [
+          { description: 'Launch Notepad', actionType: 'launch_app', params: { appName: 'notepad' } },
+        ]);
+
+        await checkpointedEngine.startTask(task.id);
+        await vi.waitFor(() => expect(checkpointedEngine.getCurrentTask()?.status).toBe('completed'));
+
+        expect(savedBeforeAction).toBe(true);
+        expect(launch).toHaveBeenCalledOnce();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('does not retry an in-flight action when Pause is pressed; waits for explicit approval', async () => {
+      const dir = mkdtempSync(join(TEMP_DIR, 'workflow-pause-in-flight-'));
+      let beginAction!: () => void;
+      let finishAction!: () => void;
+      const actionStarted = new Promise<void>((resolve) => { beginAction = resolve; });
+      const actionGate = new Promise<void>((resolve) => { finishAction = resolve; });
+      try {
+        const pausedEngine = new AgenticWorkflowEngine({
+          cdpClient, nativeInput, computerVision, appManager, clipboardService, checkpointDir: dir,
+        });
+        const launch = vi.spyOn(appManager, "launchApplication").mockImplementation(async () => {
+          beginAction();
+          await actionGate;
+          return { ok: true, appName: "notepad" };
+        });
+        const approval = vi.fn();
+        pausedEngine.on("task:needs-approval", approval);
+        const task = pausedEngine.createTask("Pause safely during launch", [
+          { description: "Launch Notepad", actionType: "launch_app", params: { appName: "notepad" } },
+        ]);
+
+        await pausedEngine.startTask(task.id);
+        await actionStarted;
+        expect(pausedEngine.pauseTask(task.id)).toBe(true);
+        expect(pausedEngine.getCurrentTask()?.status).toBe("waiting_approval");
+        expect(pausedEngine.getCurrentTask()?.steps[0]?.outcomeUncertain).toBe(true);
+        expect(approval).not.toHaveBeenCalled();
+        expect(await pausedEngine.approveStep(task.id, task.steps[0]!.id)).toBe(false);
+
+        finishAction();
+        await vi.waitFor(() => expect(approval).toHaveBeenCalledOnce());
+        expect(launch).toHaveBeenCalledOnce();
+        expect(await pausedEngine.approveStep(task.id, task.steps[0]!.id)).toBe(true);
+        await vi.waitFor(() => expect(pausedEngine.getCurrentTask()?.status).toBe("completed"));
+        expect(launch).toHaveBeenCalledTimes(2);
+      } finally {
+        finishAction?.();
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+    it('blocks an external side effect when the configured checkpoint location is not writable', async () => {
+      const root = mkdtempSync(join(TEMP_DIR, 'workflow-write-failure-'));
+      const checkpointPath = join(root, 'not-a-directory');
+      try {
+        writeFileSync(checkpointPath, 'occupied', 'utf8');
+        const checkpointedEngine = new AgenticWorkflowEngine({
+          cdpClient,
+          nativeInput,
+          computerVision,
+          appManager,
+          clipboardService,
+          checkpointDir: checkpointPath,
+        });
+        const launch = vi.spyOn(appManager, 'launchApplication');
+        const task = checkpointedEngine.createTask('Launch Notepad safely', [
+          { description: 'Launch Notepad', actionType: 'launch_app', params: { appName: 'notepad' } },
+        ]);
+
+        await checkpointedEngine.startTask(task.id);
+
+        expect(checkpointedEngine.getCurrentTask()?.status).toBe('failed');
+        expect(checkpointedEngine.getCurrentTask()?.error?.toLowerCase()).toContain('checkpoint');
+        expect(launch).not.toHaveBeenCalled();
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it('requires explicit approval before retrying a crash-interrupted action even with auto-approve enabled', async () => {
+      const dir = mkdtempSync(join(TEMP_DIR, 'workflow-recovery-approval-'));
+      try {
+        const store = new TaskCheckpointStore({ dir });
+        const checkpointedEngine = new AgenticWorkflowEngine({
+          cdpClient,
+          nativeInput,
+          computerVision,
+          appManager,
+          clipboardService,
+          checkpointDir: dir,
+          autoApprove: true,
+        });
+        const task = checkpointedEngine.createTask('Launch Notepad after confirmation', [
+          { description: 'Launch Notepad', actionType: 'launch_app', params: { appName: 'notepad' } },
+        ]);
+        task.status = 'running';
+        task.steps[0]!.status = 'running';
+        task.activeStepIndex = 0;
+        expect(store.save(task)).toBe(true);
+
+        const restoredEngine = new AgenticWorkflowEngine({
+          cdpClient,
+          nativeInput,
+          computerVision,
+          appManager,
+          clipboardService,
+          checkpointDir: dir,
+          autoApprove: true,
+        });
+        const launch = vi.spyOn(appManager, 'launchApplication').mockResolvedValue({
+          ok: true,
+          appName: 'notepad',
+        });
+        const approval = vi.fn();
+        restoredEngine.on('task:needs-approval', approval);
+
+        expect(await restoredEngine.resumeCheckpoint(task.id)).toBe(true);
+        expect(restoredEngine.getCurrentTask()?.status).toBe('waiting_approval');
+        expect(approval).toHaveBeenCalledOnce();
+        expect(launch).not.toHaveBeenCalled();
+
+        const stepId = task.steps[0]!.id;
+        expect(await restoredEngine.approveStep(task.id, stepId)).toBe(true);
+        await vi.waitFor(() => expect(restoredEngine.getCurrentTask()?.status).toBe('completed'));
+        expect(launch).toHaveBeenCalledOnce();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('actually resumes an interrupted task when its next step was still pending', async () => {
+      const dir = mkdtempSync(join(TEMP_DIR, 'workflow-recovery-pending-'));
+      try {
+        const store = new TaskCheckpointStore({ dir });
+        const checkpointedEngine = new AgenticWorkflowEngine({
+          cdpClient,
+          nativeInput,
+          computerVision,
+          appManager,
+          clipboardService,
+          checkpointDir: dir,
+        });
+        const task = checkpointedEngine.createTask('Launch Notepad after restart', [
+          { description: 'Launch Notepad', actionType: 'launch_app', params: { appName: 'notepad' } },
+        ]);
+        task.status = 'running';
+        task.steps[0]!.status = 'pending';
+        expect(store.save(task)).toBe(true);
+
+        const restoredEngine = new AgenticWorkflowEngine({
+          cdpClient,
+          nativeInput,
+          computerVision,
+          appManager,
+          clipboardService,
+          checkpointDir: dir,
+        });
+        const launch = vi.spyOn(appManager, 'launchApplication').mockResolvedValue({
+          ok: true,
+          appName: 'notepad',
+        });
+
+        expect(await restoredEngine.resumeCheckpoint(task.id)).toBe(true);
+        await vi.waitFor(() => expect(restoredEngine.getCurrentTask()?.status).toBe('completed'));
+        expect(launch).toHaveBeenCalledOnce();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
   describe('OS Clipboard Autonomous Workflows', () => {
     it('decomposes copy/paste goal into cross-app clipboard recipe', () => {
       const steps = engine.decomposeGoal('Copy summary data to clipboard and paste into notepad');

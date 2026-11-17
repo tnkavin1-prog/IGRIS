@@ -94,29 +94,24 @@ describe('Emergency Autonomous Killswitch & Pause/Resume', () => {
     expect(releaseSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('pauses and resumes active autonomous task', async () => {
+  it('requires approval before retrying an action paused while in flight', async () => {
+    let approvalPayload: any = null;
+    engine.on('task:needs-approval', (payload) => { approvalPayload = payload; });
     const task = engine.createTask('Open Notepad and type notes');
     await engine.startTask(task.id);
-
-    // Task is running
     expect(engine.getCurrentTask()?.status).toBe('running');
 
-    // Pause task
     const paused = engine.pauseCurrentTask();
     expect(paused).toBe(true);
-    expect(engine.getCurrentTask()?.status).toBe('paused');
+    expect(engine.getCurrentTask()?.status).toBe('waiting_approval');
+    expect(engine.getCurrentTask()?.steps[0]?.outcomeUncertain).toBe(true);
+    expect(engine.pauseCurrentTask()).toBe(false);
 
-    // Trying to pause an already paused task returns false
-    const pauseAgain = engine.pauseCurrentTask();
-    expect(pauseAgain).toBe(false);
-
-    // Resume task
-    const resumed = await engine.resumeCurrentTask();
-    expect(resumed).toBe(true);
-    expect(engine.getCurrentTask()?.status).toBe('running');
-
-    // Clean up
-    await engine.emergencyStop('Test cleanup');
+    await vi.waitFor(() => expect(approvalPayload?.step?.status).toBe("needs_approval"));
+    expect(await engine.resumeCurrentTask()).toBe(false);
+    const approved = await engine.approveStep(task.id, task.steps[0]?.id || "");
+    expect(approved).toBe(true);
+    await vi.waitFor(() => expect(engine.getCurrentTask()?.status).toBe("completed"));
   });
 
   it('nativeInput releaseAllInputStates records event and calls CLI or Win32', async () => {

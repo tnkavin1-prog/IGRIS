@@ -17,6 +17,7 @@ import { VisualBlackboard } from './VisualBlackboard.js';
 import { SkillLauncherPanel } from './SkillLauncherPanel.js';
 import { ModelSwitchboard } from './ModelSwitchboard.js';
 import { HUD_ACCENTS, appearanceStyle, type HudAppearance } from './appearance.js';
+import { getApprovalGuidance } from '../main/workflow-recovery.js';
 
 export interface CompactHUDProps {
   status: LiveHUDStatus;
@@ -645,11 +646,7 @@ export function CompactHUD({
                     ) : null}
                   </div>
                   <p>{pendingApproval.step.description}</p>
-                  <small>
-                    {pendingApproval.step.actionType === 'run_command'
-                      ? 'This command runs on your machine. Review it before you allow it.'
-                      : 'Confirm to execute this high-impact action.'}
-                  </small>
+                  <small>{getApprovalGuidance(pendingApproval.step)}</small>
                   {pendingApproval.step.actionType === 'run_command' &&
                   typeof pendingApproval.step.params?.command === 'string' ? (
                     <code className="apc">{pendingApproval.step.params.command}</code>
@@ -716,11 +713,14 @@ export function CompactHUD({
                     <div style={{ display: 'flex', gap: 6, flex: 'none' }}>
                       <button
                         className="btn sm ghost"
+                        disabled={currentTask.status === 'waiting_approval'}
                         onClick={
                           currentTask.status === 'paused' ? onResumeWorkflow : onPauseWorkflow
                         }
                       >
-                        {currentTask.status === 'paused' ? 'Resume' : 'Pause'}
+                        {currentTask.status === 'waiting_approval'
+                          ? 'Review'
+                          : currentTask.status === 'paused' ? 'Resume' : 'Pause'}
                       </button>
                       <button className="btn sm danger" onClick={onEmergencyStop}>
                         Stop

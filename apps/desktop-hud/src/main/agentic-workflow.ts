@@ -20,6 +20,10 @@ import type {
   WorkflowStepInput,
 } from './types.js';
 
+const INTERRUPTED_WORKFLOW_ACTION_WARNING =
+  'IGRIS paused while this action was in progress. It may already have happened. ' +
+  'Check the target application before approving; approval will retry this action.';
+
 export interface WorkflowEngineDependencies {
   cdpClient: CDPClient;
   nativeInput: NativeInputService;
@@ -76,7 +80,7 @@ export class AgenticWorkflowEngine extends EventEmitter {
         this.checkpointStore = new TaskCheckpointStore({ dir: deps.checkpointDir });
         // A crashed session leaves a checkpoint behind; surface it as the
         // current task so the user can resume rather than start over.
-        const incomplete = this.checkpointStore.listIncomplete();
+        const incomplete = this.checkpointStore.recoverInterrupted();
         if (incomplete.length > 0 && this.currentTask === null) {
           this.currentTask = incomplete[0]!;
         }
@@ -119,15 +123,43 @@ export class AgenticWorkflowEngine extends EventEmitter {
     return this.checkpointStore?.listIncomplete() ?? [];
   }
 
-  /** Restore a checkpointed task as the current task. */
+  /** Restore a checkpointed task and either request approval or resume safe pending work. */
   public resumeCheckpoint(taskId: string): boolean {
     const task = this.checkpointStore?.load(taskId);
-    if (!task) return false;
-    if (this.isExecuting) return false;
+    if (!task || this.isExecuting) return false;
     this.currentTask = task;
-    this.currentTask.status = 'running';
-    this.emit('task:updated', this.currentTask);
+    const activeStep = task.steps[task.activeStepIndex];
+    if (task.status === 'waiting_approval' || activeStep?.status === 'needs_approval') {
+      task.status = 'waiting_approval';
+      if (!this.persistCurrentTask()) {
+        task.status = 'failed';
+        task.error = 'Checkpoint could not be saved; no action was retried.';
+        this.emit('task:updated', task);
+        return false;
+      }
+      if (activeStep?.status === 'needs_approval') {
+        this.emit('task:needs-approval', { task, step: activeStep });
+      }
+      this.emit('task:updated', task);
+      return true;
+    }
+    if (task.status !== 'paused' && task.status !== 'running' && task.status !== 'planning') return false;
+    task.status = 'running';
+    if (!this.persistCurrentTask()) {
+      task.status = 'failed';
+      task.error = 'Checkpoint could not be saved; no action was started.';
+      this.emit('task:updated', task);
+      return false;
+    }
+    this.emit('task:updated', task);
+    void this.executeLoop();
     return true;
+  }
+
+  /** Persist current state. A configured checkpoint store is a hard execution boundary. */
+  private persistCurrentTask(): boolean {
+    if (!this.checkpointStore) return true;
+    return !!this.currentTask && this.checkpointStore.save(this.currentTask);
   }
 
   /** Remove a checkpoint (for example after the user has dismissed it). */
@@ -524,6 +556,13 @@ export class AgenticWorkflowEngine extends EventEmitter {
     }
 
     this.currentTask.status = 'running';
+    if (!this.persistCurrentTask()) {
+      this.currentTask.status = 'failed';
+      this.currentTask.error = 'Checkpoint could not be saved; no action was started.';
+      this.currentTask.completedAt = Date.now();
+      this.emit('task:updated', this.currentTask);
+      return this.currentTask;
+    }
     this.emit('task:updated', this.currentTask);
 
     void this.executeLoop();
@@ -534,18 +573,34 @@ export class AgenticWorkflowEngine extends EventEmitter {
    * Pause the currently running task
    */
   public pauseTask(taskId: string): boolean {
-    if (
-      this.currentTask &&
-      this.currentTask.id === taskId &&
-      this.currentTask.status === 'running'
-    ) {
-      this.currentTask.status = 'paused';
-      this.emit('task:updated', this.currentTask);
-      return true;
+    if (!this.currentTask || this.currentTask.id !== taskId || this.currentTask.status !== "running") {
+      return false;
     }
-    return false;
-  }
 
+    const activeStep = this.currentTask.steps[this.currentTask.activeStepIndex];
+    if (activeStep?.status === "running") {
+      // The adapter may complete its side effect after the user presses Pause.
+      // Treat the outcome as uncertain and require an explicit retry decision.
+      activeStep.status = "needs_approval";
+      activeStep.requiresApproval = true;
+      activeStep.outcomeUncertain = true;
+      activeStep.error = INTERRUPTED_WORKFLOW_ACTION_WARNING;
+      this.currentTask.status = "waiting_approval";
+      const saved = this.persistCurrentTask();
+      if (!saved) {
+        this.currentTask.error = "The action is paused, but its recovery checkpoint could not be saved. Do not retry until you verify the target application.";
+      }
+      // The active adapter is still unwinding. The execution loop emits the
+      // approval event only after the in-flight side effect has returned.
+      this.emit("task:updated", this.currentTask);
+      return saved;
+    }
+
+    this.currentTask.status = "paused";
+    if (!this.persistCurrentTask()) return false;
+    this.emit("task:updated", this.currentTask);
+    return true;
+  }
   /**
    * Pause the active task regardless of ID
    */
@@ -560,19 +615,40 @@ export class AgenticWorkflowEngine extends EventEmitter {
    * Resume a paused task
    */
   public async resumeTask(taskId: string): Promise<boolean> {
-    if (
-      this.currentTask &&
-      this.currentTask.id === taskId &&
-      this.currentTask.status === 'paused'
-    ) {
-      this.currentTask.status = 'running';
-      this.emit('task:updated', this.currentTask);
-      void this.executeLoop();
+    if (!this.currentTask || this.currentTask.id !== taskId || this.currentTask.status !== "paused") {
+      return false;
+    }
+
+    const activeStep = this.currentTask.steps[this.currentTask.activeStepIndex];
+    if (activeStep?.status === "running") {
+      activeStep.status = "needs_approval";
+      activeStep.requiresApproval = true;
+      activeStep.outcomeUncertain = true;
+      activeStep.error = INTERRUPTED_WORKFLOW_ACTION_WARNING;
+    }
+    if (activeStep?.status === "needs_approval") {
+      this.currentTask.status = "waiting_approval";
+      if (!this.persistCurrentTask()) {
+        this.currentTask.error = "Checkpoint could not be saved; the interrupted action was not retried.";
+        this.emit("task:updated", this.currentTask);
+        return false;
+      }
+      this.emit("task:needs-approval", { task: this.currentTask, step: activeStep });
+      this.emit("task:updated", this.currentTask);
       return true;
     }
-    return false;
-  }
 
+    this.currentTask.status = "running";
+    if (!this.persistCurrentTask()) {
+      this.currentTask.status = "failed";
+      this.currentTask.error = "Checkpoint could not be saved; no action was resumed.";
+      this.emit("task:updated", this.currentTask);
+      return false;
+    }
+    this.emit("task:updated", this.currentTask);
+    void this.executeLoop();
+    return true;
+  }
   /**
    * Resume the currently paused task
    */
@@ -590,6 +666,7 @@ export class AgenticWorkflowEngine extends EventEmitter {
     if (this.currentTask && this.currentTask.id === taskId) {
       this.currentTask.status = 'cancelled';
       this.currentTask.completedAt = Date.now();
+      this.persistCurrentTask();
       this.emit('task:cancelled', this.currentTask);
       this.emit('task:updated', this.currentTask);
       return true;
@@ -631,6 +708,7 @@ export class AgenticWorkflowEngine extends EventEmitter {
     this.appManager.abortActiveCommands();
     await this.nativeInput.releaseAllInputStates();
 
+    this.persistCurrentTask();
     this.emit('task:emergency-stop', { task, reason });
     this.emit('task:cancelled', task);
     this.emit('task:updated', task);
@@ -642,6 +720,7 @@ export class AgenticWorkflowEngine extends EventEmitter {
    * User approved a sensitive step
    */
   public async approveStep(taskId: string, stepId: string): Promise<boolean> {
+    if (this.isExecuting) return false;
     if (!this.currentTask || this.currentTask.id !== taskId) return false;
 
     const step = this.currentTask.steps.find((s) => s.id === stepId);
@@ -649,8 +728,17 @@ export class AgenticWorkflowEngine extends EventEmitter {
 
     step.requiresApproval = false;
     step.approvedByUser = true;
+    step.outcomeUncertain = false;
+    step.error = undefined;
     step.status = 'pending';
     this.currentTask.status = 'running';
+    if (!this.persistCurrentTask()) {
+      this.currentTask.status = 'failed';
+      this.currentTask.error = 'Checkpoint could not be saved after approval; no retry was started.';
+      this.currentTask.completedAt = Date.now();
+      this.emit('task:updated', this.currentTask);
+      return false;
+    }
     this.emit('task:updated', this.currentTask);
 
     void this.executeLoop();
@@ -665,17 +753,44 @@ export class AgenticWorkflowEngine extends EventEmitter {
     stepId: string,
     reason = 'User declined execution',
   ): Promise<boolean> {
-    if (!this.currentTask || this.currentTask.id !== taskId) return false;
+    const task = this.currentTask;
+    if (!task || task.id !== taskId || task.status !== 'waiting_approval' || this.isExecuting) {
+      return false;
+    }
 
-    const step = this.currentTask.steps.find((s) => s.id === stepId);
-    if (!step) return false;
+    const step = task.steps.find((candidate) => candidate.id === stepId);
+    if (!step || step.status !== 'needs_approval') return false;
+
+    const previous = {
+      taskStatus: task.status,
+      taskError: task.error,
+      taskCompletedAt: task.completedAt,
+      stepStatus: step.status,
+      stepError: step.error,
+      stepCompletedAt: step.completedAt,
+    };
 
     step.status = 'failed';
     step.error = reason;
-    this.currentTask.status = 'failed';
-    this.currentTask.error = reason;
-    this.currentTask.completedAt = Date.now();
-    this.emit('task:updated', this.currentTask);
+    step.completedAt = Date.now();
+    task.status = 'failed';
+    task.error = reason;
+    task.completedAt = Date.now();
+
+    if (!this.persistCurrentTask()) {
+      // Do not tell the UI the rejection succeeded while the old approval
+      // checkpoint can still reappear after restart.
+      step.status = previous.stepStatus;
+      step.error = previous.stepError;
+      step.completedAt = previous.stepCompletedAt;
+      task.status = previous.taskStatus;
+      task.error = 'Rejection could not be saved; approval remains pending.';
+      task.completedAt = previous.taskCompletedAt;
+      this.emit('task:updated', task);
+      return false;
+    }
+
+    this.emit('task:updated', task);
     return true;
   }
 
@@ -706,6 +821,7 @@ export class AgenticWorkflowEngine extends EventEmitter {
           this.currentTask.status = 'failed';
           this.currentTask.error = step.error;
           this.currentTask.completedAt = Date.now();
+          this.persistCurrentTask();
           this.emit('task:step-failed', {
             task: this.currentTask,
             step,
@@ -717,12 +833,19 @@ export class AgenticWorkflowEngine extends EventEmitter {
 
         const needsHuman = risk === 'dangerous';
         const approvalRequired =
-          step.status !== 'running' &&
-          (needsHuman ? step.approvedByUser !== true : step.requiresApproval && !this.autoApprove);
+          step.outcomeUncertain === true ||
+          (step.status !== 'running' &&
+            (needsHuman ? step.approvedByUser !== true : step.requiresApproval && !this.autoApprove));
 
         if (approvalRequired) {
           step.status = 'needs_approval';
           this.currentTask.status = 'waiting_approval';
+          if (!this.persistCurrentTask()) {
+            this.currentTask.status = 'failed';
+            this.currentTask.error = 'Checkpoint could not be saved; approval cannot safely continue.';
+            this.emit('task:updated', this.currentTask);
+            break;
+          }
           this.emit('task:needs-approval', { task: this.currentTask, step });
           this.emit('task:updated', this.currentTask);
           break;
@@ -730,6 +853,17 @@ export class AgenticWorkflowEngine extends EventEmitter {
 
         step.status = 'running';
         step.startedAt = Date.now();
+        if (!this.persistCurrentTask()) {
+          step.status = 'failed';
+          step.error = 'Write-ahead checkpoint failed; action was not executed.';
+          step.completedAt = Date.now();
+          this.currentTask.status = 'failed';
+          this.currentTask.error = step.error;
+          this.currentTask.completedAt = Date.now();
+          this.emit('task:step-failed', { task: this.currentTask, step, error: step.error });
+          this.emit('task:updated', this.currentTask);
+          break;
+        }
         this.emit('task:step-started', { task: this.currentTask, step });
         this.emit('task:updated', this.currentTask);
 
@@ -746,7 +880,14 @@ export class AgenticWorkflowEngine extends EventEmitter {
           this.emit('task:step-completed', { task: this.currentTask, step, result });
 
           this.currentTask.activeStepIndex += 1;
-          this.checkpointStore?.save(this.currentTask);
+          if (!this.persistCurrentTask()) {
+            this.currentTask.status = 'failed';
+            this.currentTask.error =
+              'Action completed but its result could not be checkpointed. Verify the external state before resuming.';
+            this.currentTask.completedAt = Date.now();
+            this.emit('task:updated', this.currentTask);
+            break;
+          }
           this.emit('task:updated', this.currentTask);
         } catch (stepErr) {
           if (!this.currentTask || (this.currentTask.status as TaskStatus) !== 'running') {
@@ -763,7 +904,14 @@ export class AgenticWorkflowEngine extends EventEmitter {
           this.currentTask.error = this.currentTask.error
             ? `${this.currentTask.error}; ${step.error}`
             : step.error;
-          this.checkpointStore?.save(this.currentTask);
+          if (!this.persistCurrentTask()) {
+            this.currentTask.status = 'failed';
+            this.currentTask.error =
+              'Action failure could not be checkpointed. Verify the external state before resuming.';
+            this.currentTask.completedAt = Date.now();
+            this.emit('task:updated', this.currentTask);
+            break;
+          }
           this.emit('task:step-failed', { task: this.currentTask, step, error: step.error });
           this.emit('task:updated', this.currentTask);
           continue;
@@ -795,6 +943,15 @@ export class AgenticWorkflowEngine extends EventEmitter {
       }
     } finally {
       this.isExecuting = false;
+      const task = this.currentTask;
+      const activeStep = task?.steps[task.activeStepIndex];
+      if (
+        task?.status === "waiting_approval" &&
+        activeStep?.status === "needs_approval" &&
+        activeStep.outcomeUncertain === true
+      ) {
+        this.emit("task:needs-approval", { task, step: activeStep });
+      }
     }
   }
 
