@@ -9,6 +9,8 @@ import type {
   AgentPlanner,
 } from '../../../apps/desktop-hud/src/main/vision-planner.js';
 import type { CaptureResult } from '../../../apps/desktop-hud/src/main/types.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 
 const shot: CaptureResult = {
   data: 'fixture',
@@ -178,6 +180,64 @@ describe('autonomous verification loop', () => {
     );
     expect(input.mouseClick).not.toHaveBeenCalled();
   });
+
+  it('recovers an interrupted session and resumes without replaying its uncertain step', async () => {
+    const dir = mkdtempSync(join(process.cwd(), 'temp', 'agent-resume-'));
+    try {
+      const { agent, planner, input } = fixture();
+      agent.setCheckpointDir(dir);
+      planner.next.mockResolvedValue(action());
+      planner.verify.mockResolvedValue({
+        succeeded: true,
+        goalAchieved: false,
+        evidence: 'Verified current state',
+      });
+      // An iteration cap of one fails after its first verified step.
+      const first = await agent.startSession('Continue fixture', { maxIterations: 1 });
+      expect(first.status).toBe('failed');
+      expect(input.mouseClick).toHaveBeenCalledOnce();
+      // Simulate abrupt process termination by replacing the stored checkpoint
+      // with a state marked running and containing an in-flight action.
+      const { AgentSessionStore } =
+        await import('../../../apps/desktop-hud/src/main/agent-session-store.js');
+      const store = new AgentSessionStore({ dir });
+      const saved = store.load(first.id)!;
+      saved.status = 'running';
+      saved.recoveredFromCrash = undefined;
+      saved.steps.push({
+        id: 'uncertain',
+        description: 'Possible click',
+        action: 'computer_click',
+        params: { x: 10, y: 10 },
+        status: 'running',
+        attempts: 1,
+        maxAttempts: 1,
+      });
+      store.save(saved);
+      agent.setCheckpointDir(dir);
+      expect(agent.getRecoveredSessions()[0]?.steps.at(-1)?.status).toBe('failed');
+      planner.next.mockResolvedValue({ ...action(), status: 'complete' });
+      planner.verify.mockResolvedValue({
+        succeeded: true,
+        goalAchieved: true,
+        evidence: 'Verified complete',
+      });
+      const resumed = await agent.resumeSession(first.id, { maxIterations: 3 });
+      expect(resumed.status).toBe('completed');
+      expect(resumed.steps.filter((step) => step.id === 'uncertain')).toHaveLength(1);
+      expect(input.mouseClick).toHaveBeenCalledOnce();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('caps the autonomous reasoning loop at 200 iterations', async () => {
+    const { agent, planner } = fixture();
+    planner.next.mockResolvedValue({ ...action(), status: 'blocked', description: 'Stop here' });
+    const session = await agent.startSession('Bounded goal', { maxIterations: 1000 });
+    expect(session.maxIterations).toBe(200);
+  });
+
   it('cancels pending model work and permits a subsequent session after cleanup', async () => {
     const { agent, planner, input } = fixture();
     let started!: () => void;

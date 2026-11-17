@@ -9,6 +9,7 @@ import { NativeInputService } from './native-input.js';
 import { retry } from './reliability.js';
 import type { AgentPlanner } from './vision-planner.js';
 import type { SecurityAuditor } from './security-auditor.js';
+import { AgentSessionStore } from './agent-session-store.js';
 
 export interface AgentObservation {
   timestamp: number;
@@ -45,10 +46,12 @@ export interface AgentSession {
   error?: string;
   iterations: number;
   maxIterations: number;
+  recoveredFromCrash?: boolean;
 }
 export interface AgentOptions {
   maxIterations?: number;
   stepTimeoutMs?: number;
+  checkpointDir?: string;
   autoApprove?: boolean;
   planner?: AgentPlanner;
   computerVision?: ComputerVisionService;
@@ -99,16 +102,48 @@ export class AutonomousAgent extends EventEmitter {
   private input: NativeInputService;
   private grounding: ScreenGroundingService;
   private auditor?: SecurityAuditor;
+  private checkpointStore: AgentSessionStore | null = null;
+  private recoveredSessions: AgentSession[] = [];
+  private resumeCandidate: AgentSession | null = null;
 
   constructor(options: AgentOptions = {}) {
     super();
     this.options = options;
     this.planner = options.planner;
+    if (options.checkpointDir) this.setCheckpointDir(options.checkpointDir);
     this.vision = options.computerVision || new ComputerVisionService();
     this.manager = options.appManager || new AppManagerService();
     this.input = options.nativeInput || new NativeInputService();
     this.grounding = options.grounding || screenGrounding;
   }
+  /** Configure durable storage and quarantine any session interrupted by a previous process. */
+  public setCheckpointDir(dir: string): void {
+    this.checkpointStore = new AgentSessionStore({ dir });
+    this.recoveredSessions = this.checkpointStore.recoverInterrupted();
+    if (this.recoveredSessions.length) this.resumeCandidate = this.recoveredSessions[0] ?? null;
+  }
+
+  public getRecoveredSessions(): AgentSession[] {
+    return this.recoveredSessions.map((session) => ({
+      ...session,
+      steps: session.steps.map((step) => ({ ...step, params: { ...step.params } })),
+    }));
+  }
+
+  /** Resume only after an explicit user request; uncertain in-flight steps remain failed. */
+  public async resumeSession(
+    sessionId?: string,
+    options: Partial<AgentOptions> = {},
+  ): Promise<AgentSession> {
+    const source = sessionId ? this.checkpointStore?.load(sessionId) : this.resumeCandidate;
+    if (!source || !source.recoveredFromCrash || source.status !== 'failed')
+      throw new Error('No interrupted session is available to resume.');
+    return this.startSession(source.goal, {
+      ...options,
+      resumeFromSession: source,
+    } as Partial<AgentOptions> & { resumeFromSession: AgentSession });
+  }
+
   public configure(
     planner: AgentPlanner,
     services: {
@@ -132,21 +167,41 @@ export class AutonomousAgent extends EventEmitter {
     if (this.isRunning) throw new Error('Autonomous agent is already running a session.');
     if (!goal.trim()) throw new Error('An autonomous goal is required.');
     if (!this.planner) throw new Error('Autonomous vision planner is not configured.');
-    const settings = { ...this.options, ...options };
+    const settings = { ...this.options, ...options } as AgentOptions & {
+      resumeFromSession?: AgentSession;
+    };
     this.isRunning = true;
     this.controller = new AbortController();
     const signal = this.controller.signal;
-    const session: AgentSession = {
-      id: `agent_${Date.now()}`,
-      goal,
-      status: 'running',
-      steps: [],
-      currentStepIndex: 0,
-      startedAt: Date.now(),
-      iterations: 0,
-      maxIterations: Math.max(1, Math.min(50, settings.maxIterations ?? 30)),
-    };
+    const prior = settings.resumeFromSession;
+    const priorSteps = prior?.steps.map((step) => ({ ...step, params: { ...step.params } })) ?? [];
+    const session: AgentSession = prior
+      ? {
+          ...prior,
+          status: 'running',
+          steps: priorSteps,
+          currentStepIndex: priorSteps.length,
+          completedAt: undefined,
+          error: undefined,
+          recoveredFromCrash: false,
+          iterations: prior.iterations,
+          maxIterations: Math.max(
+            prior.iterations + 1,
+            Math.min(200, settings.maxIterations ?? prior.maxIterations),
+          ),
+        }
+      : {
+          id: `agent_${Date.now()}`,
+          goal,
+          status: 'running',
+          steps: [],
+          currentStepIndex: 0,
+          startedAt: Date.now(),
+          iterations: 0,
+          maxIterations: Math.max(1, Math.min(200, settings.maxIterations ?? 30)),
+        };
     this.currentSession = session;
+    this.checkpointStore?.save(session);
     this.emit('session:started', session);
     try {
       await computerOperator.initialize();
@@ -154,6 +209,7 @@ export class AutonomousAgent extends EventEmitter {
       let failures = 0;
       while (!signal.aborted && session.iterations < session.maxIterations) {
         session.iterations++;
+        this.checkpointStore?.save(session);
         const before = await this.observe(signal);
         settings.onObservation?.(before);
         this.emit('agent:observe', { session, observation: before });
@@ -168,6 +224,7 @@ export class AutonomousAgent extends EventEmitter {
           if (!verification.goalAchieved)
             throw new Error(`Goal completion was not verified: ${verification.evidence}`);
           session.status = 'completed';
+          this.checkpointStore?.save(session);
           break;
         }
         if (
@@ -196,6 +253,8 @@ export class AutonomousAgent extends EventEmitter {
         session.currentStepIndex = session.steps.length - 1;
         settings.onStepStart?.(step);
         this.emit('agent:step-start', { session, step });
+        // Persist running status BEFORE the side effect is sent to the OS.
+        this.checkpointStore?.save(session);
         const started = Date.now();
         this.auditor?.logAudit('agent:step-started', 'operator', {
           sessionId: session.id,
@@ -211,6 +270,7 @@ export class AutonomousAgent extends EventEmitter {
           };
         }
         signal.throwIfAborted();
+        this.checkpointStore?.save(session);
         if (Date.now() - started > (settings.stepTimeoutMs ?? 60_000))
           throw new Error('Action exceeded its time budget; no retry was attempted.');
         const after = await this.observe(signal);
@@ -231,6 +291,7 @@ export class AutonomousAgent extends EventEmitter {
         });
         if (succeeded) {
           step.status = 'completed';
+          this.checkpointStore?.save(session);
           failures = 0;
           settings.onStepComplete?.(step, { ...step.result, evidence: verification.evidence });
           this.emit('agent:step-complete', { session, step, result: step.result });
@@ -240,6 +301,7 @@ export class AutonomousAgent extends EventEmitter {
           }
         } else {
           step.status = 'failed';
+          this.checkpointStore?.save(session);
           failures++;
           step.error =
             step.result?.error || verification.evidence || 'Visible outcome could not be verified.';
@@ -268,6 +330,7 @@ export class AutonomousAgent extends EventEmitter {
       }
     } finally {
       session.completedAt = Date.now();
+      this.checkpointStore?.save(session);
       await this.input.releaseAllInputStates().catch(() => undefined);
       this.isRunning = false;
       this.controller = null;
@@ -282,6 +345,7 @@ export class AutonomousAgent extends EventEmitter {
     this.controller?.abort();
     if (this.currentSession && this.isRunning) {
       this.currentSession.status = 'cancelled';
+      this.checkpointStore?.save(this.currentSession);
       this.emit('session:cancelled', this.currentSession);
     }
     await this.input.releaseAllInputStates();

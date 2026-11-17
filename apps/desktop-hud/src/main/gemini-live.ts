@@ -166,6 +166,8 @@ export class GeminiLiveService extends EventEmitter {
     this.auditor = deps?.auditor ?? new SecurityAuditor({ mockMode: this.appManager.isMockMode });
     this.settings = this.loadInitialSettings();
     this.workflowEngine.setAutoApprove(this.settings.autoApprove);
+    // Keep vision-agent sessions separate from workflow checkpoints.
+    autonomousAgent.setCheckpointDir(join(DATA_ROOT, 'agent-sessions'));
     autonomousAgent.configure(
       new GeminiVisionPlanner(
         () => ({
@@ -1634,6 +1636,22 @@ export class GeminiLiveService extends EventEmitter {
                 },
               },
               {
+                name: 'resume_autonomous_task',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Explicitly resumes the most recent interrupted desktop-agent goal after inspecting its checkpoint. Actions that were in-flight at the crash are not replayed automatically.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    sessionId: {
+                      type: 'STRING',
+                      description:
+                        'Optional interrupted session ID. Omit to resume the most recent interrupted session.',
+                    },
+                  },
+                },
+              },
+              {
                 name: 'open_blender',
                 behavior: 'NON_BLOCKING',
                 description:
@@ -3043,6 +3061,41 @@ export class GeminiLiveService extends EventEmitter {
                 iterations: session.iterations,
                 steps: session.steps.length,
                 error: session.error,
+              };
+              break;
+            }
+
+            case 'resume_autonomous_task': {
+              const sessionId =
+                typeof call.args.sessionId === 'string' ? call.args.sessionId : undefined;
+              const session = await autonomousAgent.resumeSession(sessionId, {
+                autoApprove: this.settings.autoApprove,
+                onObservation: (obs) =>
+                  this.emit('conversation-message', {
+                    id: `resume_obs_${Date.now()}`,
+                    kind: 'assistant',
+                    title: 'Agent observation',
+                    text: `Desktop state: ${obs.windows.length} windows active`,
+                    at: Date.now(),
+                  } as any),
+                onStepStart: (step) =>
+                  this.emit('conversation-message', {
+                    id: `resume_step_${Date.now()}`,
+                    kind: 'tool',
+                    name: step.action,
+                    title: `Resuming: ${step.description}`,
+                    at: Date.now(),
+                  } as any),
+              });
+              result = {
+                success: session.status === 'completed',
+                sessionId: session.id,
+                goal: session.goal,
+                status: session.status,
+                steps: session.steps.length,
+                error: session.error,
+                warning:
+                  'Previously in-flight actions were not replayed; verify their outcome before continuing.',
               };
               break;
             }

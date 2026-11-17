@@ -31,7 +31,7 @@ describe('GeminiLiveService', () => {
     expect(settings.alwaysOnTop).toBe(true);
     expect(settings.soundEffectsEnabled).toBe(true);
     expect(settings.soundVolume).toBe(0.5);
-    expect(settings.minimizeToTray).toBe(true);
+    expect(settings.minimizeToTray).toBe(false);
   });
 
   it('audits tool metadata without typed secrets or raw arguments', async () => {
@@ -343,6 +343,7 @@ describe('GeminiLiveService', () => {
   );
 
   it('formats realtimeInput with audio and video keys', () => {
+    (service as any).isSetupComplete = true;
     let sentPayload: any = null;
     (service as any).socket = {
       readyState: 1, // OPEN
@@ -444,6 +445,7 @@ describe('GeminiLiveService', () => {
   });
 
   it('handles computer_use_screenshot tool call and feeds frame to vision', async () => {
+    (service as any).isSetupComplete = true;
     const sentFrames: any[] = [];
     (service as any).socket = {
       readyState: 1,
@@ -1209,6 +1211,7 @@ describe('GeminiLiveService', () => {
   });
 
   it('analyses a video and sends its key frames to the model', async () => {
+    (service as any).isSetupComplete = true;
     const sent: any[] = [];
     (service as any).socket = {
       readyState: 1,

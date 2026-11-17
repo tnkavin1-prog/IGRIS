@@ -7,6 +7,7 @@ import {
   systemPreferences,
   type IpcMainEvent,
 } from 'electron';
+import { isTrustedHudIpcEvent } from './ipc-security.js';
 import { ICON_PATH } from './runtime-paths.js';
 import { appendRendererLog } from './renderer-log.js';
 import { HUD_IPC, type GestureRequest, type ModeChangedPayload } from './hud-window-ipc.js';
@@ -53,12 +54,16 @@ const GROW_DELAY_MS = 16;
 // Startup guard: re-assert visibility every 400ms for up to 10s.
 const STARTUP_GUARD_INTERVAL_MS = 400;
 const STARTUP_GUARD_MAX_MS = 10_000;
-
-// Renderer paint probe interval.
 const PAINT_PROBE_INTERVAL_MS = 2500;
 
-// DPI scale factor cache.
+// Renderer crash recovery is bounded to prevent an endless reload loop.
+const RENDERER_RESTART_WINDOW_MS = 60_000;
+const RENDERER_RESTART_LIMIT = 4;
+const RENDERER_RESTART_BASE_DELAY_MS = 500;
+
+// Display scale is diagnostic metadata only. Electron window coordinates are DIPs.
 let DPI_SCALE = 1;
+const rendererCrashTimestamps: number[] = [];
 
 // Opacity fade cancellation token.
 let fadeToken = 0;
@@ -80,7 +85,9 @@ let shrinkTimer: NodeJS.Timeout | undefined;
 let stopDisplayWatchers: (() => void) | null = null;
 let ipcRegistered = false;
 let startupGuardTimer: NodeJS.Timeout | undefined;
+let startupFallbackTimer: NodeJS.Timeout | undefined;
 let paintProbeTimer: NodeJS.Timeout | undefined;
+let rendererRecoveryTimer: NodeJS.Timeout | undefined;
 
 interface ActiveGesture {
   req: GestureRequest;
@@ -156,13 +163,10 @@ function sanitizeState(raw: WindowState): WindowState {
    DPI SCALING
    ======================================================================== */
 
-function updateDpiScale(): void {
-  const primary = screen.getPrimaryDisplay();
-  DPI_SCALE = primary.scaleFactor ?? 1;
-}
-
-function scaleForDpi(value: number): number {
-  return Math.round(value * DPI_SCALE);
+function updateDpiScale(bounds?: Rect): void {
+  const display = bounds ? screen.getDisplayMatching(bounds) : screen.getPrimaryDisplay();
+  DPI_SCALE =
+    Number.isFinite(display.scaleFactor) && display.scaleFactor > 0 ? display.scaleFactor : 1;
 }
 
 /* ========================================================================
@@ -223,12 +227,7 @@ function applyBounds(win: BrowserWindow, rect: Rect): void {
 }
 
 /** Fade with cancellation token - prevents orphaned fades hiding the window. */
-function fadeTo(
-  win: BrowserWindow,
-  target: number,
-  ms: number,
-  done?: () => void,
-): void {
+function fadeTo(win: BrowserWindow, target: number, ms: number, done?: () => void): void {
   const token = ++fadeToken;
   const start = win.getOpacity();
   const t0 = Date.now();
@@ -293,12 +292,13 @@ function probeRendererPaint(win: BrowserWindow): void {
    ======================================================================== */
 
 function initialBounds(mode: HudDisplayMode): Rect {
+  const primaryDisplay = screen.getPrimaryDisplay();
   updateDpiScale();
   const size = windowSizeFor(mode, state.consoleSize);
-  const primary = screen.getPrimaryDisplay().workArea;
+  const primary = primaryDisplay.workArea;
   const fallback: Rect = {
-    x: scaleForDpi(primary.x + primary.width - size.width - 40 + SHADOW_INSET),
-    y: scaleForDpi(primary.y + Math.max(40, Math.floor((primary.height - size.height) / 2))),
+    x: primary.x + primary.width - size.width - 40 + SHADOW_INSET,
+    y: primary.y + Math.max(40, Math.floor((primary.height - size.height) / 2)),
     ...size,
   };
   const saved = state.positions[mode];
@@ -323,11 +323,12 @@ export function createMainWindow(preloadPath: string, htmlPath: string): Browser
   }
 
   const b = initialBounds(currentDisplayMode);
+  rendererCrashTimestamps.length = 0;
 
   const win = new BrowserWindow({
     ...b,
-    minWidth: 1,
-    minHeight: 1,
+    minWidth: b.width,
+    minHeight: b.height,
     show: true,
     frame: false,
     transparent: true,
@@ -335,8 +336,8 @@ export function createMainWindow(preloadPath: string, htmlPath: string): Browser
     hasShadow: false,
     roundedCorners: false,
     alwaysOnTop: isPinnedAlwaysOnTop,
-    resizable: false,
-    maximizable: false,
+    resizable: currentDisplayMode === 'console',
+    maximizable: currentDisplayMode === 'console',
     fullscreenable: false,
     skipTaskbar: false,
     title: 'Gematron',
@@ -387,11 +388,13 @@ export function createMainWindow(preloadPath: string, htmlPath: string): Browser
 
   // Renderer paint probe at +2.5s.
   paintProbeTimer = setTimeout(() => {
+    paintProbeTimer = undefined;
     if (alive(win)) probeRendererPaint(win);
-  }, 2500);
+  }, PAINT_PROBE_INTERVAL_MS);
 
   // If the renderer never reports ready (load failure), still surface the window.
-  setTimeout(() => {
+  startupFallbackTimer = setTimeout(() => {
+    startupFallbackTimer = undefined;
     appendRendererLog(
       `[Window] startup fallback (alive=${alive(win)}, dismissed=${windowDismissed}, visible=${alive(win) ? win.isVisible() : false})`,
     );
@@ -410,7 +413,10 @@ export function createMainWindow(preloadPath: string, htmlPath: string): Browser
     if (gesture) return;
     ensureWindowVisible(24);
     const nb = win.getBounds();
-    state = { ...state, positions: { ...state.positions, [currentDisplayMode]: { x: nb.x, y: nb.y } } };
+    state = {
+      ...state,
+      positions: { ...state.positions, [currentDisplayMode]: { x: nb.x, y: nb.y } },
+    };
     userPlacedModes.add(currentDisplayMode);
     persist();
   });
@@ -435,16 +441,42 @@ export function createMainWindow(preloadPath: string, htmlPath: string): Browser
     console.error(`[DesktopHUD] Failed to load HTML: ${code} - ${desc}`);
   });
   win.webContents.on('render-process-gone', (_e, details) => {
-    appendRendererLog(`[DesktopHUD] Render process gone: ${JSON.stringify(details)}`);
+    appendRendererLog('[DesktopHUD] Render process gone: ' + JSON.stringify(details));
     console.error('[DesktopHUD] Render process gone:', details);
-    // Crash recovery: attempt to reload instead of dying.
-    if (alive(win)) {
-      setTimeout(() => {
-        if (alive(win) && !win.isDestroyed()) {
-          void win.loadFile(htmlPath).catch(() => {});
-        }
-      }, 1000);
+    if (!alive(win) || mainWindow !== win || windowDismissed) return;
+
+    const now = Date.now();
+    while (
+      rendererCrashTimestamps.length > 0 &&
+      now - rendererCrashTimestamps[0]! > RENDERER_RESTART_WINDOW_MS
+    ) {
+      rendererCrashTimestamps.shift();
     }
+    if (rendererCrashTimestamps.length >= RENDERER_RESTART_LIMIT) {
+      appendRendererLog(
+        '[DesktopHUD] Renderer recovery circuit opened after ' +
+          RENDERER_RESTART_LIMIT +
+          ' crashes in ' +
+          RENDERER_RESTART_WINDOW_MS +
+          'ms. Manual restart required.',
+      );
+      return;
+    }
+
+    const attempt = rendererCrashTimestamps.length + 1;
+    rendererCrashTimestamps.push(now);
+    const delay = Math.min(8_000, RENDERER_RESTART_BASE_DELAY_MS * 2 ** (attempt - 1));
+    if (rendererRecoveryTimer) clearTimeout(rendererRecoveryTimer);
+    rendererRecoveryTimer = setTimeout(() => {
+      rendererRecoveryTimer = undefined;
+      if (!alive(win) || mainWindow !== win || windowDismissed) return;
+      void win.loadFile(htmlPath).catch((error: unknown) => {
+        appendRendererLog(
+          '[DesktopHUD] Renderer recovery reload failed: ' +
+            (error instanceof Error ? error.message : String(error)),
+        );
+      });
+    }, delay);
   });
 
   win.on('closed', () => {
@@ -454,7 +486,13 @@ export function createMainWindow(preloadPath: string, htmlPath: string): Browser
     endGesture();
     if (shrinkTimer) clearTimeout(shrinkTimer);
     if (startupGuardTimer) clearInterval(startupGuardTimer);
+    if (startupFallbackTimer) clearTimeout(startupFallbackTimer);
     if (paintProbeTimer) clearTimeout(paintProbeTimer);
+    if (rendererRecoveryTimer) clearTimeout(rendererRecoveryTimer);
+    startupGuardTimer = undefined;
+    startupFallbackTimer = undefined;
+    paintProbeTimer = undefined;
+    rendererRecoveryTimer = undefined;
     flushWindowState();
     mainWindow = null;
   });
@@ -549,11 +587,14 @@ export function ensureWindowVisible(margin = 24): boolean {
   const win = mainWindow;
   if (!alive(win) || gesture) return false;
   const bounds = win.getBounds();
+  updateDpiScale(bounds);
   const size =
     currentDisplayMode === 'console'
       ? { width: bounds.width, height: bounds.height }
       : windowSizeFor(currentDisplayMode);
-  const next = roundRect(recoverRect({ x: bounds.x, y: bounds.y, ...size }, allWorkAreas(), margin));
+  const next = roundRect(
+    recoverRect({ x: bounds.x, y: bounds.y, ...size }, allWorkAreas(), margin),
+  );
   if (sameRect(next, bounds)) return false;
   suppressMovedUntil = Date.now() + 500; // suppress feedback loop for 500ms
   applyBounds(win, next);
@@ -565,6 +606,7 @@ export function getWindowDiagnostics(): Record<string, unknown> {
   const win = mainWindow;
   if (!alive(win)) return { alive: false };
   const bounds = win.getBounds();
+  updateDpiScale(bounds);
   return {
     alive: true,
     visible: win.isVisible(),
@@ -586,7 +628,8 @@ function watchDisplays(): () => void {
   const schedule = () => {
     if (t) clearTimeout(t);
     t = setTimeout(() => {
-      updateDpiScale();
+      const win = mainWindow;
+      if (alive(win)) updateDpiScale(win.getBounds());
       ensureWindowVisible(24);
       assertTopmost();
     }, 250);
@@ -623,7 +666,8 @@ export function setDisplayMode(mode: HudDisplayMode): HudDisplayMode {
 
   const from = currentDisplayMode;
   const bounds = win.getBounds();
-  if (from === 'console') state = { ...state, consoleSize: { width: bounds.width, height: bounds.height } };
+  if (from === 'console')
+    state = { ...state, consoleSize: { width: bounds.width, height: bounds.height } };
   currentDisplayMode = mode;
 
   const workArea = screen.getDisplayMatching(bounds).workArea;
@@ -653,12 +697,18 @@ export function setDisplayMode(mode: HudDisplayMode): HudDisplayMode {
   send(HUD_IPC.modeChanged, payload);
 
   const delay = durationMs === 0 ? 0 : growing || saved ? GROW_DELAY_MS : durationMs + 40;
-  shrinkTimer = setTimeout(() => {
+  const applyModeBounds = () => {
     if (!alive(win)) return;
+    shrinkTimer = undefined;
+    win.setMinimumSize(next.width, next.height);
+    win.setResizable(mode === 'console');
+    win.setMaximizable(mode === 'console');
     suppressMovedUntil = Date.now() + 500;
     applyBounds(win, next);
     persist();
-  }, delay);
+  };
+  if (delay === 0) applyModeBounds();
+  else shrinkTimer = setTimeout(applyModeBounds, delay);
 
   return currentDisplayMode;
 }
@@ -740,7 +790,10 @@ function endGesture(): void {
   if (!alive(win)) return;
   const b = win.getBounds();
   if (g.req.kind === 'move') {
-    state = { ...state, positions: { ...state.positions, [currentDisplayMode]: { x: b.x, y: b.y } } };
+    state = {
+      ...state,
+      positions: { ...state.positions, [currentDisplayMode]: { x: b.x, y: b.y } },
+    };
     userPlacedModes.add(currentDisplayMode);
   } else {
     state = { ...state, consoleSize: { width: b.width, height: b.height } };
@@ -749,7 +802,9 @@ function endGesture(): void {
 }
 
 function fromMainWindow(e: IpcMainEvent): boolean {
-  return !!mainWindow && !mainWindow.isDestroyed() && e.sender === mainWindow.webContents;
+  return (
+    !!mainWindow && !mainWindow.isDestroyed() && isTrustedHudIpcEvent(e, mainWindow.webContents)
+  );
 }
 
 function registerWindowIpc(): void {

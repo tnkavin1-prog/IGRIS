@@ -15,6 +15,7 @@ const electronState = vi.hoisted(() => {
     minimumSizes: [] as Array<{ width: number; height: number }>,
     resizable: [] as boolean[],
     maximizable: [] as boolean[],
+    windowOptions: null as Record<string, unknown> | null,
     workArea: { x: 0, y: 0, width: 1920, height: 1040 },
   };
   return state;
@@ -22,9 +23,18 @@ const electronState = vi.hoisted(() => {
 
 vi.mock('electron', () => {
   class FakeBrowserWindow {
-    webContents = { on: vi.fn(), send: vi.fn() };
+    webContents = {
+      on: vi.fn(),
+      send: vi.fn(),
+      isDestroyed: vi.fn(() => false),
+      setWindowOpenHandler: vi.fn(),
+      mainFrame: { url: 'file:///test/index.html' },
+      getURL: () => 'file:///test/index.html',
+    };
 
-    constructor(public readonly options: Record<string, unknown> = {}) {}
+    constructor(public readonly options: Record<string, unknown> = {}) {
+      electronState.windowOptions = options;
+    }
 
     on(): void {}
     once(): void {}
@@ -38,6 +48,22 @@ vi.mock('electron', () => {
     isDestroyed(): boolean {
       return false;
     }
+
+    isVisible(): boolean {
+      return true;
+    }
+    getOpacity(): number {
+      return 1;
+    }
+    isFocused(): boolean {
+      return true;
+    }
+    isAlwaysOnTop(): boolean {
+      return true;
+    }
+    setOpacity(): void {}
+    setIgnoreMouseEvents(): void {}
+    setPosition(): void {}
     unmaximize(): void {}
     maximize(): void {}
     restore(): void {}
@@ -70,18 +96,34 @@ vi.mock('electron', () => {
 
   return {
     BrowserWindow: FakeBrowserWindow,
+    ipcMain: { on: vi.fn() },
     screen: {
       getPrimaryDisplay: () => ({
+        workArea: { ...electronState.workArea },
         workAreaSize: {
           width: electronState.workArea.width,
           height: electronState.workArea.height,
         },
+        scaleFactor: 1.5,
       }),
-      getDisplayMatching: () => ({ workArea: { ...electronState.workArea } }),
+      getAllDisplays: () => [
+        {
+          workArea: { ...electronState.workArea },
+          bounds: { ...electronState.workArea },
+          scaleFactor: 1.5,
+        },
+      ],
+      getDisplayMatching: () => ({ workArea: { ...electronState.workArea }, scaleFactor: 1.5 }),
+      on: vi.fn(),
+      removeListener: vi.fn(),
     },
+    powerMonitor: { on: vi.fn(), removeListener: vi.fn() },
+    app: { once: vi.fn() },
+    systemPreferences: { getAnimationSettings: () => ({ shouldRenderRichAnimation: false }) },
   };
 });
 
+import { SHADOW_INSET, surfaceSizeOf } from '../../../apps/desktop-hud/src/main/display-mode.js';
 import {
   createMainWindow,
   ensureWindowVisible,
@@ -96,6 +138,13 @@ describe('HUD display modes', () => {
     electronState.minimumSizes = [];
     electronState.resizable = [];
     electronState.maximizable = [];
+    electronState.windowOptions = null;
+  });
+
+  it('positions the initial window in DIPs even when the primary display is scaled', () => {
+    createMainWindow('preload.js', 'index.html');
+    expect(electronState.windowOptions?.x).toBe(1464);
+    expect(electronState.windowOptions?.y).toBe(204);
   });
 
   it('resizes the window to the orb footprint and keeps the right edge', () => {
@@ -106,11 +155,15 @@ describe('HUD display modes', () => {
     expect(getDisplayMode()).toBe('orb');
 
     const call = electronState.setBoundsCalls.at(-1)!;
-    expect(call.width).toBe(74);
-    expect(call.height).toBe(74);
+    expect(surfaceSizeOf(call)).toEqual({ width: 74, height: 74 });
+    expect(call.width).toBe(74 + SHADOW_INSET * 2);
+    expect(call.height).toBe(74 + SHADOW_INSET * 2);
     // The right edge stays where it was, so the HUD never jumps.
     expect(call.x + call.width).toBe(before.x + before.width);
-    expect(electronState.minimumSizes.at(-1)).toEqual({ width: 74, height: 74 });
+    expect(electronState.minimumSizes.at(-1)).toEqual({
+      width: 74 + SHADOW_INSET * 2,
+      height: 74 + SHADOW_INSET * 2,
+    });
     expect(electronState.resizable.at(-1)).toBe(false);
   });
 
@@ -119,9 +172,13 @@ describe('HUD display modes', () => {
 
     setDisplayMode('bar');
     const call = electronState.setBoundsCalls.at(-1)!;
-    expect(call.width).toBe(420);
-    expect(call.height).toBe(62);
-    expect(electronState.minimumSizes.at(-1)).toEqual({ width: 420, height: 62 });
+    expect(surfaceSizeOf(call)).toEqual({ width: 420, height: 62 });
+    expect(call.width).toBe(420 + SHADOW_INSET * 2);
+    expect(call.height).toBe(62 + SHADOW_INSET * 2);
+    expect(electronState.minimumSizes.at(-1)).toEqual({
+      width: 420 + SHADOW_INSET * 2,
+      height: 62 + SHADOW_INSET * 2,
+    });
   });
 
   it('resizes the window to the full panel footprint', () => {
@@ -129,9 +186,13 @@ describe('HUD display modes', () => {
 
     setDisplayMode('full');
     const call = electronState.setBoundsCalls.at(-1)!;
-    expect(call.width).toBe(400);
-    expect(call.height).toBe(600);
-    expect(electronState.minimumSizes.at(-1)).toEqual({ width: 400, height: 600 });
+    expect(surfaceSizeOf(call)).toEqual({ width: 400, height: 600 });
+    expect(call.width).toBe(400 + SHADOW_INSET * 2);
+    expect(call.height).toBe(600 + SHADOW_INSET * 2);
+    expect(electronState.minimumSizes.at(-1)).toEqual({
+      width: 400 + SHADOW_INSET * 2,
+      height: 600 + SHADOW_INSET * 2,
+    });
   });
 
   it('restores the previous full size when the console is reopened', () => {
@@ -139,8 +200,9 @@ describe('HUD display modes', () => {
 
     setDisplayMode('console');
     const consoleCall = electronState.setBoundsCalls.at(-1)!;
-    expect(consoleCall.width).toBe(540);
-    expect(consoleCall.height).toBe(700);
+    expect(surfaceSizeOf(consoleCall)).toEqual({ width: 540, height: 700 });
+    expect(consoleCall.width).toBe(540 + SHADOW_INSET * 2);
+    expect(consoleCall.height).toBe(700 + SHADOW_INSET * 2);
     expect(electronState.resizable.at(-1)).toBe(true);
     expect(electronState.maximizable.at(-1)).toBe(true);
 

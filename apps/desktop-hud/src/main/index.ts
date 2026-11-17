@@ -1,4 +1,13 @@
-import { app, ipcMain, globalShortcut, shell, session, screen } from 'electron';
+import {
+  app,
+  ipcMain,
+  globalShortcut,
+  shell,
+  session,
+  screen,
+  type IpcMainInvokeEvent,
+  type WebContents,
+} from 'electron';
 import { join } from 'node:path';
 import { appendFileSync, mkdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { CDPClient } from './cdp-client.js';
@@ -42,6 +51,20 @@ function logLine(file: 'hud-startup' | 'electron-error', msg: string): void {
   }
 }
 
+type HudIpcHandler = (event: IpcMainInvokeEvent, ...args: any[]) => any;
+
+/** All renderer-to-main privileged calls pass through this one trust gate. */
+function handleHudIpc(channel: string, handler: HudIpcHandler): void {
+  ipcMain.handle(channel, (event, ...args) => {
+    const win = getMainWindow();
+    if (!win || win.isDestroyed() || !isTrustedHudIpcEvent(event, win.webContents)) {
+      logLine('electron-error', 'Rejected untrusted renderer IPC invocation: ' + channel);
+      throw new Error('IPC request rejected: untrusted renderer sender.');
+    }
+    return handler(event, ...args);
+  });
+}
+
 process.on('uncaughtException', (err) => {
   console.error('[UncaughtException]', err);
   try {
@@ -81,14 +104,13 @@ import type {
   WindowTilingLayout,
 } from './types.js';
 import { screenGrounding } from './screen-grounding.js';
+import { isTrustedHudIpcEvent } from './ipc-security.js';
 
-// GPU acceleration flags for transparent overlay rendering.
-// Must be set before app.ready / app.whenReady.
-app.commandLine.appendSwitch('enable-gpu-rasterization');
-app.commandLine.appendSwitch('enable-zero-copy');
-app.commandLine.appendSwitch('disable-gpu-driver-bug-workarounds');
-app.commandLine.appendSwitch('ignore-gpu-blocklist');
-app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor');
+// Let Chromium select supported GPU features and honour its driver blocklist.
+// Set IGRIS_FORCE_SOFTWARE_RENDERING=1 before launch to diagnose GPU-driver issues.
+if (process.env.IGRIS_FORCE_SOFTWARE_RENDERING === '1') {
+  app.disableHardwareAcceleration();
+}
 
 // Electron keeps its own caches, cookies and local storage under the
 // userData directory. Both it and the temporary directory must follow the
@@ -113,12 +135,26 @@ app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor');
 // load time, which crashes the whole main process before a window is shown.
 function configurePermissions(): void {
   const allowed = new Set(['media', 'microphone', 'audioCapture', 'notifications']);
-  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    callback(allowed.has(permission));
+  const isTrustedRequester = (webContents: WebContents | null): boolean => {
+    const win = getMainWindow();
+    if (!win || win.isDestroyed() || !webContents || webContents !== win.webContents) return false;
+    return isTrustedHudIpcEvent(
+      { sender: webContents, senderFrame: webContents.mainFrame },
+      win.webContents,
+    );
+  };
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    callback(allowed.has(permission) && isTrustedRequester(webContents));
   });
-  session.defaultSession.setPermissionCheckHandler((_webContents, permission) =>
-    allowed.has(permission),
-  );
+  session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin) => {
+    if (!allowed.has(permission) || !isTrustedRequester(webContents)) return false;
+    if (!requestingOrigin) return true;
+    try {
+      return new URL(requestingOrigin).protocol === 'file:';
+    } catch {
+      return false;
+    }
+  });
 }
 
 // Register custom Windows URI protocol (e.g. gematron://summon)
@@ -514,45 +550,45 @@ if (!gotLock) {
   });
 
   // Setup IPC Handlers
-  ipcMain.handle('window:minimize', () => minimizeWindow());
-  ipcMain.handle('window:toggle-maximize', () => toggleMaximize());
-  ipcMain.handle('window:is-maximized', () => getMainWindow()?.isMaximized() ?? false);
-  ipcMain.handle('window:close', () => closeWindow());
-  ipcMain.handle('window:toggle-pin', () => toggleAlwaysOnTop());
-  ipcMain.handle('window:is-pinned', () => getMainWindow()?.isAlwaysOnTop() ?? true);
-  ipcMain.handle('window:set-display-mode', (_, mode: string) =>
+  handleHudIpc('window:minimize', () => minimizeWindow());
+  handleHudIpc('window:toggle-maximize', () => toggleMaximize());
+  handleHudIpc('window:is-maximized', () => getMainWindow()?.isMaximized() ?? false);
+  handleHudIpc('window:close', () => closeWindow());
+  handleHudIpc('window:toggle-pin', () => toggleAlwaysOnTop());
+  handleHudIpc('window:is-pinned', () => getMainWindow()?.isAlwaysOnTop() ?? true);
+  handleHudIpc('window:set-display-mode', (_, mode: string) =>
     setDisplayMode(mode as 'orb' | 'bar' | 'full' | 'console'),
   );
-  ipcMain.handle('window:get-display-mode', () => getDisplayMode());
-  ipcMain.handle('window:diagnostics', () => getWindowDiagnostics());
+  handleHudIpc('window:get-display-mode', () => getDisplayMode());
+  handleHudIpc('window:diagnostics', () => getWindowDiagnostics());
 
   // Read-only CDP queries never launch Chrome. Mutations that create or navigate
   // tabs use the same attach-first gateway as voice commands.
-  ipcMain.handle('cdp:get-status', async () => await cdpClient.getStatus());
-  ipcMain.handle('cdp:list-tabs', async () => await cdpClient.listTabs());
-  ipcMain.handle('cdp:get-active-tab', async () => await cdpClient.getActiveTab());
-  ipcMain.handle('cdp:switch-tab', async (_, tabId: string) => {
+  handleHudIpc('cdp:get-status', async () => await cdpClient.getStatus());
+  handleHudIpc('cdp:list-tabs', async () => await cdpClient.listTabs());
+  handleHudIpc('cdp:get-active-tab', async () => await cdpClient.getActiveTab());
+  handleHudIpc('cdp:switch-tab', async (_, tabId: string) => {
     const ok = await cdpClient.switchTab(tabId);
     getMainWindow()?.focus();
     return ok;
   });
-  ipcMain.handle('cdp:create-tab', async (_, url?: string) => {
+  handleHudIpc('cdp:create-tab', async (_, url?: string) => {
     const result = await liveService.browser.openTab(url);
     getMainWindow()?.focus();
     return result;
   });
-  ipcMain.handle('cdp:close-tab', async (_, tabId: string) => {
+  handleHudIpc('cdp:close-tab', async (_, tabId: string) => {
     return await cdpClient.closeTab(tabId);
   });
-  ipcMain.handle('cdp:capture-screenshot', async (_, tabId?: string) => {
+  handleHudIpc('cdp:capture-screenshot', async (_, tabId?: string) => {
     return await cdpClient.captureScreenshot(tabId);
   });
-  ipcMain.handle('cdp:navigate', async (_, url: string, tabId?: string) => {
+  handleHudIpc('cdp:navigate', async (_, url: string, tabId?: string) => {
     const result = await liveService.browser.navigate(url, tabId);
     getMainWindow()?.focus();
     return { ok: result.success, url: result.url, error: result.error };
   });
-  ipcMain.handle('cdp:open-youtube', async (_, query?: string) => {
+  handleHudIpc('cdp:open-youtube', async (_, query?: string) => {
     const url = query
       ? `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`
       : 'https://www.youtube.com';
@@ -560,7 +596,7 @@ if (!gotLock) {
     getMainWindow()?.focus();
     return result;
   });
-  ipcMain.handle('cdp:launch-chrome', async (_, url?: string) => {
+  handleHudIpc('cdp:launch-chrome', async (_, url?: string) => {
     const result = url
       ? await liveService.browser.openTab(url)
       : await liveService.browser.focusOrLaunch();
@@ -569,62 +605,62 @@ if (!gotLock) {
       message: result.message ?? result.error ?? 'Chrome command completed.',
     };
   });
-  ipcMain.handle('cdp:duplicate-tab', async (_, tabId?: string) => {
+  handleHudIpc('cdp:duplicate-tab', async (_, tabId?: string) => {
     const tab = await cdpClient.duplicateTab(tabId);
     getMainWindow()?.focus();
     return tab;
   });
-  ipcMain.handle('cdp:reload-tab', async (_, tabId?: string, ignoreCache?: boolean) => {
+  handleHudIpc('cdp:reload-tab', async (_, tabId?: string, ignoreCache?: boolean) => {
     return await cdpClient.reloadTab(tabId, ignoreCache);
   });
-  ipcMain.handle(
+  handleHudIpc(
     'cdp:search-tab-content',
     async (_, query: string, options?: { caseSensitive?: boolean }) => {
       return await cdpClient.searchTabContent(query, options);
     },
   );
-  ipcMain.handle('cdp:close-duplicate-tabs', async () => {
+  handleHudIpc('cdp:close-duplicate-tabs', async () => {
     return await cdpClient.closeDuplicateTabs();
   });
 
   // Gemini Live IPC Handlers
-  ipcMain.handle('gemini:connect', async () => {
+  handleHudIpc('gemini:connect', async () => {
     await wakeWord.setPaused(true);
     const connected = await liveService.connect();
     if (!connected) await wakeWord.setPaused(false);
     return connected;
   });
-  ipcMain.handle('gemini:disconnect', () => liveService.disconnect());
-  ipcMain.handle('gemini:send-text', (_, text: string) => liveService.sendText(text));
-  ipcMain.handle('gemini:send-audio-chunk', (_, base64: string) =>
+  handleHudIpc('gemini:disconnect', () => liveService.disconnect());
+  handleHudIpc('gemini:send-text', (_, text: string) => liveService.sendText(text));
+  handleHudIpc('gemini:send-audio-chunk', (_, base64: string) =>
     liveService.sendAudioChunk(base64),
   );
-  ipcMain.handle('gemini:send-frame', (_, base64: string) => liveService.sendImageFrame(base64));
-  ipcMain.handle('gemini:get-settings', () => liveService.currentSettings);
-  ipcMain.handle('gemini:update-settings', (_, settings) => liveService.updateSettings(settings));
+  handleHudIpc('gemini:send-frame', (_, base64: string) => liveService.sendImageFrame(base64));
+  handleHudIpc('gemini:get-settings', () => liveService.currentSettings);
+  handleHudIpc('gemini:update-settings', (_, settings) => liveService.updateSettings(settings));
 
   // OS Computer Vision & Input Handlers
-  ipcMain.handle(
+  handleHudIpc(
     'computer:capture-screen',
     async (_, sourceId?: string) => await liveService.vision.captureScreen(sourceId),
   );
-  ipcMain.handle(
+  handleHudIpc(
     'computer:capture-window',
     async (_, windowTitle: string) => await liveService.vision.captureWindow(windowTitle),
   );
-  ipcMain.handle('computer:list-sources', async () => await liveService.vision.listSources());
-  ipcMain.handle('computer:get-display-metrics', () => liveService.vision.getDisplayMetrics());
-  ipcMain.handle(
+  handleHudIpc('computer:list-sources', async () => await liveService.vision.listSources());
+  handleHudIpc('computer:get-display-metrics', () => liveService.vision.getDisplayMetrics());
+  handleHudIpc(
     'computer:find-text-on-screen',
     async (_, text: string, options?: FindTextOptions) =>
       await liveService.vision.findTextOnScreen(text, options),
   );
 
-  ipcMain.handle(
+  handleHudIpc(
     'computer:mouse-move',
     async (_, x: number, y: number) => await liveService.input.mouseMove(x, y),
   );
-  ipcMain.handle(
+  handleHudIpc(
     'computer:mouse-click',
     async (
       _,
@@ -633,141 +669,141 @@ if (!gotLock) {
       options?: { button?: 'left' | 'right' | 'middle'; double?: boolean },
     ) => await liveService.input.mouseClick(x, y, options),
   );
-  ipcMain.handle(
+  handleHudIpc(
     'computer:mouse-drag',
     async (_, startX: number, startY: number, endX: number, endY: number, steps?: number) =>
       await liveService.input.mouseDrag(startX, startY, endX, endY, steps),
   );
-  ipcMain.handle(
+  handleHudIpc(
     'computer:mouse-scroll',
     async (_, deltaY: number) => await liveService.input.mouseScroll(deltaY),
   );
-  ipcMain.handle('computer:get-cursor', async () => await liveService.input.getCursorPosition());
-  ipcMain.handle(
+  handleHudIpc('computer:get-cursor', async () => await liveService.input.getCursorPosition());
+  handleHudIpc(
     'computer:type-text',
     async (_, text: string) => await liveService.input.typeText(text),
   );
-  ipcMain.handle(
+  handleHudIpc(
     'computer:send-hotkey',
     async (_, keys: string | string[]) => await liveService.input.sendHotkey(keys),
   );
 
   // Application Lifecycle & Windows Management Handlers
-  ipcMain.handle('apps:list-windows', async () => await liveService.apps.listRunningWindows());
-  ipcMain.handle(
+  handleHudIpc('apps:list-windows', async () => await liveService.apps.listRunningWindows());
+  handleHudIpc(
     'apps:launch',
     async (_, appName: string, args?: string[]) =>
       await liveService.apps.launchApplication(appName, args),
   );
-  ipcMain.handle(
+  handleHudIpc(
     'apps:focus-window',
     async (_, query: string | number) => await liveService.apps.focusWindow(query),
   );
-  ipcMain.handle(
+  handleHudIpc(
     'apps:minimize-window',
     async (_, query: string | number) => await liveService.apps.minimizeWindow(query),
   );
-  ipcMain.handle(
+  handleHudIpc(
     'apps:maximize-window',
     async (_, query: string | number) => await liveService.apps.maximizeWindow(query),
   );
-  ipcMain.handle(
+  handleHudIpc(
     'apps:close-window',
     async (_, query: string | number) => await liveService.apps.closeWindow(query),
   );
-  ipcMain.handle(
+  handleHudIpc(
     'apps:run-command',
     async (_, command: string, options?: { timeoutMs?: number; requiresApproval?: boolean }) =>
       await liveService.apps.runSystemCommand(command, options),
   );
-  ipcMain.handle(
+  handleHudIpc(
     'apps:tile-windows',
     async (_, layout: WindowTilingLayout, options?: TileWindowsOptions) =>
       await liveService.apps.tileWindows(layout, options),
   );
-  ipcMain.handle(
+  handleHudIpc(
     'telemetry:get-hardware-metrics',
     async () => await liveService.hardware.sampleMetrics(),
   );
 
   // Autonomous Workflow Handlers
-  ipcMain.handle('workflow:create-task', (_, goal: string, steps?: any) =>
+  handleHudIpc('workflow:create-task', (_, goal: string, steps?: any) =>
     liveService.workflow.createTask(goal, steps),
   );
-  ipcMain.handle(
+  handleHudIpc(
     'workflow:start-task',
     async (_, taskId?: string) => await liveService.workflow.startTask(taskId),
   );
-  ipcMain.handle('workflow:pause-task', (_, taskId: string) =>
+  handleHudIpc('workflow:pause-task', (_, taskId: string) =>
     liveService.workflow.pauseTask(taskId),
   );
-  ipcMain.handle('workflow:pause-current', () => liveService.workflow.pauseCurrentTask());
-  ipcMain.handle(
+  handleHudIpc('workflow:pause-current', () => liveService.workflow.pauseCurrentTask());
+  handleHudIpc(
     'workflow:resume-task',
     async (_, taskId: string) => await liveService.workflow.resumeTask(taskId),
   );
-  ipcMain.handle(
+  handleHudIpc(
     'workflow:resume-current',
     async () => await liveService.workflow.resumeCurrentTask(),
   );
-  ipcMain.handle('workflow:cancel-task', (_, taskId: string) =>
+  handleHudIpc('workflow:cancel-task', (_, taskId: string) =>
     liveService.workflow.cancelTask(taskId),
   );
-  ipcMain.handle(
+  handleHudIpc(
     'workflow:emergency-stop',
     async (_, reason?: string) => await liveService.emergencyStop(reason),
   );
-  ipcMain.handle(
+  handleHudIpc(
     'workflow:approve-step',
     async (_, taskId: string, stepId: string) =>
       await liveService.workflow.approveStep(taskId, stepId),
   );
-  ipcMain.handle(
+  handleHudIpc(
     'workflow:reject-step',
     async (_, taskId: string, stepId: string, reason?: string) =>
       await liveService.workflow.rejectStep(taskId, stepId, reason),
   );
-  ipcMain.handle('workflow:get-current-task', () => liveService.workflow.getCurrentTask());
-  ipcMain.handle('workflow:list-checkpoints', () => liveService.workflow.listCheckpoints());
-  ipcMain.handle(
+  handleHudIpc('workflow:get-current-task', () => liveService.workflow.getCurrentTask());
+  handleHudIpc('workflow:list-checkpoints', () => liveService.workflow.listCheckpoints());
+  handleHudIpc(
     'workflow:resume-checkpoint',
     async (_, taskId: string) => await liveService.workflow.resumeCheckpoint(taskId),
   );
-  ipcMain.handle(
+  handleHudIpc(
     'workflow:discard-checkpoint',
     async (_, taskId: string) => await liveService.workflow.discardCheckpoint(taskId),
   );
   // Persistent Memory Handlers
-  ipcMain.handle('memory:get-preferences', () => liveService.memory.getPreferences());
-  ipcMain.handle('memory:update-preferences', (_, partial) =>
+  handleHudIpc('memory:get-preferences', () => liveService.memory.getPreferences());
+  handleHudIpc('memory:update-preferences', (_, partial) =>
     liveService.memory.updatePreferences(partial),
   );
-  ipcMain.handle('memory:get-alias', (_, name: string) => liveService.memory.getAlias(name));
-  ipcMain.handle('memory:set-alias', (_, name: string, targetApp: string, args?: string[]) =>
+  handleHudIpc('memory:get-alias', (_, name: string) => liveService.memory.getAlias(name));
+  handleHudIpc('memory:set-alias', (_, name: string, targetApp: string, args?: string[]) =>
     liveService.memory.setAlias(name, targetApp, args),
   );
-  ipcMain.handle('memory:list-aliases', () => liveService.memory.listAliases());
-  ipcMain.handle('memory:get-recipes', () => liveService.memory.getTaskRecipes());
-  ipcMain.handle('memory:get-recent-context', (_, limit?: number) =>
+  handleHudIpc('memory:list-aliases', () => liveService.memory.listAliases());
+  handleHudIpc('memory:get-recipes', () => liveService.memory.getTaskRecipes());
+  handleHudIpc('memory:get-recent-context', (_, limit?: number) =>
     liveService.memory.getRecentContext(limit),
   );
 
   // Autonomous Execution Dossier & Session Export to Markdown & HTML
-  ipcMain.handle('session:export', async (_, payload: SessionExportPayload) => {
+  handleHudIpc('session:export', async (_, payload: SessionExportPayload) => {
     return exportAuditSession(payload);
   });
 
   // OS Native Clipboard Handlers
-  ipcMain.handle('clipboard:read-text', () => liveService.clipboardService.readText());
-  ipcMain.handle('clipboard:write-text', (_, text: string) =>
+  handleHudIpc('clipboard:read-text', () => liveService.clipboardService.readText());
+  handleHudIpc('clipboard:write-text', (_, text: string) =>
     liveService.clipboardService.writeText(text),
   );
-  ipcMain.handle('clipboard:has-text', () => liveService.clipboardService.hasText());
-  ipcMain.handle('clipboard:read-html', () => liveService.clipboardService.readHtml());
-  ipcMain.handle('clipboard:write-html', (_, html: string) =>
+  handleHudIpc('clipboard:has-text', () => liveService.clipboardService.hasText());
+  handleHudIpc('clipboard:read-html', () => liveService.clipboardService.readHtml());
+  handleHudIpc('clipboard:write-html', (_, html: string) =>
     liveService.clipboardService.writeHtml(html),
   );
-  ipcMain.handle('clipboard:clear', () => liveService.clipboardService.clear());
+  handleHudIpc('clipboard:clear', () => liveService.clipboardService.clear());
 
   app.on('window-all-closed', () => {
     logLine(
