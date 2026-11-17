@@ -197,6 +197,21 @@ describe('GeminiLiveService connection lifecycle', () => {
     expect(errors).not.toHaveBeenCalled();
   });
 
+  it('declares the HUD web_search tool so live questions stay in the app', async () => {
+    const socket = await connectSocket();
+    socket.open();
+    const tools = sent(socket)[0].setup.tools as Array<{
+      functionDeclarations?: Array<{ name: string; description?: string }>;
+    }>;
+    const declarations = tools.flatMap((tool) => tool.functionDeclarations ?? []);
+    const search = declarations.find((entry) => entry.name === 'web_search');
+
+    expect(search).toBeDefined();
+    expect(search?.description).toMatch(/live web/i);
+    expect(declarations.map((entry) => entry.name)).toContain('navigate_to_url');
+    expect(state.isSetupComplete).toBe(false);
+  });
+
   it('accepts setupComplete by clearing its deadline, resetting backoff, and entering listening', async () => {
     const first = await connectSocket();
     const retry = await reconnectAfterDrop(first);

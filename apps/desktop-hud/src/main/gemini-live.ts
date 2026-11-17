@@ -26,6 +26,7 @@ import { PdfReader } from './pdf-reader.js';
 import { extractDocxText } from './document-reader.js';
 import { VideoReader } from './video-reader.js';
 import { transcribeAudio } from './audio-transcriber.js';
+import { webSearch } from './web-search.js';
 import { buildDefaultAdapterRegistry } from './application-adapters.js';
 import type {
   BoundingBoxTarget,
@@ -775,9 +776,7 @@ export class GeminiLiveService extends EventEmitter {
                 '- Do not respond to silence, ambient room sound, line noise, or breathing. Do not guess what the user might want.',
                 '- Respond naturally to speech addressed to you, including greetings such as "hello", questions, and requests. If speech is unclear, ask a brief clarification instead of inventing a command.',
                 'You possess complete human-like, OS-wide autonomous control over Windows: mouse clicking, dragging, moving, hardware mouse wheel scrolling, keyboard typing and hotkeys, window management (maximize, minimize, restore, close), application management, and Chrome browser tabs via CDP.',
-                this.searchGroundingDisabled
-                  ? 'REAL-TIME WEB LOOKUP: Built-in Google Search grounding is disabled for this session because the API key plan does not include it. When the user asks for current facts, recent events, or a web lookup, use the Chrome tools (navigate_to_url, browser_read, browser_click) to check the live page instead of guessing or claiming you searched.'
-                  : 'REAL-TIME WEB LOOKUP: Use built-in Google Search grounding for current facts, recent events, changing information, or whenever the user asks you to browse/search the web. This search runs through Gemini and does not open Chrome. Give a concise answer grounded in the results and name the sources. Use Chrome tools only when the user asks you to interact with a website, inspect an open page, or perform a browser action.',
+                'REAL-TIME WEB LOOKUP (IMPORTANT): For current affairs, today news, breaking events, prices, scores, weather, or anything recent or time-sensitive, IMMEDIATELY call web_search({ query: "..." }) before answering. It searches the live web from inside the HUD and returns headlines with publisher names and URLs, so reply in one or two spoken sentences and name the source. NEVER open Chrome, Google News, or any website merely to look something up, and never claim you searched without calling web_search. Use the Chrome tools only when the user explicitly asks to see, open, or interact with a page.',
                 'COORDINATE SPACE: You see downscaled frames (usually 1024x576) of the desktop. Report click/move coordinates in those frame pixels; the runtime rescales them to the physical desktop. Pass coordinate_space:"physical" only when you are certain your numbers are already desktop pixels.',
                 'FAST-PATH AUTONOMOUS ACTIONS (CRITICAL):',
                 '- When asked to MAXIMIZE a window (e.g. "maximize Chrome", "maximize window", "make it full screen"): IMMEDIATELY call maximize_window({ window_title: "Chrome" }). Do NOT call switch_active_window or tile_windows.',
@@ -823,6 +822,32 @@ export class GeminiLiveService extends EventEmitter {
           ...(this.searchGroundingDisabled ? [] : [{ googleSearch: {} }]),
           {
             functionDeclarations: [
+              {
+                name: 'web_search',
+                behavior: 'NON_BLOCKING',
+                description:
+                  'Searches the live web from inside the HUD and returns fresh headlines, snippets, publishers and URLs. Use this FIRST for current affairs, today news, breaking events, prices, scores, weather, or any question that depends on recent facts. It does not open a browser or move the mouse.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    query: {
+                      type: 'STRING',
+                      description:
+                        'What to look up, as a search query. Include the topic and any place or entity (for example "Quad summit Manila 2026" or "today top news India").',
+                    },
+                    news: {
+                      type: 'BOOLEAN',
+                      description:
+                        'True to search news sources only. Leave unset to let the runtime decide from the query.',
+                    },
+                    limit: {
+                      type: 'INTEGER',
+                      description: 'How many results to return (default 8, max 12).',
+                    },
+                  },
+                  required: ['query'],
+                },
+              },
               {
                 name: 'teach_visual_blackboard',
                 behavior: 'NON_BLOCKING',
@@ -2970,6 +2995,39 @@ export class GeminiLiveService extends EventEmitter {
                 taskId: task.id,
                 goal: task.goal,
                 stepCount: task.steps.length,
+              };
+              break;
+            }
+
+            case 'web_search': {
+              const query = String(call.args.query ?? '').trim();
+              if (!query) {
+                result = { success: false, error: 'web_search requires a query.' };
+                break;
+              }
+              const response = await webSearch(query, {
+                news: call.args.news === true ? true : undefined,
+                limit: Number(call.args.limit) || 8,
+              });
+              // Surface the publishers the assistant actually used, so the chat
+              // view can cite them instead of the model inventing sources.
+              for (const hit of response.hits) {
+                if (!hit.url || this.currentGroundingSources.some((s) => s.url === hit.url)) continue;
+                this.currentGroundingSources.push({
+                  title: hit.source ? `${hit.source}: ${hit.title}` : hit.title,
+                  url: hit.url,
+                });
+              }
+              result = {
+                success: response.hits.length > 0,
+                query: response.query,
+                news: response.news,
+                providers: response.providers,
+                fetchedAt: response.fetchedAt,
+                results: response.hits,
+                ...(response.error ? { error: response.error } : {}),
+                instruction:
+                  'Answer from these results in one or two spoken sentences and name the publisher. Do not open Chrome to verify them.',
               };
               break;
             }
