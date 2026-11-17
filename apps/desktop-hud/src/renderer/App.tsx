@@ -133,7 +133,7 @@ export function App() {
     // 1. Initialize Audio Controller & Sound Effects Engine
     const audioCtrl = new AudioController((chunk) => {
       if (window.geminiHUD?.gemini) {
-        void window.geminiHUD.gemini.sendAudioChunk(chunk);
+        window.geminiHUD.gemini.sendAudioChunk(chunk);
       }
     });
     audioCtrl.setVolume(settings.soundVolume ?? 0.5);

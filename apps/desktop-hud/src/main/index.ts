@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { appendFileSync, mkdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { CDPClient } from './cdp-client.js';
 import { HardwareMonitorService } from './hardware-monitor.js';
+import { createAudioStreamHandler } from './audio-stream-ipc.js';
 import {
   ELECTRON_USER_DATA_DIR,
   ICON_PATH,
@@ -691,8 +692,24 @@ if (!gotLock) {
   });
   handleHud('gemini:disconnect', () => liveService.disconnect());
   handleHud('gemini:send-text', (_, text: string) => liveService.sendText(text));
-  handleHud('gemini:send-audio-chunk', (_, base64: string) =>
-    liveService.sendAudioChunk(base64),
+  // PCM frames are continuous stream data, not discrete IPC commands.
+  // Keep trust and payload boundaries, but exempt realtime audio from the
+  // invoke-channel 100/minute limiter used for discrete control commands.
+  ipcMain.on(
+    'gemini:input-audio-chunk',
+    createAudioStreamHandler({
+      getTrustedSender: () => {
+        const win = getMainWindow();
+        return win && !win.isDestroyed() ? win.webContents : null;
+      },
+      trustedUrl: pathToFileURL(join(__dirname, 'index.html')).href,
+      sendAudioChunk: (base64) => liveService.sendAudioChunk(base64),
+      onRejected: (reason) => {
+        if (reason === 'untrusted-sender') {
+          logLine('electron-error', 'Rejected untrusted Gemini audio stream event');
+        }
+      },
+    }),
   );
   handleHud('gemini:send-frame', (_, base64: string) => liveService.sendImageFrame(base64));
   handleHud('gemini:get-settings', () => liveService.currentSettings);

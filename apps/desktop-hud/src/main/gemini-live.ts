@@ -656,6 +656,12 @@ export class GeminiLiveService extends EventEmitter {
             {
               text: [
                 'You are Assistant, an advanced Autonomous Multimodal Computer-Use Co-Pilot embedded in a native desktop HUD.',
+                'INFORMATION DELIVERY AND SPOKEN BRIEFINGS (CRITICAL):',
+                '- When the user asks you to explain, summarize, dictate, read aloud, or give a current-affairs briefing, answer conversationally using spoken audio. A long answer is still an answer, not permission to take over the computer.',
+                '- Treat phrases such as "dictate", "read out", "brief me", and "tell me" as requests for spoken information. Do NOT type the spoken request into Chrome, click page fields, navigate, launch applications, or start autonomous_goal merely to produce an informational answer.',
+                '- For time-sensitive current affairs, prefer read-only retrieval from the already open browser page when available, then summarize the evidence and speak the result. Use no keyboard or mouse mutations for an information-only request.',
+                '- If browser reading fails, take one read-only desktop screenshot and inspect it visually. Do not enter repeated OCR loops or start typing into the browser. State any remaining source limitation honestly.',
+                '- Keep the spoken answer structured and complete. Do not remain silent after finishing a browser or desktop read; summarize what you found and speak the answer.',
                 'CONVERSATIONAL INITIATION & SILENCE INVARIANTS (CRITICAL):',
                 '- Wait for the user to speak after connecting. Do not produce an unsolicited greeting or announcement.',
                 '- Do not respond to silence, ambient room sound, line noise, or breathing. Do not guess what the user might want.',
@@ -663,6 +669,7 @@ export class GeminiLiveService extends EventEmitter {
                 'You possess complete human-like, OS-wide autonomous control over Windows: mouse clicking, dragging, moving, hardware mouse wheel scrolling, keyboard typing and hotkeys, window management (maximize, minimize, restore, close), application management, and Chrome browser tabs via CDP.',
                 'COORDINATE SPACE: You see downscaled frames (usually 1024x576) of the desktop. Report click/move coordinates in those frame pixels; the runtime rescales them to the physical desktop. Pass coordinate_space:"physical" only when you are certain your numbers are already desktop pixels.',
                 'FAST-PATH AUTONOMOUS ACTIONS (CRITICAL):',
+                '- When the user says stop, cancel, or abort an active autonomous task, call stop_autonomous_task immediately. Do not continue the task or issue another computer action.',
                 '- When asked to MAXIMIZE a window (e.g. "maximize Chrome", "maximize window", "make it full screen"): IMMEDIATELY call maximize_window({ window_title: "Chrome" }). Do NOT call switch_active_window or tile_windows.',
                 '- When asked to SCROLL DOWN or SCROLL UP in a document, PDF, or webpage (e.g. "scroll down", "scroll up", "scroll pdf", "read further"): IMMEDIATELY call scroll_page({ direction: "down" }) or scroll_page({ direction: "up" }). Never merely claim you scrolled—always invoke the tool call.',
                 '- When asked to TAKE A SCREENSHOT, show screen, paste screenshot in chat, or view what is on screen: IMMEDIATELY call computer_use_screenshot({}). It captures the screen and displays the screenshot directly in the chat.',
@@ -1668,6 +1675,12 @@ export class GeminiLiveService extends EventEmitter {
                 },
               },
               {
+                name: 'stop_autonomous_task',
+                behavior: 'NON_BLOCKING',
+                description: 'Immediately aborts the currently running autonomous desktop task and releases held keyboard or mouse input. Use when the user says stop, cancel, or abort.',
+                parameters: { type: 'OBJECT', properties: {} },
+              },
+              {
                 name: 'open_blender',
                 behavior: 'NON_BLOCKING',
                 description:
@@ -2028,7 +2041,7 @@ export class GeminiLiveService extends EventEmitter {
       try {
         const result = await this.executionGuard.execute(call.name, call.args, async () => {
           if (!isActive(call.id)) throw new Error('Tool call cancelled before execution.');
-          if (autonomousAgent.isSessionRunning()) {
+          if (autonomousAgent.isSessionRunning() && call.name !== 'stop_autonomous_task') {
             throw new Error(
               'An autonomous task owns the computer. Stop it before issuing another action.',
             );
@@ -2036,6 +2049,19 @@ export class GeminiLiveService extends EventEmitter {
           let result: Record<string, any>;
 
           switch (call.name) {
+            case 'stop_autonomous_task': {
+              const wasRunning = autonomousAgent.isSessionRunning();
+              const stopped = await autonomousAgent.stopSession();
+              result = {
+                success: stopped.stopped,
+                stopped: wasRunning && stopped.stopped,
+                status: wasRunning ? 'cancelled' : 'idle',
+                message: wasRunning
+                  ? 'Autonomous task cancelled and input release requested.'
+                  : 'No autonomous desktop task was running.',
+              };
+              break;
+            }
             case 'list_application_skills': {
               await computerOperator.initialize();
               const skills = await Promise.all(
@@ -2877,11 +2903,32 @@ export class GeminiLiveService extends EventEmitter {
               try {
                 const pageData = await this.cdpClient.readPage();
                 result = { success: true, ...pageData };
-              } catch (err) {
-                result = {
-                  success: false,
-                  error: err instanceof Error ? err.message : String(err),
-                };
+              } catch (readError) {
+                // If Chrome is visible but DevTools is unavailable, supply
+                // one screenshot to Gemini rather than typing or looping OCR.
+                try {
+                  const shot = await this.computerVision.captureScreen();
+                  this.sendImageFrame(shot.data);
+                  this.emit('conversation-message', {
+                    id: 'browser_read_fallback_' + Date.now(),
+                    kind: 'assistant',
+                    title: 'Browser visual fallback',
+                    text: 'Chrome DevTools reading was unavailable. A desktop screenshot was supplied for visual inspection.',
+                    imageUrl: 'data:image/jpeg;base64,' + shot.data,
+                    at: Date.now(),
+                  } as ConversationMessage);
+                  result = {
+                    success: true,
+                    source: 'desktop-screenshot-fallback',
+                    dimensions: shot.width + ' × ' + shot.height,
+                    warning: 'The Chrome DOM could not be read. Inspect the supplied screenshot visually; do not type into the page.',
+                  };
+                } catch (captureError) {
+                  result = {
+                    success: false,
+                    error: 'Chrome page read failed: ' + (readError instanceof Error ? readError.message : String(readError)) + '. Screenshot fallback failed: ' + (captureError instanceof Error ? captureError.message : String(captureError)),
+                  };
+                }
               }
               break;
             }
@@ -3009,7 +3056,7 @@ export class GeminiLiveService extends EventEmitter {
               const goal = String(call.args.goal || '');
               const maxIterations =
                 typeof call.args.maxIterations === 'number' ? call.args.maxIterations : undefined;
-              const session = await autonomousAgent.startSession(goal, {
+              const sessionPromise = autonomousAgent.startSession(goal, {
                 maxIterations,
                 autoApprove: this.settings.autoApprove,
                 onObservation: (obs) => {
@@ -3069,14 +3116,27 @@ export class GeminiLiveService extends EventEmitter {
                   } as any);
                 },
               });
+              // Return control to Gemini Live immediately. The computer-use
+              // session continues independently and reports progress/events.
+              const session = autonomousAgent.getSession();
+              void sessionPromise.catch((error) => {
+                this.emit('conversation-message', {
+                  id: 'goal_start_fail_' + Date.now(),
+                  kind: 'assistant',
+                  title: 'Autonomous task could not start',
+                  text: 'Goal "' + goal + '" could not be started: ' + (error instanceof Error ? error.message : String(error)),
+                  at: Date.now(),
+                } as ConversationMessage);
+              });
               result = {
-                success: session.status === 'completed',
-                sessionId: session.id,
-                goal: session.goal,
-                status: session.status,
-                iterations: session.iterations,
-                steps: session.steps.length,
-                error: session.error,
+                success: true,
+                accepted: true,
+                sessionId: session?.goal === goal ? session.id : undefined,
+                goal,
+                status: session?.goal === goal ? session.status : 'running',
+                iterations: session?.goal === goal ? session.iterations : 0,
+                steps: session?.goal === goal ? session.steps.length : 0,
+                message: 'Autonomous task accepted and running. Continue the conversation while progress updates arrive.',
               };
               break;
             }

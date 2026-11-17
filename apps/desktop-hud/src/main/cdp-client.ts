@@ -144,9 +144,7 @@ export class CDPClient extends EventEmitter {
       if (this.rerunRequested && this.pollInterval && !this.isSuspended) {
         this.rerunRequested = false;
         void this.pollTabsGuarded(this.trackingGeneration, 0);
-        return;
-      }
-      if (!this.isSuspended && this.pollInterval) {
+      } else if (!this.isSuspended && this.pollInterval) {
         this.pollInterval = setTimeout(() => {
           void this.pollTabsGuarded(this.trackingGeneration, intervalMs);
         }, intervalMs);

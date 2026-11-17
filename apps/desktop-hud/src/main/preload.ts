@@ -98,8 +98,10 @@ const api = {
     connect: (): Promise<boolean> => ipcRenderer.invoke('gemini:connect'),
     disconnect: (): Promise<void> => ipcRenderer.invoke('gemini:disconnect'),
     sendText: (text: string): Promise<boolean> => ipcRenderer.invoke('gemini:send-text', text),
-    sendAudioChunk: (base64: string): Promise<void> =>
-      ipcRenderer.invoke('gemini:send-audio-chunk', base64),
+    // Realtime PCM uses fire-and-forget IPC; invoke() creates a pending
+    // renderer promise for every frame and trips discrete-command limits.
+    sendAudioChunk: (base64: string): void =>
+      ipcRenderer.send('gemini:input-audio-chunk', base64),
     sendFrame: (base64: string): Promise<void> => ipcRenderer.invoke('gemini:send-frame', base64),
     getSettings: (): Promise<HUDSettings> => ipcRenderer.invoke('gemini:get-settings'),
     updateSettings: (settings: Partial<HUDSettings>): Promise<void> =>
