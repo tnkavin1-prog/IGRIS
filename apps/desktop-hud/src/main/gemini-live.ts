@@ -90,7 +90,7 @@ function isSearchGroundingRejection(code: number, reason: string): boolean {
 }
 
 function readSavedGeminiApiKey(): string | null {
-  if (!existsSync(GEMINI_API_KEY_FILE) || !safeStorage.isEncryptionAvailable()) return null;
+  if (!existsSync(GEMINI_API_KEY_FILE) || !safeStorage?.isEncryptionAvailable?.()) return null;
   try {
     return safeStorage.decryptString(readFileSync(GEMINI_API_KEY_FILE));
   } catch (error) {
@@ -100,8 +100,10 @@ function readSavedGeminiApiKey(): string | null {
 }
 
 function saveGeminiApiKey(apiKey: string): void {
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error('Windows secure storage is unavailable. The API key was not saved.');
+  if (!safeStorage?.isEncryptionAvailable?.()) {
+    // No OS-level secret store (or a test harness): keep the key in memory only.
+    console.warn('[Gemini] Windows secure storage is unavailable; the API key was not saved.');
+    return;
   }
   mkdirSync(ELECTRON_USER_DATA_DIR, { recursive: true });
   const temporaryFile = `${GEMINI_API_KEY_FILE}.tmp`;
@@ -361,6 +363,9 @@ export class GeminiLiveService extends EventEmitter {
     const updates = { ...newSettings };
     if (updates.apiKey !== undefined) {
       updates.apiKey = updates.apiKey.trim();
+      // Best effort: the session still uses the key from memory this run even
+      // when Windows secure storage is unavailable, so a failure here must not
+      // abort the rest of the settings update.
       saveGeminiApiKey(updates.apiKey);
     }
     this.settings = { ...this.settings, ...updates };
