@@ -28,6 +28,13 @@ export interface EmberHUDProps {
   onOpenConsole: () => void;
 }
 
+/**
+ * Longest caption tail kept in the DOM. Spoken answers can be several hundred
+ * words; the box only shows the last two lines, so this is purely a memory
+ * bound that stays far larger than what can ever be on screen.
+ */
+const TRANSCRIPT_MAX_WORDS = 140;
+
 const PILLS: Array<{ id: EmberOrbState; label: string }> = [
   { id: 'idle', label: 'Idle' },
   { id: 'listening', label: 'Listen' },
@@ -110,6 +117,10 @@ export function EmberHUD({
 }: EmberHUDProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const sheetRef = useRef<HTMLDialogElement>(null);
+  const transcriptRef = useRef<HTMLDivElement | null>(null);
+  // Words already committed to the screen for this turn, so only newly spoken
+  // words animate in instead of the whole paragraph.
+  const renderedWordsRef = useRef<{ turnId: string; count: number }>({ turnId: '', count: 0 });
   const [statusVisible, setStatusVisible] = useState(true);
   const [reveal, setReveal] = useState(false);
 
@@ -122,16 +133,23 @@ export function EmberHUD({
   const statusLabel = statusTextFor(status);
   const modelLabel = formatModelLabel(settings.modelId);
 
-  const { clipped, display } = useMemo(() => {
+  const { words, display, turnId } = useMemo(() => {
     let lastUser = '';
     let lastAssistant = '';
+    let assistantId = '';
+    let userId = '';
     for (let i = conversation.length - 1; i >= 0 && !(lastUser && lastAssistant); i--) {
       const m = conversation[i];
       if (!m) continue;
       const t = m.text?.trim();
       if (!t) continue;
-      if (m.kind === 'user' && !lastUser) lastUser = t;
-      else if (m.kind === 'assistant' && !lastAssistant) lastAssistant = t;
+      if (m.kind === 'user' && !lastUser) {
+        lastUser = t;
+        userId = m.id;
+      } else if (m.kind === 'assistant' && !lastAssistant) {
+        lastAssistant = t;
+        assistantId = m.id;
+      }
     }
     const transcript =
       status === 'speaking' || status === 'thinking'
@@ -139,11 +157,19 @@ export function EmberHUD({
         : status === 'listening'
           ? lastUser
           : '';
-    const words = transcript.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
-    const clipped = words.slice(0, 18);
+    // Keep the tail of a long answer so the caption can scroll with the voice
+    // instead of stopping after a fixed snippet.
+    const all = transcript.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+    const words = all.slice(-TRANSCRIPT_MAX_WORDS);
     return {
-      clipped,
-      display: clipped.join(' ') + (words.length > clipped.length ? '…' : ''),
+      words,
+      display: words.join(' '),
+      turnId:
+        status === 'speaking' || status === 'thinking'
+          ? assistantId || userId || 'turn'
+          : status === 'listening'
+            ? userId || 'user'
+            : '',
     };
   }, [conversation, status]);
 
@@ -153,15 +179,38 @@ export function EmberHUD({
     return () => window.clearTimeout(timer);
   }, [status]);
 
+  // Animate the caption in once per spoken turn. Resetting this on every
+  // transcription chunk made the whole paragraph blur and re-fade as the answer
+  // streamed in.
   useEffect(() => {
-    if (!display) {
+    if (!turnId) {
       setReveal(false);
       return;
     }
     setReveal(false);
-    const timer = window.setTimeout(() => setReveal(true), 50);
+    const timer = window.setTimeout(() => setReveal(true), 40);
     return () => window.clearTimeout(timer);
-  }, [display]);
+  }, [turnId]);
+
+  // Keep the newest spoken line in view, the way live captions behave.
+  useEffect(() => {
+    const el = transcriptRef.current;
+    if (!el) return;
+    const frame = window.requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [display, reveal]);
+
+  // Words that are already on screen for this turn. Recording them after paint
+  // lets the next chunk animate only the words that were just spoken instead of
+  // fading the whole paragraph in again.
+  const previousWordCount =
+    renderedWordsRef.current.turnId === turnId ? renderedWordsRef.current.count : 0;
+
+  useEffect(() => {
+    renderedWordsRef.current = { turnId, count: words.length };
+  }, [turnId, words.length]);
 
   useEffect(() => {
     if (!sheetOpen) return;
@@ -280,11 +329,19 @@ export function EmberHUD({
           <EmberOrb state={orbState} />
         </button>
 
-        <div className={`transcript ${reveal ? 'show' : ''}`} aria-hidden="true">
-          {clipped.map((word, index) => (
+        <div className={`transcript ${reveal ? 'show' : ''}`} aria-hidden="true" ref={transcriptRef}>
+          {words.map((word, index) => (
             <Fragment key={`${index}-${word}`}>
-              <span style={{ transitionDelay: `${index * 70}ms` }}>{word}</span>
-              {index < clipped.length - 1 ? ' ' : null}
+              <span
+                style={{
+                  transitionDelay: `${
+                    index < previousWordCount ? 0 : Math.min((index - previousWordCount) * 40, 320)
+                  }ms`,
+                }}
+              >
+                {word}
+              </span>
+              {index < words.length - 1 ? ' ' : null}
             </Fragment>
           ))}
         </div>

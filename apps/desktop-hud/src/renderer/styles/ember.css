@@ -217,8 +217,19 @@
   font-size: 16px;
   line-height: 1.5;
   color: rgba(237, 230, 220, 0.85);
-  overflow: hidden;
+  /* Live captions: the box stays the same size, but the text scrolls inside it
+     so the line being spoken is never sliced off at the bottom. */
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
   z-index: 5;
+}
+
+.ember-root .transcript::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .ember-root .transcript span {
