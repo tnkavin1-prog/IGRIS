@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { ConversationMessage, HUDSettings, LiveHUDStatus } from '../main/types.js';
 import { EmberOrb, type EmberOrbState } from './EmberOrb.js';
 import { HudIcon } from './HudIcon.js';
@@ -23,6 +23,7 @@ export interface EmberHUDProps {
   onSoundVolumeChange: (volume: number) => void;
   onAutoApproveChange: (enabled: boolean) => void;
   onWakeWordChange: (enabled: boolean) => void;
+  onSaveApiKey: (apiKey: string) => Promise<{ ok: boolean; message: string }>;
   onCollapseToBar: () => void;
   onCollapseToOrb: () => void;
   onOpenConsole: () => void;
@@ -111,6 +112,7 @@ export function EmberHUD({
   onSoundVolumeChange,
   onAutoApproveChange,
   onWakeWordChange,
+  onSaveApiKey,
   onCollapseToBar,
   onCollapseToOrb,
   onOpenConsole,
@@ -123,6 +125,21 @@ export function EmberHUD({
   const renderedWordsRef = useRef<{ turnId: string; count: number }>({ turnId: '', count: 0 });
   const [statusVisible, setStatusVisible] = useState(true);
   const [reveal, setReveal] = useState(false);
+  const [apiKeyDraft, setApiKeyDraft] = useState('');
+  const [apiKeyMessage, setApiKeyMessage] = useState('');
+
+  const handleSaveApiKey = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const apiKey = apiKeyDraft.trim();
+    if (!apiKey) {
+      setApiKeyMessage('Paste a Gemini API key first.');
+      return;
+    }
+    setApiKeyMessage('Saving securely…');
+    const result = await onSaveApiKey(apiKey);
+    setApiKeyMessage(result.message);
+    if (result.ok) setApiKeyDraft('');
+  };
 
   const isLive =
     status === 'connecting' ||
@@ -448,6 +465,32 @@ export function EmberHUD({
                     {status === 'error' ? 'Offline' : isLive ? 'Online' : 'Standby'}
                   </span>
                 </div>
+              </div>
+            </div>
+
+            <div className="em-section">
+              <div className="em-section-label">Gemini API</div>
+              <div className="em-card em-api-key-card">
+                <form onSubmit={handleSaveApiKey}>
+                  <label htmlFor="gemini-api-key">API key</label>
+                  <div className="em-api-key-controls">
+                    <input
+                      id="gemini-api-key"
+                      type="password"
+                      value={apiKeyDraft}
+                      onChange={(event) => setApiKeyDraft(event.target.value)}
+                      placeholder={settings.apiKey ? 'Saved key hidden · paste replacement' : 'Paste Gemini API key'}
+                      autoComplete="new-password"
+                      spellCheck={false}
+                      aria-label="Gemini API key"
+                    />
+                    <button type="submit" disabled={!apiKeyDraft.trim()}>
+                      Save
+                    </button>
+                  </div>
+                  <small>Stored encrypted on this PC. Paste a new key to replace the current one.</small>
+                  {apiKeyMessage && <div className="em-api-key-message" role="status">{apiKeyMessage}</div>}
+                </form>
               </div>
             </div>
 

@@ -19,7 +19,7 @@ export interface WindowState {
   positions: Partial<Record<HudDisplayMode, SavedPoint>>;
 }
 
-const MODES: HudDisplayMode[] = ['orb', 'bar', 'full', 'console'];
+const MODES: HudDisplayMode[] = ['orb', 'bar', 'full', 'console', 'advanced'];
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
 export function defaultWindowState(): WindowState {

@@ -14,6 +14,7 @@ import type {
   WorkflowStep,
 } from '../main/types.js';
 import { CompactHUD } from './CompactHUD.js';
+import { AdvancedConsole } from './AdvancedConsole.js';
 import { EmberHUD } from './EmberHUD.js';
 import { HudIcon } from './HudIcon.js';
 import { AudioController } from './audio-controller.js';
@@ -23,6 +24,18 @@ import { resolveInitialDisplayMode } from '../main/display-mode.js';
 import { useModeTransition } from './hooks/useModeTransition.js';
 import { ResizeHandles } from './ResizeHandles.js';
 import './types.js';
+
+function withTimeout<T>(operation: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timer: number | undefined;
+  return Promise.race([
+    operation,
+    new Promise<never>((_, reject) => {
+      timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    }),
+  ]).finally(() => {
+    if (timer !== undefined) window.clearTimeout(timer);
+  });
+}
 
 export function App() {
   const [status, setStatus] = useState<LiveHUDStatus>('idle');
@@ -277,6 +290,7 @@ export function App() {
               ...last,
               id: last.id || msg.id,
               text: existing + incoming,
+              sources: msg.sources?.length ? msg.sources : last.sources,
             };
             const next = [...prev];
             next[lastIndex] = updated;
@@ -527,6 +541,24 @@ export function App() {
     void window.geminiHUD?.gemini.updateSettings({ wakeWordEnabled: enabled });
   };
 
+  const handleSaveGeminiApiKey = async (
+    apiKey: string,
+  ): Promise<{ ok: boolean; message: string }> => {
+    const trimmed = apiKey.trim();
+    if (!trimmed) return { ok: false, message: 'Paste a Gemini API key first.' };
+    if (!window.geminiHUD) return { ok: false, message: 'Gematron settings are unavailable.' };
+    try {
+      handleStopSession();
+      await window.geminiHUD.gemini.disconnect().catch(() => undefined);
+      await window.geminiHUD.gemini.updateSettings({ apiKey: trimmed });
+      setSettings((previous) => ({ ...previous, apiKey: trimmed }));
+      return { ok: true, message: 'Key saved securely. Tap the orb to reconnect.' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, message: `Could not save the key: ${message}` };
+    }
+  };
+
   const handleStartSession = async () => {
     if (
       !window.geminiHUD ||
@@ -538,9 +570,17 @@ export function App() {
     setStatus('connecting');
     setExportNotice(null);
     try {
-      await soundEngineRef.current?.unlock();
+      await withTimeout(
+        Promise.resolve(soundEngineRef.current?.unlock() ?? true),
+        5_000,
+        'Audio setup did not finish. Check the Windows output device and retry.',
+      );
       if (generation !== sessionGenerationRef.current) return;
-      const outputReady = await audioControllerRef.current?.unlock();
+      const outputReady = await withTimeout(
+        audioControllerRef.current?.unlock() ?? Promise.resolve(false),
+        5_000,
+        'Audio output did not become ready. Check the Windows output device and retry.',
+      );
       if (generation !== sessionGenerationRef.current) return;
       if (!outputReady) {
         statusRef.current = 'idle';
@@ -548,7 +588,11 @@ export function App() {
         setExportNotice('Audio output unavailable. Check the Windows output device.');
         return;
       }
-      const ok = await window.geminiHUD.gemini.connect();
+      const ok = await withTimeout(
+        window.geminiHUD.gemini.connect(),
+        10_000,
+        'Gematron could not start the Gemini connection. Check the API key and network, then retry.',
+      );
       if (generation !== sessionGenerationRef.current) return;
       if (!ok) {
         statusRef.current = 'error';
@@ -753,6 +797,14 @@ export function App() {
 
   // Use mode transition hook for animated surface morphing
   const renderMode = useModeTransition(displayMode);
+  const sendAdvancedText = (text: string) => {
+    if (['listening', 'thinking', 'speaking'].includes(statusRef.current)) {
+      handleSendText(text);
+      return;
+    }
+    void handleStartSession();
+    window.setTimeout(() => handleSendText(text), 2500);
+  };
 
   if (renderMode === 'full') {
     return (
@@ -763,6 +815,7 @@ export function App() {
         soundMuted={soundMuted}
         soundVolume={soundVolume}
         isPinned={isPinned}
+        notice={exportNotice}
         onTogglePin={handleTogglePin}
         onMinimize={() => window.geminiHUD?.windowControl.minimize()}
         onClose={handleClose}
@@ -772,9 +825,10 @@ export function App() {
         onSoundVolumeChange={handleSoundVolumeChange}
         onAutoApproveChange={handleAutoApproveChange}
         onWakeWordChange={handleWakeWordChange}
+        onSaveApiKey={handleSaveGeminiApiKey}
         onCollapseToBar={handleCollapseToBar}
         onCollapseToOrb={handleCollapseToOrb}
-        onOpenConsole={() => setDisplayMode('console')}
+        onOpenConsole={() => setDisplayMode('advanced')}
       />
     );
   }
@@ -802,7 +856,7 @@ export function App() {
           onClose={handleClose}
           onCollapseToBar={handleCollapseToBar}
           onCollapseToOrb={handleCollapseToOrb}
-          onOpenEmber={() => setDisplayMode('full')}
+          onOpenEmber={() => setDisplayMode('advanced')}
           onStartSession={handleStartSession}
           onStopSession={handleStopSession}
           onSendText={handleSendText}
@@ -834,6 +888,57 @@ export function App() {
         <ResizeHandles />
       </>
     );
+  }
+
+  if (renderMode === 'advanced') {
+    return <AdvancedConsole
+      status={status} conversation={conversation} settings={settings} telemetry={telemetry}
+      pinned={isPinned} chromeConnected={chromeConnected} notice={exportNotice}
+      onAction={(action, payload) => {
+        switch (action) {
+          case 'return-normal': setDisplayMode('console'); break;
+          case 'toggle-pin': void handleTogglePin(); break;
+          case 'export-session': void handleExportSession(); break;
+          case 'close': handleClose(); break;
+          case 'start-session': void handleStartSession(); break;
+          case 'stop-session': handleStopSession(); break;
+          case 'send-text': {
+            const text = typeof payload?.text === 'string' ? payload.text.trim() : '';
+            if (!text) break;
+            sendAdvancedText(text);
+            break;
+          }
+          case 'clean-downloads': void handleStartAutonomousTask('Review the Downloads folder, identify duplicates and stale installers, and propose an organized cleanup. Do not delete or move files without explicit approval.'); break;
+          case 'focus-session': void handleStartAutonomousTask('Start a focused study session. Inspect the desktop and propose a distraction-reducing setup. Ask before changing windows or settings.'); break;
+          case 'summarize-screen': void (async () => {
+            if (!['listening', 'thinking', 'speaking'].includes(statusRef.current)) {
+              await handleStartSession();
+              await new Promise((resolve) => window.setTimeout(resolve, 2500));
+            }
+            await handleScanDesktop();
+            sendAdvancedText('Summarize the current desktop screenshot I just shared. Give the key points and visible next actions.');
+          })(); break;
+          case 'explain-board': {
+            const tex = typeof payload?.tex === 'string' ? payload.tex : '';
+            if (tex) sendAdvancedText(`Explain this formula and give a concise worked example: ${tex}`);
+            break;
+          }
+          case 'slide-board': void handleStartAutonomousTask('Create a concise study slide deck about the current whiteboard topic. Ask before saving or overwriting files.'); break;
+          case 'launch-browser': void window.geminiHUD?.cdp.launchChrome(); break;
+          case 'kill-switch': void handleEmergencyStop('Advanced console kill switch activated'); break;
+          case 'set-pin': if (payload?.value !== isPinned) void handleTogglePin(); break;
+          case 'set-wake-word': handleWakeWordChange(Boolean(payload?.value)); break;
+          case 'set-auto-approve': handleAutoApproveChange(Boolean(payload?.value)); break;
+          case 'set-sound': handleToggleSoundMute(); break;
+          case 'ask-all-models':
+          case 'not-connected':
+            setExportNotice(action === 'ask-all-models' ? 'Multi-model dispatch is not connected yet.' : `${String(payload?.feature || 'This integration')} is not connected.`);
+            window.setTimeout(() => setExportNotice(null), 3500);
+            break;
+          default: break;
+        }
+      }}
+    />;
   }
 
   const isLive = ['connecting', 'listening', 'speaking', 'thinking'].includes(status);

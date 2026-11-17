@@ -47,6 +47,7 @@ export const DISPLAY_PRESETS: Record<HudDisplayMode, Size> = {
   bar: { width: 420, height: 62 },
   full: { width: 400, height: 600 },
   console: { width: 540, height: 700 },
+  advanced: { width: 940, height: 860 },
 };
 
 /** Console is the only resizable mode (visible-surface limits). */
@@ -56,7 +57,7 @@ export const CONSOLE_LIMITS = {
 } as const;
 
 export function isHudDisplayMode(value: unknown): value is HudDisplayMode {
-  return value === 'orb' || value === 'bar' || value === 'full' || value === 'console';
+  return value === 'orb' || value === 'bar' || value === 'full' || value === 'console' || value === 'advanced';
 }
 
 /**

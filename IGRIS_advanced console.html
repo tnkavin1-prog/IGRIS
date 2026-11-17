@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gematron · Advanced Console</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+
+<style>
+:root{
+  --bg:#0a0908;
+  --panel:#12100f;
+  --panel2:#181513;
+  --panel3:#1f1b18;
+  --line:rgba(255,214,170,.07);
+  --line2:rgba(255,214,170,.14);
+  --tx:#f0e9e0;
+  --mut:#948a7f;
+  --dim:#5f574f;
+  --amb:#f0a35e;
+  --amb2:#ffcfa3;
+  --amb3:#c9672b;
+  --ok:#8fcf9a;
+  --ui:'Manrope',system-ui,'Segoe UI',sans-serif;
+  --serif:'Instrument Serif','Times New Roman',serif;
+  --mono:'JetBrains Mono',ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:var(--ui);color:var(--tx);
+  display:grid;place-items:center;overflow:hidden;
+  background:
+    radial-gradient(900px 500px at 15% 105%,rgba(240,140,60,.22),transparent 60%),
+    radial-gradient(700px 500px at 90% -10%,rgba(190,90,40,.16),transparent 60%),
+    linear-gradient(160deg,#171210,#0a0807 60%);
+}
+body::before{ /* subtle vignette + grain */
+  content:"";position:fixed;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse at center,transparent 40%,rgba(0,0,0,.55));
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input,select{font:inherit;color:inherit}
+.ic{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ic.sm{width:15px;height:15px}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:rgba(255,214,170,.1);border-radius:8px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,214,170,.2)}
+
+/* ───────── ORB ───────── */
+.orb{
+  --s:200px;width:var(--s);height:var(--s);border-radius:50%;position:relative;flex:none;
+  background:radial-gradient(circle at 36% 30%,#ffe3c8 0%,#f5b080 30%,#e08a52 58%,#a8532a 85%,#7a3a1c 100%);
+  box-shadow:0 0 calc(var(--s)*.35) rgba(240,150,80,.28),
+             inset calc(var(--s)*-.06) calc(var(--s)*-.08) calc(var(--s)*.2) rgba(90,35,10,.55),
+             inset calc(var(--s)*.04) calc(var(--s)*.05) calc(var(--s)*.15) rgba(255,236,215,.35);
+}
+.orb::after{ /* think swirl */
+  content:"";position:absolute;inset:0;border-radius:50%;opacity:0;transition:opacity .4s;
+  background:conic-gradient(from 0deg,transparent 0 55%,rgba(255,240,225,.45) 75%,transparent 95%);
+  mix-blend-mode:soft-light;
+}
+.orb.sm{--s:34px}
+.orb.xs{--s:26px}
+[data-state=idle]  .orb.live{animation:breathe 6s ease-in-out infinite}
+[data-state=listen] .orb.live{animation:breathe 2.4s ease-in-out infinite}
+[data-state=speak] .orb.live{animation:speak 1.1s ease-in-out infinite}
+[data-state=think] .orb.live{animation:breathe 3s ease-in-out infinite}
+[data-state=think] .orb.live::after{opacity:1;animation:spin 2.2s linear infinite}
+.orb.sm.live,.orb.xs.live{animation-duration:inherit}
+@keyframes breathe{0%,100%{transform:scale(1);filter:brightness(1)}50%{transform:scale(1.035);filter:brightness(1.07)}}
+@keyframes speak{0%,100%{transform:scale(1)}30%{transform:scale(1.05)}60%{transform:scale(.985)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ───────── WINDOW ───────── */
+.win{
+  position:relative;width:min(940px,96vw);height:min(860px,94vh);
+  display:grid;grid-template-columns:70px 1fr;grid-template-rows:auto 1fr;
+  background:linear-gradient(180deg,rgba(24,20,18,.96),rgba(12,10,9,.98));
+  border:1px solid var(--line2);border-radius:28px;overflow:hidden;
+  box-shadow:0 40px 120px rgba(0,0,0,.7),0 0 0 1px rgba(0,0,0,.6),
+             0 0 120px rgba(240,140,60,.07),inset 0 1px 0 rgba(255,225,190,.07);
+}
+.win::before{ /* ambient amber glow behind content */
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(500px 300px at 60% 0%,rgba(240,150,70,.07),transparent 70%);
+}
+
+/* title bar */
+.tb{grid-column:1/3;display:flex;align-items:center;gap:14px;padding:14px 18px 14px 20px;border-bottom:1px solid var(--line);position:relative;z-index:3;-webkit-app-region:drag}
+.tb button{-webkit-app-region:no-drag}
+.brand{display:flex;align-items:center;gap:12px}
+.name{font-family:var(--serif);font-style:italic;font-size:25px;line-height:1;letter-spacing:.2px}
+.status{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--mut);font-weight:600}
+.status i{width:6px;height:6px;border-radius:50%;background:var(--amb);box-shadow:0 0 8px var(--amb);animation:blink 2.4s infinite}
+@keyframes blink{50%{opacity:.45}}
+.model{position:relative;display:flex;align-items:center;gap:8px;margin-left:8px;padding:8px 14px;border-radius:999px;border:1px solid var(--line2);background:rgba(255,214,170,.03);font-size:12.5px;font-weight:500;color:var(--tx);transition:.2s}
+.model:hover{border-color:rgba(240,163,94,.4);background:rgba(240,163,94,.06)}
+.menu{position:absolute;top:calc(100% + 8px);left:0;min-width:200px;padding:6px;border-radius:16px;background:#171412;border:1px solid var(--line2);box-shadow:0 20px 50px rgba(0,0,0,.6);display:none;z-index:20;text-align:left}
+.menu.open{display:block;animation:pop .2s}
+.menu div{padding:9px 12px;border-radius:10px;font-size:12.5px;color:var(--mut);display:flex;justify-content:space-between}
+.menu div:hover{background:rgba(240,163,94,.08);color:var(--tx)}
+.menu div.on{color:var(--amb2)}
+.spacer{flex:1}
+.tools{display:flex;gap:6px}
+.tbtn{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;color:var(--mut);transition:.2s;border:1px solid transparent}
+.tbtn:hover{color:var(--tx);background:rgba(255,214,170,.06)}
+.tbtn.on{color:var(--amb);background:rgba(240,163,94,.1);border-color:rgba(240,163,94,.25)}
+.tbtn.x:hover{background:rgba(220,80,60,.15);color:#ff9d8a}
+
+/* rail */
+.rail{display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 0;border-right:1px solid var(--line);position:relative;z-index:2}
+.rb{position:relative;width:44px;height:44px;border-radius:15px;display:grid;place-items:center;color:var(--dim);transition:.25s}
+.rb:hover{color:var(--tx);background:rgba(255,214,170,.05)}
+.rb.active{color:var(--amb2);background:linear-gradient(145deg,rgba(240,163,94,.2),rgba(240,163,94,.06));box-shadow:inset 0 0 0 1px rgba(240,163,94,.28),0 6px 24px rgba(240,140,60,.12)}
+.rb.active::before{content:"";position:absolute;left:-13px;top:12px;bottom:12px;width:3px;border-radius:3px;background:var(--amb);box-shadow:0 0 12px var(--amb)}
+.rb::after{content:attr(data-tip);position:absolute;left:56px;padding:6px 10px;border-radius:9px;background:#1b1714;border:1px solid var(--line2);font-size:11px;letter-spacing:.06em;white-space:nowrap;opacity:0;transform:translateX(-4px);pointer-events:none;transition:.2s;color:var(--tx);z-index:30}
+.rb:hover::after{opacity:1;transform:none}
+.rail .grow{flex:1}
+
+/* main */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;position:relative;z-index:1}
+.ctx{display:flex;align-items:center;gap:8px;padding:14px 22px 6px}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:7px 13px;border-radius:999px;border:1px solid var(--line2);background:rgba(255,214,170,.025);font-size:12px;color:var(--mut);white-space:nowrap;transition:.2s}
+.chip b{color:var(--tx);font-weight:600}
+.chip.amb{color:var(--amb);border-color:rgba(240,163,94,.28);background:rgba(240,163,94,.06)}
+.chip.amb b{color:var(--amb2)}
+.chip.mono{font-family:var(--mono);font-size:11px;letter-spacing:.02em}
+.chip:hover{border-color:rgba(240,163,94,.35)}
+.ctx .spacer{flex:1}
+.eyebrow{font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--mut);font-weight:600}
+
+.views{flex:1;min-height:0;position:relative}
+.view{position:absolute;inset:0;overflow:auto;padding:12px 22px 18px;display:none}
+.view.active{display:block;animation:in .4s cubic-bezier(.2,.8,.2,1)}
+@keyframes in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes pop{from{opacity:0;transform:translateY(-4px) scale(.98)}to{opacity:1;transform:none}}
+
+/* ───────── CHAT ───────── */
+.chat{display:flex;flex-direction:column;gap:16px;padding-top:6px}
+.day{text-align:center;font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:var(--dim);font-weight:600;margin:6px 0}
+.day span{padding:0 12px}
+.msg{display:flex;gap:12px;align-items:flex-end;max-width:84%;animation:in .4s both}
+.msg.u{align-self:flex-end;flex-direction:row-reverse}
+.bub{padding:12px 17px;border-radius:20px;font-size:14px;line-height:1.55}
+.msg.a .bub{background:var(--panel2);border:1px solid var(--line2);border-bottom-left-radius:7px;color:#eadfd2}
+.msg.u .bub{background:linear-gradient(135deg,#f5b27a,#d9743a);color:#1d0f06;font-weight:500;border-bottom-right-radius:7px;box-shadow:0 8px 28px rgba(220,120,50,.28),inset 0 1px 0 rgba(255,255,255,.35)}
+.msg .time{font-size:10px;color:var(--dim);margin-top:5px;font-family:var(--mono)}
+.card{margin-top:10px;padding:14px;border-radius:16px;background:rgba(0,0,0,.28);border:1px solid var(--line)}
+.card .row{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--mut);margin-bottom:10px}
+.card .row b{color:var(--amb2);font-weight:600;display:flex;gap:6px;align-items:center}
+.bar{height:5px;border-radius:5px;background:rgba(255,214,170,.08);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:5px;background:linear-gradient(90deg,var(--amb3),var(--amb),var(--amb2));box-shadow:0 0 12px rgba(240,163,94,.5)}
+.stats{display:flex;gap:18px;margin-top:12px}
+.stats div{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.stats strong{display:block;font-family:var(--serif);font-size:24px;letter-spacing:0;text-transform:none;color:var(--tx);font-weight:400;margin-top:2px}
+.typing{display:flex;gap:5px;padding:15px 18px}
+.typing i{width:6px;height:6px;border-radius:50%;background:var(--amb);animation:dot 1.2s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes dot{0%,60%,100%{opacity:.25;transform:none}30%{opacity:1;transform:translateY(-4px)}}
+
+/* ───────── SECTION HEADS ───────── */
+.sh{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:6px 0 12px}
+.sh h3{font-size:10.5px;letter-spacing:.28em;text-transform:uppercase;color:var(--mut);font-weight:600}
+.title{font-family:var(--serif);font-size:34px;font-style:italic;line-height:1.05;margin:4px 0 4px}
+.sub{font-size:13px;color:var(--mut);margin-bottom:16px}
+.sel{appearance:none;padding:9px 38px 9px 15px;border-radius:14px;border:1px solid var(--line2);background:#16130f url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23948a7f' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m2 4 4 4 4-4'/%3E%3C/svg%3E") no-repeat right 14px center;font-size:12.5px;cursor:pointer;outline:0;max-width:300px}
+.sel:focus{border-color:rgba(240,163,94,.45)}
+
+/* ───────── BOARD ───────── */
+.btools{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.sq{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;border:1px solid var(--line2);background:rgba(255,214,170,.025);color:var(--mut);transition:.2s}
+.sq:hover{color:var(--tx);border-color:rgba(240,163,94,.35)}
+.sq.on{color:var(--amb);background:rgba(240,163,94,.1);border-color:rgba(240,163,94,.4)}
+.sw-c{display:flex;gap:9px;margin:0 10px}
+.dot-c{width:22px;height:22px;border-radius:50%;background:var(--c);border:2px solid transparent;box-shadow:0 0 0 1px rgba(255,255,255,.12);transition:.2s}
+.dot-c:hover{transform:scale(1.12)}
+.dot-c.on{border-color:#0f0d0b;box-shadow:0 0 0 2px var(--c),0 0 14px var(--c)}
+.pill{padding:9px 16px;border-radius:12px;border:1px solid var(--line2);background:rgba(255,214,170,.03);font-size:12.5px;font-weight:500;transition:.2s;display:inline-flex;align-items:center;gap:8px;color:var(--tx)}
+.pill:hover{border-color:rgba(240,163,94,.45);background:rgba(240,163,94,.07);color:var(--amb2)}
+.pill.fill{background:linear-gradient(135deg,#f5b27a,#d9743a);color:#1d0f06;border-color:transparent;font-weight:600;box-shadow:0 6px 20px rgba(220,120,50,.25)}
+.pill.fill:hover{filter:brightness(1.08);color:#1d0f06}
+.stage{position:relative;border-radius:22px;border:1px solid var(--line2);overflow:hidden;
+  background:
+    linear-gradient(rgba(255,214,170,.035) 1px,transparent 1px) 0 0/28px 28px,
+    linear-gradient(90deg,rgba(255,214,170,.035) 1px,transparent 1px) 0 0/28px 28px,
+    radial-gradient(circle at 50% 45%,#1b1713,#0e0c0a 75%);
+  box-shadow:inset 0 0 60px rgba(0,0,0,.5)}
+.stage .corner{position:absolute;font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.1em}
+.stage svg.dg{display:block;width:100%;height:auto;max-height:360px}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;touch-action:none}
+.dg text{font-family:var(--mono);fill:#f0e4d4;font-size:15px;font-weight:500}
+.dg .ln{fill:none;stroke:#f4ead9;stroke-width:3;stroke-linejoin:round;stroke-linecap:round}
+.dg .tri{stroke-dasharray:1;stroke-dashoffset:0;filter:drop-shadow(0 0 6px rgba(255,220,180,.25))}
+.dg .dash{fill:none;stroke:var(--amb);stroke-width:2;stroke-dasharray:6 6;opacity:.9}
+.dg .rad{stroke:var(--amb2);stroke-width:3;stroke-linecap:round;filter:drop-shadow(0 0 6px rgba(240,163,94,.7))}
+.dg .fillc{fill:rgba(240,163,94,.07)}
+.dg.redraw .tri{animation:draw 1.4s ease-out}
+.dg.redraw .dash,.dg.redraw .rad,.dg.redraw .fillc,.dg.redraw text{animation:fadeup 1.2s ease-out both}
+@keyframes draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+@keyframes fadeup{from{opacity:0}to{opacity:1}}
+.panel{border-radius:20px;border:1px solid var(--line2);background:linear-gradient(180deg,var(--panel2),var(--panel));padding:18px;margin-top:16px}
+.tex{font-size:21px;padding:14px 4px;overflow-x:auto;color:#f6ecdf}
+.tex code{font-family:var(--mono);font-size:13px;color:var(--mut)}
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.steps{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.step{display:grid;grid-template-columns:30px 1fr;gap:14px;padding:10px 0;position:relative}
+.step:not(:last-child)::before{content:"";position:absolute;left:14px;top:40px;bottom:-8px;width:1px;background:linear-gradient(var(--line2),transparent)}
+.step .n{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:11.5px;font-weight:700;color:var(--amb2);background:rgba(240,163,94,.1);border:1px solid rgba(240,163,94,.3)}
+.step h4{font-size:13.5px;font-weight:600;margin-bottom:3px}
+.step p{font-size:12.5px;color:var(--mut);line-height:1.5}
+
+/* ───────── OPS / APPS / SYSTEM ───────── */
+.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.tile{position:relative;padding:16px;border-radius:20px;border:1px solid var(--line2);background:linear-gradient(180deg,var(--panel2),var(--panel));text-align:left;transition:.25s;overflow:hidden}
+.tile:hover{border-color:rgba(240,163,94,.4);transform:translateY(-2px);box-shadow:0 14px 40px rgba(0,0,0,.4),0 0 40px rgba(240,140,60,.06)}
+.tile::after{content:"";position:absolute;right:-30px;top:-30px;width:90px;height:90px;border-radius:50%;background:radial-gradient(circle,rgba(240,163,94,.14),transparent 70%);opacity:0;transition:.3s}
+.tile:hover::after{opacity:1}
+.tile .ti{width:40px;height:40px;border-radius:13px;display:grid;place-items:center;color:var(--amb);background:rgba(240,163,94,.09);border:1px solid rgba(240,163,94,.2);margin-bottom:14px}
+.tile h4{font-size:14px;font-weight:600;margin-bottom:4px}
+.tile p{font-size:12px;color:var(--mut);line-height:1.5}
+.tile kbd,.kbd{font-family:var(--mono);font-size:10px;padding:3px 7px;border-radius:7px;border:1px solid var(--line2);color:var(--mut);background:rgba(0,0,0,.25)}
+.tile .kbd{position:absolute;right:14px;top:16px}
+.list{display:flex;flex-direction:column;gap:10px}
+.item{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:16px;border:1px solid var(--line);background:rgba(255,214,170,.02)}
+.item .t{flex:1;min-width:0}
+.item .t b{display:block;font-size:13px;font-weight:600;margin-bottom:8px}
+.item .t b small{font-weight:400;color:var(--mut);margin-left:8px;font-family:var(--mono);font-size:11px}
+.item .pc{font-family:var(--mono);font-size:12px;color:var(--amb2);width:42px;text-align:right}
+.tl{position:relative;padding-left:20px;margin-top:4px}
+.tl::before{content:"";position:absolute;left:4px;top:6px;bottom:6px;width:1px;background:var(--line2)}
+.tl div{position:relative;font-size:12.5px;color:var(--mut);padding:7px 0}
+.tl div::before{content:"";position:absolute;left:-20px;top:13px;width:9px;height:9px;border-radius:50%;background:var(--panel);border:2px solid var(--amb)}
+.tl b{color:var(--tx);font-weight:500}
+.tl em{font-family:var(--mono);font-style:normal;font-size:10.5px;color:var(--dim);margin-left:8px}
+.app{display:flex;flex-direction:column;gap:14px}
+.app .top{display:flex;justify-content:space-between;align-items:flex-start}
+.tag{font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;padding:4px 8px;border-radius:999px;color:var(--ok);background:rgba(143,207,154,.1);border:1px solid rgba(143,207,154,.25)}
+.tag.off{color:var(--dim);background:transparent;border-color:var(--line2)}
+.sw{position:relative;width:40px;height:23px;flex:none}
+.sw input{display:none}
+.sw span{position:absolute;inset:0;border-radius:23px;background:#2a2420;border:1px solid var(--line2);transition:.25s;cursor:pointer}
+.sw span::after{content:"";position:absolute;top:2px;left:2px;width:17px;height:17px;border-radius:50%;background:#8a7f73;transition:.25s}
+.sw input:checked+span{background:rgba(240,163,94,.25);border-color:rgba(240,163,94,.5)}
+.sw input:checked+span::after{left:19px;background:var(--amb);box-shadow:0 0 12px var(--amb)}
+.gauge{display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px 10px}
+.gauge svg{width:92px;height:92px;transform:rotate(-90deg)}
+.gauge circle{fill:none;stroke-width:6;stroke-linecap:round}
+.gauge .bg{stroke:rgba(255,214,170,.08)}
+.gauge .fg{stroke:url(#ag);filter:drop-shadow(0 0 6px rgba(240,163,94,.55));transition:stroke-dasharray .8s}
+.gauge .v{position:absolute;font-family:var(--serif);font-size:28px;margin-top:29px}
+.gauge .wrap{position:relative;display:grid;place-items:center}
+.spark{width:100%;height:70px}
+.spark polyline{fill:none;stroke:var(--amb);stroke-width:2;stroke-linejoin:round;filter:drop-shadow(0 0 5px rgba(240,163,94,.6))}
+.srow{display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-bottom:1px solid var(--line);font-size:13px}
+.srow:last-child{border:0}
+.srow small{display:block;color:var(--mut);font-size:11.5px;margin-top:3px}
+.kill{width:100%;margin-top:14px;padding:14px;border-radius:16px;border:1px solid rgba(230,90,60,.35);background:rgba(230,90,60,.07);color:#ff9d8a;font-weight:600;font-size:13px;letter-spacing:.06em;display:flex;align-items:center;justify-content:center;gap:10px;transition:.2s}
+.kill:hover{background:rgba(230,90,60,.14);box-shadow:0 0 30px rgba(230,90,60,.15)}
+
+/* ───────── VOICE ───────── */
+.voice{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100%;gap:0;text-align:center}
+.voice .eyebrow{font-size:12px;letter-spacing:.4em;margin-bottom:34px;color:#a39a8f;transition:.3s}
+.orbwrap{position:relative;width:340px;height:340px;display:grid;place-items:center;cursor:pointer}
+.rings{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.rings .r1{transform-origin:center;animation:spin 18s linear infinite}
+.rings .r2{transform-origin:center;animation:spin 28s linear infinite reverse}
+.rings circle{fill:none;stroke:rgba(255,200,150,.22);stroke-linecap:round}
+[data-state=idle] .rings{opacity:.5}
+.ripple{position:absolute;width:200px;height:200px;border-radius:50%;border:1px solid rgba(240,163,94,.5);opacity:0;pointer-events:none}
+[data-state=listen] .ripple{animation:rip 2.4s ease-out infinite}
+[data-state=listen] .ripple:nth-of-type(2){animation-delay:.8s}
+[data-state=listen] .ripple:nth-of-type(3){animation-delay:1.6s}
+[data-state=speak] .ripple{animation:rip 1.6s ease-out infinite}
+@keyframes rip{from{transform:scale(1);opacity:.7}to{transform:scale(1.75);opacity:0}}
+.ghost{font-family:var(--serif);font-style:italic;font-size:40px;color:rgba(240,225,205,.16);margin:20px 0 26px;min-height:50px;letter-spacing:.5px}
+.seg{display:flex;gap:8px}
+.seg button{padding:9px 20px;border-radius:999px;border:1px solid var(--line2);font-size:12.5px;font-weight:500;color:var(--mut);transition:.25s}
+.seg button:hover{color:var(--tx)}
+.seg button.on{background:rgba(240,163,94,.1);color:var(--amb2);border-color:rgba(240,163,94,.45);box-shadow:0 0 22px rgba(240,163,94,.12)}
+.hint{margin-top:18px;font-size:13px;color:var(--mut);letter-spacing:.03em}
+.wave{display:flex;gap:4px;align-items:center;height:26px;margin-top:14px;opacity:0;transition:.3s}
+[data-state=listen] .wave,[data-state=speak] .wave{opacity:1}
+.wave i{width:3px;border-radius:3px;background:linear-gradient(var(--amb2),var(--amb3));height:6px;animation:wv 1s ease-in-out infinite}
+.wave i:nth-child(odd){animation-duration:.8s}
+.wave i:nth-child(3n){animation-duration:1.3s}
+@keyframes wv{50%{height:24px}}
+
+/* ───────── DOCK ───────── */
+.dock{padding:10px 22px 14px;border-top:1px solid var(--line);background:linear-gradient(180deg,transparent,rgba(0,0,0,.25))}
+.qc{display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;scrollbar-width:none}
+.qc::-webkit-scrollbar{display:none}
+.qc .pill{white-space:nowrap;padding:8px 14px;font-size:12.5px;border-radius:999px;color:var(--mut)}
+.comp{display:flex;align-items:center;gap:12px}
+.field{flex:1;display:flex;align-items:center;gap:12px;padding:0 10px 0 16px;height:54px;border-radius:20px;border:1px solid var(--line2);background:rgba(255,214,170,.03);color:var(--dim);transition:.25s}
+.field:focus-within{border-color:rgba(240,163,94,.5);box-shadow:0 0 0 4px rgba(240,163,94,.07),0 0 40px rgba(240,140,60,.08);color:var(--amb)}
+.field input{flex:1;background:none;border:0;outline:0;font-size:14px;color:var(--tx)}
+.field input::placeholder{color:#6d645b}
+.send{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;color:var(--mut);transition:.2s}
+.send:hover{color:#1d0f06;background:var(--amb)}
+.mic{position:relative;width:56px;height:56px;border-radius:50%;display:grid;place-items:center;color:#1d0f06;
+  background:radial-gradient(circle at 36% 28%,#ffe3c8,#f2a064 55%,#c9672b);
+  box-shadow:0 8px 30px rgba(230,120,50,.4),inset 0 1px 0 rgba(255,255,255,.5);transition:.2s}
+.mic:hover{transform:scale(1.06)}
+.mic::before{content:"";position:absolute;inset:-5px;border-radius:50%;border:1px solid rgba(240,163,94,.5);opacity:0}
+[data-state=listen] .mic::before{animation:rip2 1.6s infinite}
+@keyframes rip2{from{transform:scale(.9);opacity:.8}to{transform:scale(1.35);opacity:0}}
+.stop{width:50px;height:50px;border-radius:17px;display:grid;place-items:center;border:1px solid var(--line2);background:rgba(255,214,170,.03);color:var(--mut);transition:.2s}
+.stop:hover{color:#ff9d8a;border-color:rgba(230,90,60,.4);background:rgba(230,90,60,.08)}
+.hints{display:flex;justify-content:center;gap:26px;margin-top:10px;font-size:11px;color:var(--dim)}
+.hints span{display:flex;gap:7px;align-items:center}
+
+/* command palette */
+.cmdk{position:absolute;inset:0;z-index:50;display:none;align-items:flex-start;justify-content:center;padding-top:110px;background:rgba(5,4,3,.6);backdrop-filter:blur(8px)}
+.cmdk.open{display:flex;animation:fade .2s}
+@keyframes fade{from{opacity:0}}
+.cbox{width:min(560px,90%);border-radius:22px;background:#151210;border:1px solid var(--line2);box-shadow:0 40px 100px rgba(0,0,0,.7),0 0 80px rgba(240,140,60,.08);overflow:hidden;animation:pop .25s}
+.cin{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line);color:var(--amb)}
+.cin input{flex:1;background:none;border:0;outline:0;font-size:15px;color:var(--tx)}
+.cl{padding:8px;max-height:320px;overflow:auto}
+.cl .sec{font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--dim);padding:10px 12px 6px;font-weight:700}
+.ci{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:12px;font-size:13px;color:var(--mut);cursor:pointer}
+.ci:hover,.ci.sel{background:rgba(240,163,94,.09);color:var(--tx)}
+.ci .ic{color:var(--amb)}
+.ci .kbd{margin-left:auto}
+
+/* toast */
+.toast{position:absolute;left:50%;bottom:150px;transform:translate(-50%,20px);padding:10px 18px;border-radius:999px;background:#1c1714;border:1px solid rgba(240,163,94,.4);color:var(--amb2);font-size:12.5px;opacity:0;pointer-events:none;transition:.3s;z-index:60;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+@media(max-width:700px){.grid3{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}.hints{display:none}}
+</style>
+</head>
+<body>
+
+<!-- ICON SPRITE -->
+<svg width="0" height="0" style="position:absolute">
+  <defs><linearGradient id="ag" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c9672b"/><stop offset="1" stop-color="#ffcfa3"/></linearGradient></defs>
+  <symbol id="chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></symbol>
+  <symbol id="board" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+  <symbol id="bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+  <symbol id="grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/></symbol>
+  <symbol id="chip" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></symbol>
+  <symbol id="target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/></symbol>
+  <symbol id="cmd" viewBox="0 0 24 24"><path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/></symbol>
+  <symbol id="pin" viewBox="0 0 24 24"><path d="M12 17v5M9 3h6l-1 6 3 3v2H7v-2l3-3z"/></symbol>
+  <symbol id="dl" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></symbol>
+  <symbol id="compact" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="8" rx="4"/></symbol>
+  <symbol id="close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+  <symbol id="send" viewBox="0 0 24 24"><path d="M21 3 10 14M21 3l-7 18-4-7-7-4z"/></symbol>
+  <symbol id="stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5"/></symbol>
+  <symbol id="eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/></symbol>
+  <symbol id="sliders" viewBox="0 0 24 24"><path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+  <symbol id="pen" viewBox="0 0 24 24"><path d="M4 20l1-5L16 4l4 4L9 19z"/></symbol>
+  <symbol id="eraser" viewBox="0 0 24 24"><path d="M20 20H9L4 15a2 2 0 0 1 0-3l8-8a2 2 0 0 1 3 0l5 5a2 2 0 0 1 0 3l-8 8"/></symbol>
+  <symbol id="spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></symbol>
+  <symbol id="copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+  <symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="screen" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8"/></symbol>
+  <symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+  <symbol id="folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="code" viewBox="0 0 24 24"><path d="m8 8-5 4 5 4M16 8l5 4-5 4M14 5l-4 14"/></symbol>
+  <symbol id="mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
+  <symbol id="cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+  <symbol id="music" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></symbol>
+  <symbol id="trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5zM3 13l9 5 9-5"/></symbol>
+  <symbol id="power" viewBox="0 0 24 24"><path d="M12 3v9M6.3 6.8a8 8 0 1 0 11.4 0"/></symbol>
+</svg>
+
+<div class="win" id="win" data-state="idle">
+
+  <!-- TITLE BAR -->
+  <header class="tb">
+    <div class="brand">
+      <div class="orb sm live"></div>
+      <div>
+        <div class="name">Gematron</div>
+        <div class="status"><i></i><span id="statusTxt">Idle</span></div>
+      </div>
+    </div>
+    <button class="model" id="modelBtn">
+      <span id="modelName">Gemini 3.8</span>
+      <svg class="ic sm"><use href="#chev"/></svg>
+      <div class="menu" id="modelMenu">
+        <div class="on">Configured Gemini model <span>●</span></div>
+      </div>
+    </button>
+    <div class="spacer"></div>
+    <div class="tools">
+      <button class="tbtn" id="cmdBtn" title="Commands"><svg class="ic"><use href="#cmd"/></svg></button>
+      <button class="tbtn on" id="pinBtn" title="Always on top"><svg class="ic"><use href="#pin"/></svg></button>
+      <button class="tbtn" data-action="export-session" title="Export"><svg class="ic"><use href="#dl"/></svg></button>
+      <button class="tbtn" data-action="return-normal" title="Return to normal console"><svg class="ic"><use href="#compact"/></svg></button>
+      <button class="tbtn" data-view="voice" title="Voice"><svg class="ic"><use href="#target"/></svg></button>
+      <button class="tbtn x" data-action="close" title="Close"><svg class="ic"><use href="#close"/></svg></button>
+    </div>
+  </header>
+
+  <!-- RAIL -->
+  <nav class="rail">
+    <button class="rb active" data-view="chat" data-tip="Chat"><svg class="ic"><use href="#chat"/></svg></button>
+    <button class="rb" data-view="board" data-tip="Board"><svg class="ic"><use href="#board"/></svg></button>
+    <button class="rb" data-view="ops" data-tip="Ops"><svg class="ic"><use href="#bolt"/></svg></button>
+    <button class="rb" data-view="apps" data-tip="Tools"><svg class="ic"><use href="#grid"/></svg></button>
+    <button class="rb" data-view="system" data-tip="System"><svg class="ic"><use href="#chip"/></svg></button>
+    <button class="rb" data-view="voice" data-tip="Voice"><svg class="ic"><use href="#target"/></svg></button>
+    <div class="grow"></div>
+    <button class="rb" data-view="system" data-tip="Settings"><svg class="ic"><use href="#sliders"/></svg></button>
+  </nav>
+
+  <!-- MAIN -->
+  <section class="main">
+    <div class="ctx">
+      <span class="chip amb"><svg class="ic sm"><use href="#eye"/></svg>Vision <b>on demand</b></span>
+      <span class="chip"><svg class="ic sm"><use href="#shield"/></svg>Ask first</span>
+      <span class="chip mono" id="sysChip">CPU — · RAM —</span>
+      <span class="spacer"></span>
+      <span class="eyebrow" id="viewLabel">Conversation</span>
+    </div>
+
+    <div class="views">
+
+      <!-- CHAT -->
+      <div class="view active" id="v-chat">
+        <div class="chat">
+          <div class="day"><span>Conversation · waiting for session</span></div>
+        </div>
+      </div>
+
+      <!-- BOARD -->
+      <div class="view" id="v-board">
+        <div class="sh">
+          <h3>Geometry &amp; Mensuration</h3>
+          <select class="sel" id="topic">
+            <option>Equilateral Triangle &amp; Inradius Proof</option>
+            <option>Circle · Chord &amp; Tangent</option>
+            <option>Cylinder · Surface Area</option>
+            <option>Pythagorean Triples</option>
+          </select>
+        </div>
+        <div class="btools">
+          <button class="sq on" id="penBtn" title="Pen"><svg class="ic"><use href="#pen"/></svg></button>
+          <button class="sq" id="eraBtn" title="Eraser"><svg class="ic"><use href="#eraser"/></svg></button>
+          <div class="sw-c" id="colors">
+            <button class="dot-c on" style="--c:#f4ead9" data-c="#f4ead9"></button>
+            <button class="dot-c" style="--c:#f0a35e" data-c="#f0a35e"></button>
+            <button class="dot-c" style="--c:#ff7f6b" data-c="#ff7f6b"></button>
+            <button class="dot-c" style="--c:#9fd6a8" data-c="#9fd6a8"></button>
+            <button class="dot-c" style="--c:#8fc3e8" data-c="#8fc3e8"></button>
+          </div>
+          <span class="spacer"></span>
+          <button class="pill" id="redraw"><svg class="ic sm"><use href="#spark"/></svg>Redraw diagram</button>
+          <button class="pill" id="clearBtn">Clear</button>
+        </div>
+
+        <div class="stage" id="stage">
+          <span class="corner" style="left:16px;top:12px">FIG. 01</span>
+          <span class="corner" style="right:16px;top:12px">SCALE 1 : 1</span>
+          <svg class="dg" id="dg" viewBox="0 0 480 400">
+            <circle class="fillc" cx="240" cy="263.4" r="86.6"/>
+            <path class="ln tri" pathLength="1" d="M240 90 L90 350 L390 350 Z"/>
+            <circle class="dash" cx="240" cy="263.4" r="86.6" style="fill:none"/>
+            <line class="dash" x1="240" y1="90" x2="240" y2="350"/>
+            <line class="rad" x1="240" y1="263.4" x2="240" y2="350"/>
+            <circle cx="240" cy="263.4" r="4.5" fill="#ffcfa3" style="filter:drop-shadow(0 0 8px #f0a35e)"/>
+            <text x="240" y="72" text-anchor="middle" style="font-size:17px;font-weight:600">A (60°)</text>
+            <text x="70" y="372">B</text>
+            <text x="396" y="372">C</text>
+            <text x="250" y="180" style="fill:#f0a35e;font-size:13px">h = (√3/2)a</text>
+            <text x="256" y="262" style="fill:#ffcfa3;font-size:13px">Incenter (I)</text>
+            <text x="214" y="312" style="fill:#ffcfa3;font-size:15px;font-style:italic">r</text>
+            <text x="240" y="384" text-anchor="middle" style="fill:#948a7f;font-size:12px">Base side = a</text>
+          </svg>
+          <canvas id="draw"></canvas>
+        </div>
+
+        <div class="panel">
+          <div class="sh" style="margin-top:0"><h3>Rendered LaTeX</h3><span class="kbd">KaTeX</span></div>
+          <div class="tex" id="tex" data-tex="\text{Area}=\frac{\sqrt{3}}{4}a^{2},\quad r=\frac{a}{2\sqrt{3}}=\frac{\Delta}{s}"><code>\text{Area} = \frac{\sqrt{3}}{4}a^2, \quad r = \frac{a}{2\sqrt{3}} = \frac{\Delta}{s}</code></div>
+          <div class="acts">
+            <button class="pill fill" data-toast="Sent to Gematron"><svg class="ic sm"><use href="#spark"/></svg>Explain with Gematron</button>
+            <button class="pill" id="copyTex"><svg class="ic sm"><use href="#copy"/></svg>Copy LaTeX</button>
+            <button class="pill" data-toast="Added to slide deck"><svg class="ic sm"><use href="#arrow"/></svg>Slide</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="sh" style="margin-top:0"><h3>Derivation</h3></div>
+          <div class="steps">
+            <div class="step"><div class="n">1</div><div><h4>Height of the triangle</h4><p>Drop the altitude from A: <span data-tex="h=\frac{\sqrt{3}}{2}a">h = (√3/2)a</span></p></div></div>
+            <div class="step"><div class="n">2</div><div><h4>Incenter = centroid</h4><p>In an equilateral triangle the incenter divides the median in the ratio 2 : 1, so <span data-tex="r=\frac{h}{3}">r = h/3</span></p></div></div>
+            <div class="step"><div class="n">3</div><div><h4>Substitute &amp; simplify</h4><p><span data-tex="r=\frac{\sqrt{3}a}{6}=\frac{a}{2\sqrt{3}}">r = a / (2√3)</span></p></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- OPS -->
+      <div class="view" id="v-ops">
+        <div class="title">Operations</div>
+        <div class="sub">One-tap automations Gematron can run on your machine.</div>
+        <div class="grid2">
+          <button class="tile" data-toast="Running: Clean Downloads"><span class="kbd">Ctrl+1</span><div class="ti"><svg class="ic"><use href="#trash"/></svg></div><h4>Clean Downloads</h4><p>Sort by type, remove duplicates and stale installers.</p></button>
+          <button class="tile" data-toast="Summarizing screen…"><span class="kbd">Ctrl+2</span><div class="ti"><svg class="ic"><use href="#eye"/></svg></div><h4>Summarize screen</h4><p>Read what's visible and give you the key points.</p></button>
+          <button class="tile" data-toast="Asking all models…"><span class="kbd">Ctrl+3</span><div class="ti"><svg class="ic"><use href="#layers"/></svg></div><h4>Ask all models</h4><p>Multi-model dispatch is not connected yet.</p></button>
+          <button class="tile" data-toast="Opening focus mode"><span class="kbd">Ctrl+4</span><div class="ti"><svg class="ic"><use href="#target"/></svg></div><h4>Focus session</h4><p>Mute noise, open study sheets and start a timer.</p></button>
+        </div>
+        <div class="sh" style="margin-top:26px"><h3>Running now</h3></div>
+        <div class="list"><div class="item"><div class="t"><b>No active tasks<small>Started workflows will appear here.</small></b></div></div></div>
+        <div class="sh" style="margin-top:26px"><h3>History</h3></div>
+        <div class="tl">
+          <div><b>Actions you run will appear in the conversation.</b></div>
+        </div>
+      </div>
+
+      <!-- APPS -->
+      <div class="view" id="v-apps">
+        <div class="title">Tools &amp; Connections</div>
+        <div class="sub">Everything Gematron is allowed to reach.</div>
+        <div class="grid3">
+          <div class="tile app"><div class="top"><div class="ti" style="margin:0"><svg class="ic"><use href="#globe"/></svg></div><span class="tag">Live</span></div><div><h4>Browser</h4><p>Search, read &amp; navigate pages.</p></div><label class="sw"><input type="checkbox" checked><span></span></label></div>
+          <div class="tile app"><div class="top"><div class="ti" style="margin:0"><svg class="ic"><use href="#folder"/></svg></div><span class="tag off">Not connected</span></div><div><h4>Files</h4><p>Organize &amp; search your drives.</p></div><label class="sw"><input type="checkbox"><span></span></label></div>
+          <div class="tile app"><div class="top"><div class="ti" style="margin:0"><svg class="ic"><use href="#code"/></svg></div><span class="tag off">Not connected</span></div><div><h4>Code</h4><p>Run scripts &amp; edit projects.</p></div><label class="sw"><input type="checkbox"><span></span></label></div>
+          <div class="tile app"><div class="top"><div class="ti" style="margin:0"><svg class="ic"><use href="#mail"/></svg></div><span class="tag off">Off</span></div><div><h4>Mail</h4><p>Draft &amp; triage your inbox.</p></div><label class="sw"><input type="checkbox"><span></span></label></div>
+          <div class="tile app"><div class="top"><div class="ti" style="margin:0"><svg class="ic"><use href="#cal"/></svg></div><span class="tag off">Not connected</span></div><div><h4>Calendar</h4><p>Plan study blocks &amp; reminders.</p></div><label class="sw"><input type="checkbox"><span></span></label></div>
+          <div class="tile app"><div class="top"><div class="ti" style="margin:0"><svg class="ic"><use href="#music"/></svg></div><span class="tag off">Off</span></div><div><h4>Media</h4><p>Control playback &amp; volume.</p></div><label class="sw"><input type="checkbox"><span></span></label></div>
+        </div>
+      </div>
+
+      <!-- SYSTEM -->
+      <div class="view" id="v-system">
+        <div class="title">System</div>
+        <div class="sub">Live health and safety controls.</div>
+        <div class="grid3">
+          <div class="tile gauge"><div class="wrap"><svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="26" transform="scale(1.5) translate(-16.7 -16.7)"/><circle class="fg" id="g-cpu" cx="50" cy="50" r="26" transform="scale(1.5) translate(-16.7 -16.7)" stroke-dasharray="0 163.4"/></svg><span class="v" id="t-cpu">—</span></div><span class="eyebrow">CPU</span></div>
+          <div class="tile gauge"><div class="wrap"><svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="26" transform="scale(1.5) translate(-16.7 -16.7)"/><circle class="fg" id="g-ram" cx="50" cy="50" r="26" transform="scale(1.5) translate(-16.7 -16.7)" stroke-dasharray="0 163.4"/></svg><span class="v" id="t-ram">—</span></div><span class="eyebrow">RAM</span></div>
+          <div class="tile gauge"><div class="wrap"><svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="26" transform="scale(1.5) translate(-16.7 -16.7)"/><circle class="fg" id="g-gpu" cx="50" cy="50" r="26" transform="scale(1.5) translate(-16.7 -16.7)" stroke-dasharray="0 163.4"/></svg><span class="v" id="t-gpu">—</span></div><span class="eyebrow">GPU</span></div>
+        </div>
+        <div class="panel"><div class="sh" style="margin-top:0"><h3>CPU · last 60s</h3></div>
+          <svg class="spark" viewBox="0 0 300 70" preserveAspectRatio="none"><polyline id="spark" points=""/></svg></div>
+        <div class="panel" style="padding-top:8px;padding-bottom:8px">
+          <div class="srow"><div>Ask before acting<small>Confirm every file or system change</small></div><label class="sw"><input type="checkbox" checked><span></span></label></div>
+          <div class="srow"><div>Screen vision<small>Capture once when you request a screen summary</small></div><label class="sw"><input type="checkbox" checked><span></span></label></div>
+          <div class="srow"><div>Wake word<small>Respond to “Hey Gematron”</small></div><label class="sw"><input type="checkbox" checked><span></span></label></div>
+          <div class="srow"><div>Always on top<small>Keep the console above other windows</small></div><label class="sw"><input type="checkbox" checked><span></span></label></div>
+        </div>
+        <button class="pill fill" id="returnNormal" style="width:100%;justify-content:center;margin-top:14px"><svg class="ic sm"><use href="#compact"/></svg>Return to normal console</button>
+        <button class="kill" data-action="kill-switch"><svg class="ic"><use href="#power"/></svg>KILL SWITCH · Ctrl+Alt+K</button>
+      </div>
+
+      <!-- VOICE -->
+      <div class="view" id="v-voice">
+        <div class="voice">
+          <div class="eyebrow" id="vEyebrow">IDLE</div>
+          <div class="orbwrap" id="orbWrap">
+            <svg class="rings" viewBox="0 0 340 340">
+              <g class="r1"><circle cx="170" cy="170" r="150" stroke-width="1.5" stroke-dasharray="120 820"/></g>
+              <g class="r2"><circle cx="170" cy="170" r="132" stroke-width="1.5" stroke-dasharray="90 740"/></g>
+            </svg>
+            <span class="ripple"></span><span class="ripple"></span><span class="ripple"></span>
+            <div class="orb live"></div>
+          </div>
+          <div class="ghost" id="ghost">Ready</div>
+          <div class="seg" id="seg">
+            <button class="on" data-s="idle">Idle</button>
+            <button data-s="listen">Listen</button>
+            <button data-s="speak">Speak</button>
+            <button data-s="think">Think</button>
+          </div>
+          <div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="hint" id="hint">idle · click the orb to talk</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DOCK -->
+    <div class="dock">
+      <div class="qc">
+        <button class="pill"><svg class="ic sm"><use href="#bolt"/></svg>Ops</button>
+        <button class="pill"><svg class="ic sm"><use href="#layers"/></svg>Ask all models</button>
+        <button class="pill"><svg class="ic sm"><use href="#eye"/></svg>Summarize screen</button>
+        <button class="pill"><svg class="ic sm"><use href="#spark"/></svg>Clean Downloads</button>
+        <button class="pill"><svg class="ic sm"><use href="#board"/></svg>Open Board</button>
+      </div>
+      <div class="comp">
+        <label class="field">
+          <svg class="ic"><use href="#screen"/></svg>
+          <input id="inp" placeholder="Say “Hey Gematron” or type a command…">
+          <button class="send" id="sendBtn"><svg class="ic"><use href="#send"/></svg></button>
+        </label>
+        <button class="mic" id="micBtn" title="Talk"><svg class="ic" style="width:22px;height:22px;stroke-width:2"><use href="#mic"/></svg></button>
+        <button class="stop" id="stopBtn" title="Stop"><svg class="ic"><use href="#stop"/></svg></button>
+      </div>
+      <div class="hints">
+        <span><span class="kbd">Ctrl+Space</span> talk</span>
+        <span><span class="kbd">Ctrl+K</span> commands</span>
+        <span><span class="kbd">Esc</span> kill switch</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMMAND PALETTE -->
+  <div class="cmdk" id="cmdk">
+    <div class="cbox">
+      <div class="cin"><svg class="ic"><use href="#search"/></svg><input id="cin" placeholder="Search commands, tools, boards…"></div>
+      <div class="cl">
+        <div class="sec">Suggested</div>
+        <div class="ci" data-go="board"><svg class="ic"><use href="#board"/></svg>Open Board<span class="kbd">B</span></div>
+        <div class="ci" data-go="voice"><svg class="ic"><use href="#mic"/></svg>Start voice session<span class="kbd">Ctrl+Space</span></div>
+        <div class="ci" data-go="ops"><svg class="ic"><use href="#trash"/></svg>Clean Downloads<span class="kbd">Ctrl+1</span></div>
+        <div class="sec">Navigate</div>
+        <div class="ci" data-go="chat"><svg class="ic"><use href="#chat"/></svg>Conversation</div>
+        <div class="ci" data-go="apps"><svg class="ic"><use href="#grid"/></svg>Tools &amp; Connections</div>
+        <div class="ci" data-go="system"><svg class="ic"><use href="#chip"/></svg>System &amp; Safety</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const win=$('#win'); let state={status:'idle',conversation:[],settings:{},telemetry:null,pinned:true,chromeConnected:false,notice:null};
+function act(action,payload={}){parent.postMessage({type:'gematron:action',action,payload},'*')}
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.classList.remove('show'),2600)}
+const labels={chat:'Conversation',board:'Board',ops:'Operations',apps:'Tools',system:'System',voice:'Voice'};
+function go(v){$$('.view').forEach(e=>e.classList.toggle('active',e.id==='v-'+v));$$('.rb[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v&&b.dataset.tip!=='Settings'));$('#viewLabel').textContent=labels[v]||v;if(v==='board')setTimeout(fitCanvas,30)}
+$$('[data-view]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.view)));
+$('.ci[data-go]').forEach(c=>c.onclick=()=>{const t=c.textContent.trim();if(t.includes('Start voice session'))act('start-session');else if(t.includes('Clean Downloads'))act('clean-downloads');else go(c.dataset.go);$('#cmdk').classList.remove('open')});
+$('#cmdBtn').onclick=()=>{$('#cmdk').classList.add('open');$('#cin').focus()};$('#cmdk').onclick=e=>{if(e.target===$('#cmdk'))$('#cmdk').classList.remove('open')};
+$('#cin').addEventListener('input',e=>{const q=e.target.value.toLowerCase();$$('.ci').forEach(c=>c.style.display=c.textContent.toLowerCase().includes(q)?'':'none')});
+$('#pinBtn').onclick=()=>act('toggle-pin');$('#modelBtn').onclick=()=>toast('Model selection uses your configured Gemini connection.');
+$$('#modelMenu div').forEach(x=>x.onclick=e=>{e.stopPropagation();$('#modelMenu').classList.remove('open');toast('Only the configured Gemini model is connected.')});document.addEventListener('click',e=>{if(!$('#modelBtn').contains(e.target))$('#modelMenu').classList.remove('open')});
+$$('[data-action]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const action=b.dataset.action;if(action==='explain-board')act(action,{tex:$('#tex').dataset.tex});else act(action)}));$('#returnNormal').onclick=()=>act('return-normal');$$('[title="Voice"]').forEach(b=>b.onclick=()=>go('voice'));
+$$('.qc .pill').forEach(b=>b.onclick=()=>{const t=b.textContent.trim();if(t==='Open Board')go('board');else if(t==='Ops')go('ops');else if(t==='Clean Downloads')act('clean-downloads');else if(t==='Summarize screen')act('summarize-screen');else if(t==='Ask all models')act('ask-all-models')});
+$$('#v-ops .tile').forEach(b=>b.onclick=()=>{const t=b.textContent;if(t.includes('Clean Downloads'))act('clean-downloads');else if(t.includes('Summarize screen'))act('summarize-screen');else if(t.includes('Ask all models'))act('ask-all-models');else if(t.includes('Focus session'))act('focus-session')});
+$('#sendBtn').onclick=send;$('#inp').addEventListener('keydown',e=>{if(e.key==='Enter')send()});function send(){const text=$('#inp').value.trim();if(text){$('#inp').value='';act('send-text',{text})}}
+$('#micBtn').onclick=()=>{if(['listening','thinking','speaking','connecting'].includes(state.status))act('stop-session');else act('start-session')};$('#stopBtn').onclick=()=>act('stop-session');
+$$('#seg button').forEach(b=>b.onclick=()=>{if(b.dataset.s==='listen')act('start-session');else if(b.dataset.s==='idle')act('stop-session');else toast('Voice state follows the live session.')});$('#orbWrap').onclick=()=>{if(['listening','thinking','speaking','connecting'].includes(state.status))act('stop-session');else act('start-session')};
+$('[data-toast]').forEach(b=>{const title=b.title||'',t=(b.textContent||'').trim();if(title==='Export')b.onclick=()=>act('export-session');else if(title==='Return to normal console')b.onclick=()=>act('return-normal');else if(title==='Close')b.onclick=()=>act('close');else if(t.includes('Explain with Gematron'))b.onclick=()=>act('explain-board',{tex:$('#tex').dataset.tex});else if(t==='Slide')b.onclick=()=>act('slide-board');else if(t.toLowerCase().includes('kill switch'))b.onclick=()=>act('kill-switch');else if(t.includes('Clean Downloads'))b.onclick=()=>act('clean-downloads');else if(t.includes('Summarize screen'))b.onclick=()=>act('summarize-screen');else if(t.includes('Ask all models'))b.onclick=()=>act('ask-all-models');else if(t.includes('Focus session'))b.onclick=()=>act('focus-session');else b.onclick=()=>toast('This action is not connected.')});
+$$('#v-system .srow').forEach(row=>{const name=row.querySelector('div')?.childNodes[0]?.textContent.trim(),input=row.querySelector('input');if(!input)return;if(name==='Ask before acting')input.onchange=()=>act('set-auto-approve',{value:!input.checked});else if(name==='Wake word')input.onchange=()=>act('set-wake-word',{value:input.checked});else if(name==='Always on top')input.onchange=()=>act('set-pin',{value:input.checked});else if(name==='Screen vision'){input.checked=false;input.onchange=()=>{input.checked=false;act('summarize-screen')}}});
+$$('#v-apps .tile.app').forEach(tile=>{const name=tile.querySelector('h4')?.textContent.trim(),tag=tile.querySelector('.tag'),input=tile.querySelector('input');if(name==='Browser'){tag.textContent=state.chromeConnected?'Connected':'Open';input.onchange=()=>act('launch-browser')}else{tag.classList.add('off');tag.textContent='Not connected';input.checked=false;input.onchange=()=>{input.checked=false;act('not-connected',{feature:name})}}});
+const topics=['\\text{Area}=\\frac{\\sqrt{3}}{4}a^{2},\\quad r=\\frac{a}{2\\sqrt{3}}=\\frac{\\Delta}{s}','\\text{Chord}=2\\sqrt{r^{2}-d^{2}},\\quad PT^{2}=PA\\cdot PB','\\text{CSA}=2\\pi rh,\\quad \\text{TSA}=2\\pi r(r+h)','a^{2}+b^{2}=c^{2},\\quad (m^{2}-n^{2},\\,2mn,\\,m^{2}+n^{2})'];$('#topic').onchange=()=>{const tex=topics[$('#topic').selectedIndex];$('#tex').dataset.tex=tex;$('#tex').textContent=tex;if(window.katex)try{katex.render(tex,$('#tex'),{throwOnError:false})}catch{} };$('#copyTex').onclick=async()=>{try{await navigator.clipboard.writeText($('#tex').dataset.tex);toast('LaTeX copied')}catch{toast('Clipboard access is unavailable.')}};
+const cv=$('#draw'),ctx=cv.getContext('2d');let tool='pen',col='#f4ead9',down=false,lx=0,ly=0;function fitCanvas(){const r=cv.getBoundingClientRect();if(!r.width)return;const d=devicePixelRatio||1;if(cv.width===Math.round(r.width*d)&&cv.height===Math.round(r.height*d))return;cv.width=r.width*d;cv.height=r.height*d;ctx.setTransform(d,0,0,d,0,0)}function pos(e){const r=cv.getBoundingClientRect();return[e.clientX-r.left,e.clientY-r.top]}cv.addEventListener('pointerdown',e=>{down=true;[lx,ly]=pos(e);cv.setPointerCapture(e.pointerId)});cv.addEventListener('pointermove',e=>{if(!down)return;const[x,y]=pos(e);ctx.globalCompositeOperation=tool==='pen'?'source-over':'destination-out';ctx.strokeStyle=col;ctx.lineWidth=tool==='pen'?2.6:18;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(x,y);ctx.stroke();[lx,ly]=[x,y]});['pointerup','pointercancel'].forEach(ev=>cv.addEventListener(ev,()=>down=false));$('#penBtn').onclick=()=>{tool='pen';$('#penBtn').classList.add('on');$('#eraBtn').classList.remove('on')};$('#eraBtn').onclick=()=>{tool='era';$('#eraBtn').classList.add('on');$('#penBtn').classList.remove('on')};$$('#colors .dot-c').forEach(d=>d.onclick=()=>{$$('#colors .dot-c').forEach(x=>x.classList.remove('on'));d.classList.add('on');col=d.dataset.c;$('#penBtn').click()});$('#clearBtn').onclick=()=>ctx.clearRect(0,0,cv.width,cv.height);$('#redraw').onclick=()=>{const g=$('#dg');g.classList.remove('redraw');void g.offsetWidth;g.classList.add('redraw')};window.addEventListener('resize',()=>{cv.width=cv.height=0;fitCanvas()});
+function update(s){state={...state,...s};const status=s.status||'idle',live=['connecting','listening','thinking','speaking'].includes(status);$('#statusTxt').textContent=status[0].toUpperCase()+status.slice(1);$('#win').dataset.state=status==='listening'?'listen':status==='speaking'?'speak':status==='thinking'||status==='connecting'?'think':'idle';$('#modelName').textContent=(s.settings?.modelId||'Gemini').replace(/[-_]/g,' ');$('#pinBtn').classList.toggle('on',!!s.pinned);$('#vEyebrow').textContent=status.toUpperCase();$('#hint').textContent=live?'Live session · click the orb to stop':'Idle · click the orb to talk';$('#ghost').textContent=live?'Listening…':'Ready';const settings=s.settings||{},rows=$$('#v-system .srow');if(rows[0])rows[0].querySelector('input').checked=!settings.autoApprove;if(rows[2])rows[2].querySelector('input').checked=settings.wakeWordEnabled!==false;if(rows[3])rows[3].querySelector('input').checked=!!s.pinned;const cpu=s.telemetry?.cpuUsage,ram=s.telemetry?.memoryUsagePercent;setGauge('cpu',cpu);setGauge('ram',ram);$('#sysChip').textContent='CPU '+(Number.isFinite(cpu)?Math.round(cpu)+'%':'—')+' · RAM '+(Number.isFinite(ram)?Math.round(ram)+'%':'—');const policy=$('.ctx .chip')[1];if(policy&&policy.lastChild)policy.lastChild.textContent=settings.autoApprove?'Auto-approve':'Ask first';setGauge('gpu',null);const chat=$('#v-chat .chat');chat.replaceChildren();const day=document.createElement('div');day.className='day';day.textContent='Conversation · '+(s.settings?.modelId||'Gemini');chat.append(day);for(const m of(s.conversation||[])){if(!m.text)continue;const row=document.createElement('div');row.className='msg '+(m.kind==='user'?'u':'a');const bubble=document.createElement('div');bubble.className='bub';bubble.textContent=m.text;row.append(bubble);chat.append(row)}if(s.notice)toast(s.notice);$$('#v-apps .tile.app').forEach(tile=>{const name=tile.querySelector('h4')?.textContent.trim();if(name==='Browser')tile.querySelector('.tag').textContent=s.chromeConnected?'Connected':'Open'})}function setGauge(id,v){const n=Number.isFinite(v)?Math.max(0,Math.min(100,v)):null;$('#t-'+id).textContent=n===null?'—':Math.round(n);if(n!==null)$('#g-'+id).setAttribute('stroke-dasharray',(n*1.634)+' 163.4')}
+window.addEventListener('message',e=>{if(e.source!==parent||e.data?.type!=='gematron:state')return;update(e.data.state||{})});
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('#cmdk').classList.toggle('open')}else if(e.ctrlKey&&e.code==='Space'){e.preventDefault();$('#micBtn').click()}else if(e.ctrlKey&&['1','2','3','4'].includes(e.key)){e.preventDefault();({'1':()=>act('clean-downloads'),'2':()=>act('summarize-screen'),'3':()=>act('ask-all-models'),'4':()=>act('focus-session')})[e.key]()}else if(e.key==='Escape'&&$('#cmdk').classList.contains('open'))$('#cmdk').classList.remove('open')});
+</script>
+</body>
+</html>

@@ -1,0 +1,153 @@
+/* Self-hosted fonts: no CDN flash, works offline. npm i @fontsource-variable/inter @fontsource-variable/newsreader */
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/newsreader';
+
+:root {
+  --hud-inset: 16px;               /* MUST equal SHADOW_INSET in display-mode.ts */
+  --hud-radius: 22px;
+  --hud-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --hud-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --hud-dur-fast: 120ms;
+  --hud-focus: var(--ember-champagne, #f0d9b0);
+  --hud-accent: var(--ember-terracotta, #d9825b);
+  --hud-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.45),   /* contact */
+    0 6px 12px rgba(0, 0, 0, 0.28);  /* ambient: extends <= 18px, fits the 16px gutter + offset */
+  --hud-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color-scheme: dark light;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  font-family: 'Inter Variable', Inter, 'Segoe UI Variable', system-ui, sans-serif;
+  font-feature-settings: 'cv11', 'ss01', 'calt';
+  text-rendering: optimizeLegibility;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ---------- surface inside the transparent gutter ---------- */
+.ember-root {
+  box-sizing: border-box;
+  width: 100vw;
+  height: 100vh;
+  padding: var(--hud-inset);
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+html[data-anchor-x='right'] .ember-root { justify-content: flex-end; }
+html[data-anchor-y='bottom'] .ember-root { align-items: flex-end; }
+
+.window {
+  flex: none;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  border-radius: var(--hud-radius);
+  box-shadow: var(--hud-shadow), var(--hud-edge);
+  contain: layout style;
+  /* width/height are animated from useModeTransition via inline style */
+}
+.window > .grain {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-size: 160px 160px;
+  opacity: 0.045;
+  pointer-events: none;
+  animation: none;
+}
+.mode-view { width: 100%; height: 100%; animation: hud-in 180ms var(--hud-ease-out) both; }
+@keyframes hud-in { from { opacity: 0; transform: scale(0.985); } to { opacity: 1; transform: none; } }
+
+.orb-canvas { display: block; width: 100%; height: 100%; }
+
+/* ---------- interactive polish ---------- */
+.orb-wrap {
+  appearance: none; background: none; border: 0; padding: 0; margin: 0;
+  color: inherit; font: inherit; cursor: pointer; border-radius: 50%;
+  transition: transform 260ms var(--hud-ease-spring);
+}
+.orb-wrap:hover  { transform: scale(1.03); }
+.orb-wrap:active { transform: scale(0.97); transition-duration: var(--hud-dur-fast); }
+
+.uc, .wc {
+  transition: background-color var(--hud-dur-fast), color var(--hud-dur-fast),
+    transform var(--hud-dur-fast) var(--hud-ease-out);
+}
+.uc:hover, .wc:hover { background: rgba(255, 255, 255, 0.09); }
+.uc:active, .wc:active { transform: scale(0.92); }
+.wc.close:hover { background: #c42b1c; color: #fff; } /* Windows 11 close-red */
+
+.pill { transition: background-color var(--hud-dur-fast), color var(--hud-dur-fast); }
+.pill[aria-disabled='true'] { cursor: default; pointer-events: none; }
+
+.em-switch { transition: background-color 160ms, box-shadow 160ms; }
+.em-range-wrap b, .hint { font-variant-numeric: tabular-nums; }
+.transcript { font-family: 'Newsreader Variable', Newsreader, Georgia, serif; font-optical-sizing: auto; }
+
+/* Focus rings: keyboard only, high contrast, never clipped by radius */
+:where(button, [role='button'], input, select, textarea, a):focus-visible {
+  outline: 2px solid var(--hud-focus);
+  outline-offset: 2px;
+}
+.orb-wrap:focus-visible { outline-offset: 6px; }
+:where(button, input):focus:not(:focus-visible) { outline: none; }
+
+.em-sheet::backdrop { background: rgba(10, 8, 7, 0.45); backdrop-filter: blur(2px); }
+.em-sheet { animation: hud-in 200ms var(--hud-ease-out) both; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ---------- console resize handles (live in the transparent gutter) ---------- */
+.rz { position: fixed; inset: 0; pointer-events: none; z-index: 50; }
+.rz-h { position: absolute; pointer-events: auto; }
+.rz-n { top: calc(var(--hud-inset) - 5px); left: calc(var(--hud-inset) + 12px); right: calc(var(--hud-inset) + 12px); height: 10px; cursor: ns-resize; }
+.rz-s { bottom: calc(var(--hud-inset) - 5px); left: calc(var(--hud-inset) + 12px); right: calc(var(--hud-inset) + 12px); height: 10px; cursor: ns-resize; }
+.rz-e { right: calc(var(--hud-inset) - 5px); top: calc(var(--hud-inset) + 12px); bottom: calc(var(--hud-inset) + 12px); width: 10px; cursor: ew-resize; }
+.rz-w { left: calc(var(--hud-inset) - 5px); top: calc(var(--hud-inset) + 12px); bottom: calc(var(--hud-inset) + 12px); width: 10px; cursor: ew-resize; }
+.rz-ne, .rz-nw, .rz-se, .rz-sw { width: 16px; height: 16px; }
+.rz-ne { top: calc(var(--hud-inset) - 5px); right: calc(var(--hud-inset) - 5px); cursor: nesw-resize; }
+.rz-sw { bottom: calc(var(--hud-inset) - 5px); left: calc(var(--hud-inset) - 5px); cursor: nesw-resize; }
+.rz-nw { top: calc(var(--hud-inset) - 5px); left: calc(var(--hud-inset) - 5px); cursor: nwse-resize; }
+.rz-se { bottom: calc(var(--hud-inset) - 5px); right: calc(var(--hud-inset) - 5px); cursor: nwse-resize; }
+
+/* ---------- accessibility modes ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .transcript span { transition-delay: 0ms !important; }
+  .window > .grain { display: none; }
+}
+
+@media (forced-colors: active) {
+  .window { border: 1px solid CanvasText; box-shadow: none; }
+  .em-switch.on { background: Highlight; }
+  :where(button, input):focus-visible { outline-color: Highlight; }
+}
+
+/* ---------- light variant (Champagne) ---------- */
+@media (prefers-color-scheme: light) {
+  :root {
+    --hud-shadow: 0 1px 3px rgba(60, 40, 20, 0.28), 0 6px 12px rgba(60, 40, 20, 0.16);
+    --hud-edge: inset 0 0 0 1px rgba(60, 40, 20, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    --hud-focus: #8a3d1d;
+  }
+  .window { background: linear-gradient(180deg, #f6efe3, #ede2cf); color: #2a211a; }
+  .em-sheet { background: #f8f2e8; color: #2a211a; }
+  .em-card { background: rgba(60, 40, 20, 0.05); }
+  .uc:hover, .wc:hover { background: rgba(60, 40, 20, 0.08); }
+  .window > .grain { opacity: 0.06; }
+}

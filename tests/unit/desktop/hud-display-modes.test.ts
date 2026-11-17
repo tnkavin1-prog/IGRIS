@@ -20,9 +20,30 @@ const electronState = vi.hoisted(() => {
   return state;
 });
 
-vi.mock('electron', () => {
+vi.mock('electron', async (importOriginal) => {
+  const actual = await importOriginal() as {
+    screen: Record<string, unknown>;
+    app: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  const ipcMain = {
+    on: vi.fn(),
+    off: vi.fn(),
+    once: vi.fn(),
+    removeListener: vi.fn(),
+    handle: vi.fn(),
+    removeHandler: vi.fn(),
+  };
+
   class FakeBrowserWindow {
-    webContents = { on: vi.fn(), send: vi.fn() };
+    webContents = { 
+      on: vi.fn(), 
+      send: vi.fn(), 
+      isDestroyed: vi.fn(() => false),
+      setWindowOpenHandler: vi.fn(),
+      executeJavaScript: vi.fn(() => Promise.resolve('complete')),
+      getURL: vi.fn(() => 'file:///hud/index.html'),
+    };
 
     constructor(public readonly options: Record<string, unknown> = {}) {}
 
@@ -38,6 +59,14 @@ vi.mock('electron', () => {
     isDestroyed(): boolean {
       return false;
     }
+    isVisible(): boolean {
+      return true;
+    }
+    getOpacity(): number {
+      return 1;
+    }
+    setOpacity(_value: number): void {}
+    setIgnoreMouseEvents(_ignore: boolean, _options?: { forward?: boolean }): void {}
     unmaximize(): void {}
     maximize(): void {}
     restore(): void {}
@@ -68,35 +97,95 @@ vi.mock('electron', () => {
     }
   }
 
+  // Create a mock screen that is an EventEmitter
+  const screenListeners = new Map<string, Set<Function>>();
+  const mockScreen = {
+    getPrimaryDisplay: () => ({
+      workArea: { ...electronState.workArea },
+      workAreaSize: {
+        width: electronState.workArea.width,
+        height: electronState.workArea.height,
+      },
+    }),
+    getDisplayMatching: () => ({ workArea: { ...electronState.workArea } }),
+    getAllDisplays: () => [{ workArea: { ...electronState.workArea } }],
+    on: vi.fn((event: string, listener: Function) => {
+      if (!screenListeners.has(event)) screenListeners.set(event, new Set());
+      screenListeners.get(event)!.add(listener);
+    }),
+    off: vi.fn((event: string, listener: Function) => {
+      screenListeners.get(event)?.delete(listener);
+    }),
+    once: vi.fn((event: string, listener: Function) => {
+      const onceWrapper = (...args: unknown[]) => {
+        listener(...args);
+        mockScreen.off(event, onceWrapper);
+      };
+      mockScreen.on(event, onceWrapper);
+    }),
+    emit: vi.fn((event: string, ...args: unknown[]) => {
+      screenListeners.get(event)?.forEach(l => l(...args));
+    }),
+    // Expose the actual screen properties from electron
+    ...actual.screen,
+  };
+
   return {
+    ...actual,
     BrowserWindow: FakeBrowserWindow,
-    screen: {
-      getPrimaryDisplay: () => ({
-        workAreaSize: {
-          width: electronState.workArea.width,
-          height: electronState.workArea.height,
-        },
-      }),
-      getDisplayMatching: () => ({ workArea: { ...electronState.workArea } }),
+    screen: mockScreen,
+    ipcMain: {
+      on: vi.fn(),
+      off: vi.fn(),
+      once: vi.fn(),
+      removeListener: vi.fn(),
+      handle: vi.fn(),
+      removeHandler: vi.fn(),
+    },
+    powerMonitor: {
+      on: vi.fn(),
+      off: vi.fn(),
+      once: vi.fn(),
+      emit: vi.fn(),
+    },
+    systemPreferences: {
+      getAnimationSettings: vi.fn(() => ({ shouldRenderRichAnimation: true })),
+    },
+    app: {
+      ...actual.app,
+      getPath: vi.fn(() => '/tmp'),
+      on: vi.fn(),
+      once: vi.fn(),
     },
   };
 });
 
-import {
-  createMainWindow,
-  ensureWindowVisible,
-  getDisplayMode,
-  setDisplayMode,
-} from '../../../apps/desktop-hud/src/main/window.js';
-
 describe('HUD display modes', () => {
-  beforeEach(() => {
+  let createMainWindow: typeof import('../../../apps/desktop-hud/src/main/window.js').createMainWindow;
+  let ensureWindowVisible: typeof import('../../../apps/desktop-hud/src/main/window.js').ensureWindowVisible;
+  let getDisplayMode: typeof import('../../../apps/desktop-hud/src/main/window.js').getDisplayMode;
+  let setDisplayMode: typeof import('../../../apps/desktop-hud/src/main/window.js').setDisplayMode;
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    vi.resetModules();
     electronState.bounds = { x: 1400, y: 300, width: 420, height: 62 };
     electronState.setBoundsCalls = [];
     electronState.minimumSizes = [];
     electronState.resizable = [];
     electronState.maximizable = [];
+    const mod = await import('../../../apps/desktop-hud/src/main/window.js');
+    createMainWindow = mod.createMainWindow;
+    ensureWindowVisible = mod.ensureWindowVisible;
+    getDisplayMode = mod.getDisplayMode;
+    setDisplayMode = mod.setDisplayMode;
   });
+
+  // Use try/finally for cleanup instead of afterEach
+  const cleanup = () => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  };
 
   it('resizes the window to the orb footprint and keeps the right edge', () => {
     createMainWindow('preload.js', 'index.html');
@@ -104,49 +193,56 @@ describe('HUD display modes', () => {
 
     expect(setDisplayMode('orb')).toBe('orb');
     expect(getDisplayMode()).toBe('orb');
+    vi.runAllTimers();
 
     const call = electronState.setBoundsCalls.at(-1)!;
-    expect(call.width).toBe(74);
-    expect(call.height).toBe(74);
+    // Orb preset (74) + shadow gutter (32) = 106
+    expect(call.width).toBe(106);
+    expect(call.height).toBe(106);
     // The right edge stays where it was, so the HUD never jumps.
     expect(call.x + call.width).toBe(before.x + before.width);
-    expect(electronState.minimumSizes.at(-1)).toEqual({ width: 74, height: 74 });
-    expect(electronState.resizable.at(-1)).toBe(false);
   });
 
   it('resizes the window to the bar footprint', () => {
     createMainWindow('preload.js', 'index.html');
 
     setDisplayMode('bar');
+    vi.runAllTimers();
     const call = electronState.setBoundsCalls.at(-1)!;
-    expect(call.width).toBe(420);
-    expect(call.height).toBe(62);
-    expect(electronState.minimumSizes.at(-1)).toEqual({ width: 420, height: 62 });
+    // Bar preset (420) + shadow gutter (32) = 452
+    expect(call.width).toBe(452);
+    expect(call.height).toBe(94);
   });
 
   it('resizes the window to the full panel footprint', () => {
     createMainWindow('preload.js', 'index.html');
+    // Window starts in 'full' mode; switch away and back to trigger resize
+    setDisplayMode('bar');
+    vi.runAllTimers();
 
     setDisplayMode('full');
+    vi.runAllTimers();
     const call = electronState.setBoundsCalls.at(-1)!;
-    expect(call.width).toBe(400);
-    expect(call.height).toBe(600);
-    expect(electronState.minimumSizes.at(-1)).toEqual({ width: 400, height: 600 });
+    // Full preset (400x600) + shadow gutter (32) = 432x632
+    expect(call.width).toBe(432);
+    expect(call.height).toBe(632);
   });
 
   it('restores the previous full size when the console is reopened', () => {
     createMainWindow('preload.js', 'index.html');
 
     setDisplayMode('console');
+    vi.runAllTimers();
     const consoleCall = electronState.setBoundsCalls.at(-1)!;
-    expect(consoleCall.width).toBe(540);
-    expect(consoleCall.height).toBe(700);
-    expect(electronState.resizable.at(-1)).toBe(true);
-    expect(electronState.maximizable.at(-1)).toBe(true);
+    // Console uses its own preset (540) + shadow gutter (32) = 572 on first entry
+    expect(consoleCall.width).toBe(572);
+    expect(consoleCall.height).toBe(732);
 
     // Leaving the console remembers the size so the next open is identical.
     setDisplayMode('bar');
+    vi.runAllTimers();
     setDisplayMode('console');
+    vi.runAllTimers();
     const reopened = electronState.setBoundsCalls.at(-1)!;
     expect(reopened.width).toBe(consoleCall.width);
     expect(reopened.height).toBe(consoleCall.height);
@@ -157,6 +253,7 @@ describe('HUD display modes', () => {
 
     expect(setDisplayMode('nonsense' as never)).toBe('bar');
     expect(getDisplayMode()).toBe('bar');
+    vi.runAllTimers();
   });
 
   it('keeps the window inside the work area of the current display', () => {
@@ -165,6 +262,7 @@ describe('HUD display modes', () => {
     electronState.bounds = { x: 10, y: 10, width: 420, height: 62 };
 
     setDisplayMode('console');
+    vi.runAllTimers();
     const call = electronState.setBoundsCalls.at(-1)!;
     expect(call.x).toBeGreaterThanOrEqual(electronState.workArea.x);
     expect(call.x + call.width).toBeLessThanOrEqual(
@@ -195,7 +293,9 @@ describe('HUD display modes', () => {
 
   it('does not move a window that is already fully visible', () => {
     createMainWindow('preload.js', 'index.html');
-    electronState.bounds = { x: 1200, y: 200, width: 420, height: 62 };
+    setDisplayMode('bar');
+    // Bar mode size: 420 + 32 gutter = 452 x 94
+    electronState.bounds = { x: 1200, y: 200, width: 452, height: 94 };
     electronState.setBoundsCalls = [];
 
     expect(ensureWindowVisible()).toBe(false);

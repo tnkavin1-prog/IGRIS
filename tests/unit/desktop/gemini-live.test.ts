@@ -23,6 +23,139 @@ describe('GeminiLiveService', () => {
     });
   });
 
+  it('serializes tool batches from separate Live messages', async () => {
+    const sent: any[] = [];
+    (service as any).socket = {
+      readyState: 1,
+      send: (value: string) => sent.push(JSON.parse(value)),
+    };
+    let release!: (result: any) => void;
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const navigate = vi
+      .spyOn((service as any).browserGateway, 'navigate')
+      .mockImplementationOnce(() => {
+        started();
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      })
+      .mockResolvedValue({ success: true });
+    const handler = (service as any).handleServerMessage.bind(service);
+    const first = handler(
+      JSON.stringify({
+        toolCall: {
+          functionCalls: [
+            { id: 'one', name: 'navigate_to_url', args: { url: 'https://example.com/one' } },
+          ],
+        },
+      }),
+    );
+    await entered;
+    const second = handler(
+      JSON.stringify({
+        toolCall: {
+          functionCalls: [
+            { id: 'two', name: 'navigate_to_url', args: { url: 'https://example.com/two' } },
+          ],
+        },
+      }),
+    );
+    expect(navigate).toHaveBeenCalledTimes(1);
+    release({ success: true });
+    await Promise.all([first, second]);
+    expect(navigate.mock.calls).toEqual([['https://example.com/one'], ['https://example.com/two']]);
+    expect(sent).toHaveLength(2);
+  });
+
+  it.each(['disconnect', 'emergencyStop'] as const)(
+    '%s cancels queued tools and suppresses stale responses',
+    async (stop) => {
+      const oldSend = vi.fn();
+      (service as any).socket = { readyState: 1, send: oldSend, close: vi.fn() };
+      let release!: (result: any) => void;
+      let started!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const navigate = vi
+        .spyOn((service as any).browserGateway, 'navigate')
+        .mockImplementation(() => {
+          started();
+          return new Promise((resolve) => {
+            release = resolve;
+          });
+        });
+      const handler = (service as any).handleToolCalls.bind(service);
+      const first = handler([
+        { id: 'old', name: 'navigate_to_url', args: { url: 'https://example.com/one' } },
+      ]);
+      await entered;
+      const queued = handler([
+        { id: 'queued', name: 'navigate_to_url', args: { url: 'https://example.com/two' } },
+      ]);
+      await service[stop]();
+      const newSend = vi.fn();
+      (service as any).socket = { readyState: 1, send: newSend };
+      release({ success: true });
+      await Promise.all([first, queued]);
+      expect(navigate).toHaveBeenCalledTimes(1);
+      expect(oldSend).not.toHaveBeenCalled();
+      expect(newSend).not.toHaveBeenCalled();
+      expect(service.currentStatus).toBe('idle');
+    },
+  );
+
+  it('honors server cancellation without waiting behind the active tool', async () => {
+    const send = vi.fn();
+    (service as any).socket = { readyState: 1, send };
+    let release!: (result: any) => void;
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const navigate = vi
+      .spyOn((service as any).browserGateway, 'navigate')
+      .mockImplementation(() => {
+        started();
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      });
+    const running = (service as any).handleToolCalls([
+      { id: 'active', name: 'navigate_to_url', args: { url: 'https://example.com/one' } },
+      { id: 'pending', name: 'navigate_to_url', args: { url: 'https://example.com/two' } },
+    ]);
+    await entered;
+    await (service as any).handleServerMessage(
+      JSON.stringify({
+        toolCallCancellation: { ids: ['active', 'pending'] },
+      }),
+    );
+    release({ success: true });
+    await running;
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(send).not.toHaveBeenCalled();
+    expect((service as any).cancelledToolIds.size).toBe(0);
+  });
+
+  it.each([{ success: false }, { ok: false }, { verified: false }])(
+    'shows explicit failure results honestly: %j',
+    async (result) => {
+      const messages: any[] = [];
+      service.on('conversation-message', (message) => messages.push(message));
+      vi.spyOn((service as any).browserGateway, 'navigate').mockResolvedValue(result);
+      await (service as any).handleToolCalls([
+        { id: 'failed', name: 'navigate_to_url', args: { url: 'https://example.com' } },
+      ]);
+      expect(messages.at(-1)).toMatchObject({ title: 'Failed: navigate_to_url', status: 'error' });
+      const audit = (service as any).auditor.getAuditTrail();
+      expect(audit.at(-1).details.success).toBe(false);
+    },
+  );
+
   it('loads default settings with gemini-3.8-live, Kore voice, and sound enabled', () => {
     const settings = service.currentSettings;
     expect(settings.modelId).toBe('gemini-3.8-live');
@@ -31,7 +164,7 @@ describe('GeminiLiveService', () => {
     expect(settings.alwaysOnTop).toBe(true);
     expect(settings.soundEffectsEnabled).toBe(true);
     expect(settings.soundVolume).toBe(0.5);
-    expect(settings.minimizeToTray).toBe(true);
+    expect(settings.minimizeToTray).toBe(false);
   });
 
   it('audits tool metadata without typed secrets or raw arguments', async () => {
@@ -342,23 +475,26 @@ describe('GeminiLiveService', () => {
     },
   );
 
-  it('formats realtimeInput with audio and video keys', () => {
-    let sentPayload: any = null;
+  it('withholds realtime media until setup completes, then formats audio and video', async () => {
+    const sent: any[] = [];
     (service as any).socket = {
-      readyState: 1, // OPEN
-      send: (str: string) => {
-        sentPayload = JSON.parse(str);
-      },
+      readyState: 1,
+      send: (str: string) => sent.push(JSON.parse(str)),
     };
 
     service.sendAudioChunk('AQIDBA==');
-    expect(sentPayload.realtimeInput.audio).toEqual({
+    service.sendImageFrame('/9j/4AAQSkZJRg==');
+    expect(sent).toHaveLength(0);
+
+    await (service as any).handleServerMessage(JSON.stringify({ setupComplete: {} }));
+    service.sendAudioChunk('AQIDBA==');
+    expect(sent[0].realtimeInput.audio).toEqual({
       mimeType: 'audio/pcm;rate=16000',
       data: 'AQIDBA==',
     });
 
     service.sendImageFrame('/9j/4AAQSkZJRg==');
-    expect(sentPayload.realtimeInput.video).toEqual({
+    expect(sent[1].realtimeInput.video).toEqual({
       mimeType: 'image/jpeg',
       data: '/9j/4AAQSkZJRg==',
     });
@@ -445,6 +581,7 @@ describe('GeminiLiveService', () => {
 
   it('handles computer_use_screenshot tool call and feeds frame to vision', async () => {
     const sentFrames: any[] = [];
+    (service as any).isSetupComplete = true;
     (service as any).socket = {
       readyState: 1,
       send: (str: string) => {
@@ -1210,6 +1347,7 @@ describe('GeminiLiveService', () => {
 
   it('analyses a video and sends its key frames to the model', async () => {
     const sent: any[] = [];
+    (service as any).isSetupComplete = true;
     (service as any).socket = {
       readyState: 1,
       send: (str: string) => sent.push(JSON.parse(str)),
@@ -1367,6 +1505,13 @@ describe('GeminiLiveService', () => {
     const setup = sent[0].setup;
     expect(setup.sessionResumption).toEqual({ handle: 'handle-abc' });
     expect(setup.contextWindowCompression).toEqual({ slidingWindow: {} });
+    expect(setup.realtimeInputConfig.automaticActivityDetection).toEqual({
+      disabled: false,
+      startOfSpeechSensitivity: 'START_SENSITIVITY_HIGH',
+      endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
+      prefixPaddingMs: 200,
+      silenceDurationMs: 500,
+    });
   });
 
   it('does not schedule reconnects after an explicit disconnect', () => {

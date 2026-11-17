@@ -834,16 +834,35 @@ namespace Gemetron {
             if (hwnd != IntPtr.Zero) {
                 if (IsIconic(hwnd)) {
                     ShowWindow(hwnd, SW_RESTORE);
+                } else if (IsZoomed(hwnd)) {
+                    ShowWindow(hwnd, SW_MAXIMIZE);
                 } else {
                     ShowWindow(hwnd, SW_SHOW);
                 }
 
-                // Alt key simulation ensures Windows foreground rights
-                SendKeyInput(VK_MENU, false);
-                SendKeyInput(VK_MENU, true);
+                uint fgPid = 0;
+                uint fgThread = GetWindowThreadProcessId(GetForegroundWindow(), out fgPid);
+                uint targetPid = 0;
+                uint targetThread = GetWindowThreadProcessId(hwnd, out targetPid);
+                uint curThread = GetCurrentThreadId();
+
+                if (fgThread != 0 && fgThread != curThread) {
+                    AttachThreadInput(curThread, fgThread, true);
+                }
+                if (targetThread != 0 && targetThread != curThread) {
+                    AttachThreadInput(curThread, targetThread, true);
+                }
 
                 BringWindowToTop(hwnd);
                 bool ok = SetForegroundWindow(hwnd);
+
+                if (fgThread != 0 && fgThread != curThread) {
+                    AttachThreadInput(curThread, fgThread, false);
+                }
+                if (targetThread != 0 && targetThread != curThread) {
+                    AttachThreadInput(curThread, targetThread, false);
+                }
+
                 return ok || GetForegroundWindow() == hwnd;
             }
             return false;
@@ -1190,6 +1209,18 @@ namespace Gemetron {
                     return KnownFolder(args.Length > 0 ? args[0] : "desktop");
                 case "open-document":
                     return OpenDocument(DecodeBase64(args[0])).ToString();
+                case "focus":
+                    return FocusWindow(args.Length > 0 ? args[0] : "").ToString();
+                case "minimize":
+                    return MinimizeWindow(args.Length > 0 ? args[0] : "").ToString();
+                case "maximize":
+                    return MaximizeWindow(args.Length > 0 ? args[0] : "").ToString();
+                case "restore":
+                    return RestoreWindow(args.Length > 0 ? args[0] : "").ToString();
+                case "close":
+                    return CloseWindow(args.Length > 0 ? args[0] : "").ToString();
+                case "list-windows":
+                    return ListWindows();
                 default:
                     throw new ArgumentException("Unknown native action: " + action);
             }

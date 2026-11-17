@@ -78,3 +78,9 @@ docs/api/
 # Vendored agent skills and their upstream checkout (third-party, MIT).
 .opencode/skills/
 .opencode/vendor/
+
+*.lnk
+# Local scratch files
+install-windows.ps1
+scheduler.py
+skyforge.html

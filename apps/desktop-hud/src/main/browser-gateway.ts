@@ -194,6 +194,68 @@ export class BrowserGateway {
     });
   }
 
+  /** Close a Chrome tab by ID (CDP) or the active tab via Ctrl+W (UI attach). */
+  public async closeTab(tabId?: string): Promise<OpenTabResult> {
+    return this.executeOnce(`close:${tabId ?? 'active'}`, async () => {
+      if (await this.isDebugPortAlive()) {
+        try {
+          if (tabId) {
+            const ok = await this.cdp.closeTab(tabId);
+            return { success: ok, url: '', strategy: 'cdp', tabId, verified: ok };
+          }
+          const active = await this.cdp.getActiveTab();
+          if (active) {
+            const ok = await this.cdp.closeTab(active.id);
+            return { success: ok, url: active.url, strategy: 'cdp', tabId: active.id, verified: ok };
+          }
+        } catch {
+          // Fall through to UI attach
+        }
+      }
+
+      const win = await this.findPreferredChromeWindow();
+      if (!win) {
+        return {
+          success: false,
+          url: '',
+          strategy: 'ui-attach',
+          error: 'No Chrome window found to close tab in.',
+        };
+      }
+
+      const focused = await this.apps.focusWindow(win.hwnd ?? win.title);
+      if (!focused) {
+        return {
+          success: false,
+          url: '',
+          strategy: 'ui-attach',
+          error: 'Chrome window exists but could not be focused.',
+        };
+      }
+
+      const ok = await this.input.sendHotkey('Ctrl+W');
+      if (!ok) {
+        return {
+          success: false,
+          url: '',
+          strategy: 'ui-attach',
+          verified: false,
+          windowTitle: win.title,
+          error: 'Chrome could not acknowledge Ctrl+W to close tab.',
+        };
+      }
+
+      return {
+        success: true,
+        url: '',
+        strategy: 'ui-attach',
+        verified: true,
+        windowTitle: win.title,
+        message: 'Successfully closed the current tab in Chrome using Ctrl+W.',
+      };
+    });
+  }
+
   private async performOpenTab(url: string): Promise<OpenTabResult> {
     if (await this.isDebugPortAlive()) {
       const before = await this.cdp.listTabs().catch(() => [] as ChromeTabInfo[]);
@@ -301,7 +363,7 @@ export class BrowserGateway {
     return this.launchUserChrome(url);
   }
 
-  private async getChromeTabCount(windowTitle: string): Promise<number | null> {
+  public async getChromeTabCount(windowTitle: string): Promise<number | null> {
     try {
       const elements = await this.input.findUIElements('', windowTitle);
       const count = elements.filter((element) => element.controlType === 'TabItem').length;

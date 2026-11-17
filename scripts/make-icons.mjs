@@ -8,7 +8,7 @@
  * only node:zlib.
  */
 import { deflateSync } from 'node:zlib';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 
 const CRC_TABLE = (() => {
@@ -147,12 +147,26 @@ function render(size) {
 
 export function generateIcons(outDir) {
   mkdirSync(outDir, { recursive: true });
+  const assetsDir = resolve('assets/icons');
+  const hasAssets = [16, 32, 48, 128].every((size) => existsSync(join(assetsDir, `icon${size}.png`)));
+  if (hasAssets) {
+    for (const size of [16, 32, 48, 128]) {
+      copyFileSync(join(assetsDir, `icon${size}.png`), join(outDir, `icon${size}.png`));
+    }
+    return;
+  }
   for (const size of [16, 32, 48, 128]) {
     writeFileSync(join(outDir, `icon${size}.png`), render(size));
   }
 }
 
 export function generateIco(outFilePath, sizes = [16, 32, 48, 128, 256]) {
+  if (existsSync(outFilePath)) {
+    const existing = readFileSync(outFilePath);
+    if (existing.length > 1000) {
+      return existing;
+    }
+  }
   mkdirSync(dirname(outFilePath), { recursive: true });
   const images = sizes.map((s) => ({ size: s, data: render(s) }));
   const header = Buffer.alloc(6);

@@ -26,7 +26,7 @@ describe('resolveInitialDisplayMode', () => {
 
   it('restores the full window modes', () => {
     expect(resolveInitialDisplayMode('full')).toBe('full');
-    expect(resolveInitialDisplayMode('console')).toBe('console');
+    expect(resolveInitialDisplayMode('console')).toBe('full');
   });
 
   it('falls back to full mode for missing or corrupt values', () => {

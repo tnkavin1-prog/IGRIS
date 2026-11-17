@@ -36,6 +36,8 @@ function harness(options: { debug?: boolean; windows?: WindowItem[]; tabCounts?:
     listTabs: vi.fn(async (): Promise<ChromeTabInfo[]> => []),
     createTab: vi.fn(async (): Promise<ChromeTabInfo | null> => null),
     navigate: vi.fn(async (): Promise<{ ok: boolean; url: string }> => ({ ok: true, url: '' })),
+    closeTab: vi.fn(async (): Promise<boolean> => true),
+    getActiveTab: vi.fn(async (): Promise<ChromeTabInfo | null> => null),
   };
   const apps = {
     listRunningWindows: vi.fn(async (): Promise<WindowItem[]> => options.windows ?? [chromeWindow]),
@@ -215,5 +217,25 @@ describe('BrowserGateway', () => {
 
     expect(result).toMatchObject({ success: true, tabId: 'created-despite-timeout' });
     expect(cdp.createTab).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes a Chrome tab via CDP when debugging port is alive', async () => {
+    const { gateway, cdp } = harness({ debug: true });
+    cdp.closeTab.mockResolvedValueOnce(true);
+
+    const result = await gateway.closeTab('tab-123');
+
+    expect(result).toMatchObject({ success: true, strategy: 'cdp', tabId: 'tab-123', verified: true });
+    expect(cdp.closeTab).toHaveBeenCalledWith('tab-123');
+  });
+
+  it('closes active Chrome tab via Ctrl+W UI attach when CDP is unavailable', async () => {
+    const { gateway, apps, input } = harness({ debug: false });
+
+    const result = await gateway.closeTab();
+
+    expect(result).toMatchObject({ success: true, strategy: 'ui-attach', verified: true });
+    expect(apps.focusWindow).toHaveBeenCalledWith(42);
+    expect(input.sendHotkey).toHaveBeenCalledWith('Ctrl+W');
   });
 });

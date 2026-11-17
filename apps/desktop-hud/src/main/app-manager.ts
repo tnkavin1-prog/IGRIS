@@ -500,7 +500,7 @@ export class AppManagerService {
               '-Command',
               'Get-StartApps | ConvertTo-Json -Compress',
             ],
-            { stdio: ['ignore', 'pipe', 'ignore'] },
+            { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true },
           );
           let s = '';
           const timer = setTimeout(() => {
@@ -1321,6 +1321,7 @@ export class AppManagerService {
     return new Promise((resolve) => {
       const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', cmd], {
         stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
       });
 
       this.activeProcesses.add(child);
@@ -1434,6 +1435,7 @@ export class AppManagerService {
 
       const child = spawn(exePath, [action, ...args], {
         stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
       });
 
       let stdout = '';
@@ -1497,14 +1499,14 @@ export class AppManagerService {
 
       const loader = existsSync(dllPath)
         ? `Add-Type -Path '${dllPath}';`
-        : `Add-Type -ReferencedAssemblies System.Windows.Forms,System.Drawing,System.Runtime.Serialization,WindowsBase,UIAutomationClient,UIAutomationTypes -Path '${csPath}';`;
+        : `Add-Type -ReferencedAssemblies System.Windows.Forms,System.Drawing,System.Runtime.Serialization,System.Xml,WindowsBase,UIAutomationClient,UIAutomationTypes -Path '${csPath}';`;
 
       const psScript = `${loader} ${snippet}`;
 
       const child = spawn(
         'powershell.exe',
         ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', psScript],
-        { stdio: ['ignore', 'pipe', 'pipe'] },
+        { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true },
       );
 
       let stdout = '';

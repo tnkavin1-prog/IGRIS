@@ -560,6 +560,19 @@ export function CompactHUD({
                         <div className="orb av" style={{ '--s': '26px' } as CSSProperties} />
                         <div className="bubble">
                           {entry.text}
+                          {entry.sources?.length ? (
+                            <div style={{ marginTop: 8, fontSize: 11, opacity: 0.75 }}>
+                              <strong>Sources</strong>{' '}
+                              {entry.sources.map((source, index) => (
+                                <span key={`${source.url}-${index}`}>
+                                  {index > 0 ? ' · ' : ''}
+                                  <a href={source.url} target="_blank" rel="noreferrer">
+                                    {source.title}
+                                  </a>
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
                           {entry.imageUrl && (
                             <div style={{ marginTop: 8 }}>
                               <img
@@ -1078,10 +1091,10 @@ export function CompactHUD({
                 setShowSheet(false);
                 onOpenEmber();
               }}
-              title="Return to the Ember voice screen"
+              title="Open the advanced console"
             >
               <HudIcon name="orbi" size={13} />
-              Ember voice screen
+              Advanced console
             </button>
           )}
 

@@ -39,13 +39,14 @@ export interface ConversationMessage {
   detail?: string;
   status?: 'running' | 'ok' | 'error';
   imageUrl?: string;
+  sources?: Array<{ title: string; url: string }>;
   at: number;
 }
 
 export type LiveHUDStatus =
   'idle' | 'connecting' | 'listening' | 'thinking' | 'speaking' | 'error' | 'closed';
 
-export type HudDisplayMode = 'orb' | 'bar' | 'full' | 'console';
+export type HudDisplayMode = 'orb' | 'bar' | 'full' | 'console' | 'advanced';
 
 export interface HUDSettings {
   apiKey: string;

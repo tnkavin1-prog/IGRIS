@@ -124,6 +124,7 @@ async function main() {
   // 5. Copy HTML & CSS assets
   cpSync(join(root, 'src', 'renderer', 'index.html'), join(dist, 'index.html'));
   cpSync(join(root, 'src', 'renderer', 'styles'), join(dist, 'styles'), { recursive: true });
+  cpSync(join(root, '..', '..', 'IGRIS_advanced console.html'), join(dist, 'advanced-console.html'));
 
   // 6. Generate release manifest (production only)
   await generateManifest();
