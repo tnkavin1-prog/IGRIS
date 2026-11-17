@@ -460,20 +460,17 @@ export class GeminiLiveService extends EventEmitter {
         this.cancelPendingOperations();
         const detail = { code, reason: reason.toString() };
         this.emit('disconnected', detail);
-        if (setupTimedOut) {
-          // A session that never completed setup should fail visibly. Reopening
-          // it automatically here would put the HUD back into "connecting"
-          // and hide the actionable timeout message behind a retry loop.
-          this.setStatus('error');
-        } else if ([1007, 1008, 1003].includes(code)) {
-          this.resumeHandle = null;
-          this.setStatus('error');
-          this.emitError(
-            `Gemini rejected the session (${code}): ${detail.reason || 'Check the API key and Live model.'}`,
-          );
+        // A close code of 1006/1005/1015 is a dead transport, not a verdict on
+        // the handshake, so it is retried with backoff. Explicit rejections stay
+        // terminal: repeating them only hides the actionable message behind a
+        // reconnect loop. A setup-phase 1011 is Google's internal/quota signal
+        // and is also reported rather than retried.
+        const rejected =
+          [1003, 1007, 1008].includes(code) || (code === 1011 && !setupWasComplete);
+        if (this.manualDisconnect) {
+          this.setStatus('idle');
         } else if (
           !setupWasComplete &&
-          !this.manualDisconnect &&
           !this.searchGroundingDisabled &&
           isSearchGroundingRejection(code, detail.reason)
         ) {
@@ -490,18 +487,18 @@ export class GeminiLiveService extends EventEmitter {
             'Live search grounding is not enabled for this API key, so the session was restarted without it. Chrome tools can still look things up.',
           );
           this.scheduleReconnect();
-        } else if (!setupWasComplete && !this.manualDisconnect) {
-          // Do not retry a session that the server closed before setup was
-          // acknowledged. Repeating the same rejected handshake only leaves
-          // the HUD showing "connecting" with no useful next step.
+        } else if (rejected) {
+          this.resumeHandle = null;
           this.setStatus('error');
           this.emitError(
-            `Gemini closed the connection before setup completed (${code}): ${detail.reason || 'Check API key access, model access, and network.'}`,
+            `Gemini rejected the session (${code}): ${detail.reason || 'Check the API key and Live model.'}`,
           );
-        } else if (!this.manualDisconnect && (code !== 1000 || this.serverGoingAway)) {
-          this.scheduleReconnect();
+        } else if (code === 1000 && !this.serverGoingAway) {
+          this.setStatus('closed');
         } else {
-          this.setStatus(this.manualDisconnect ? 'idle' : 'closed');
+          // Keep the timeout message visible while the retry runs.
+          if (setupTimedOut) this.setStatus('error');
+          this.scheduleReconnect();
         }
       });
 
