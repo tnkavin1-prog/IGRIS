@@ -555,11 +555,21 @@ if (!gotLock) {
     }
   }
 
-  // Security boundary: per-channel rate limiting (100 calls per minute)
+  // Security boundary: per-channel rate limiting. Streaming channels are
+  // emitted continuously (audio every ~60 ms, video frames slower), so they get
+  // a much higher ceiling. Overflow on a streaming channel is dropped silently:
+  // throwing there would surface as an unhandled promise rejection in the
+  // renderer for every single frame of the session.
   const RATE_LIMIT_WINDOW_MS = 60 * 1000;
   const RATE_LIMIT_MAX_CALLS = 100;
+  const STREAMING_CHANNEL_LIMITS: Record<string, number> = {
+    'gemini:send-audio-chunk': 12_000,
+    'gemini:send-image-frame': 1_200,
+    'gemini:send-realtime-input': 12_000,
+  };
   const channelCallCounts = new Map<string, { count: number; resetAt: number }>();
-  function checkRateLimit(channel: string): void {
+  /** Returns true when the call should be dropped. Throws for non-streaming channels. */
+  function checkRateLimit(channel: string): boolean {
     const now = Date.now();
     let entry = channelCallCounts.get(channel);
     if (!entry || now > entry.resetAt) {
@@ -567,9 +577,15 @@ if (!gotLock) {
       channelCallCounts.set(channel, entry);
     }
     entry.count++;
-    if (entry.count > RATE_LIMIT_MAX_CALLS) {
+    const streaming = channel in STREAMING_CHANNEL_LIMITS;
+    const maxCalls = streaming
+      ? (STREAMING_CHANNEL_LIMITS[channel] ?? RATE_LIMIT_MAX_CALLS)
+      : RATE_LIMIT_MAX_CALLS;
+    if (entry.count > maxCalls) {
+      if (streaming) return true;
       throw new Error(`Rate limit exceeded for channel: ${channel}`);
     }
+    return false;
   }
 
   // Track child processes for supervision
@@ -594,7 +610,7 @@ if (!gotLock) {
         throw new Error('Blocked IPC from untrusted renderer: ' + channel);
       }
       validatePayloadSize(...args);
-      checkRateLimit(channel);
+      if (checkRateLimit(channel)) return undefined;
       return handler(event, ...args);
     });
   }
@@ -607,7 +623,7 @@ if (!gotLock) {
   handleHud('window:toggle-pin', () => toggleAlwaysOnTop());
   handleHud('window:is-pinned', () => getMainWindow()?.isAlwaysOnTop() ?? true);
   handleHud('window:set-display-mode', (_, mode: string) =>
-    setDisplayMode(mode as 'orb' | 'bar' | 'full' | 'console'),
+    setDisplayMode(mode as 'orb' | 'bar' | 'full' | 'console' | 'advanced'),
   );
   handleHud('window:get-display-mode', () => getDisplayMode());
   handleHud('window:diagnostics', () => getWindowDiagnostics());
@@ -684,9 +700,18 @@ if (!gotLock) {
 
   // Gemini Live IPC Handlers
   handleHud('gemini:connect', async () => {
-    await wakeWord.setPaused(true);
+    // Pausing the local speech helper must not block the live-session request.
+    // If the helper is slow to exit, the renderer can otherwise remain stuck
+    // on "connecting" before Gemini's own connection timeout even starts.
+    void wakeWord.setPaused(true).catch((error) => {
+      console.warn('[WakeWord] Could not pause before Gemini connect:', error);
+    });
     const connected = await liveService.connect();
-    if (!connected) await wakeWord.setPaused(false);
+    if (!connected) {
+      void wakeWord.setPaused(false).catch((error) => {
+        console.warn('[WakeWord] Could not resume after Gemini connect failed:', error);
+      });
+    }
     return connected;
   });
   handleHud('gemini:disconnect', () => liveService.disconnect());

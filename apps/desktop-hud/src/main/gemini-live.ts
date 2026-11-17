@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { safeStorage } from 'electron';
 import { readFile } from 'node:fs/promises';
 import WebSocket from 'ws';
 import type { CDPClient } from './cdp-client.js';
@@ -17,7 +18,7 @@ import { autonomousAgent } from './autonomous-agent.js';
 import { GeminiVisionPlanner } from './vision-planner.js';
 import { screenGrounding } from './screen-grounding.js';
 import { downloadManager } from './download-manager.js';
-import { BRIDGE_ENV_PATH, DATA_ROOT } from './runtime-paths.js';
+import { BRIDGE_ENV_PATH, DATA_ROOT, ELECTRON_USER_DATA_DIR } from './runtime-paths.js';
 import { join } from 'node:path';
 import { HardwareMonitorService } from './hardware-monitor.js';
 import { FrameCoordinateMapper } from './frame-coords.js';
@@ -40,6 +41,73 @@ import type {
 
 const LIVE_WS_URL =
   'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
+const GEMINI_API_KEY_FILE = join(ELECTRON_USER_DATA_DIR, 'gemini-api-key.enc');
+const GEMINI_CAPABILITIES_FILE = join(ELECTRON_USER_DATA_DIR, 'gemini-capabilities.json');
+
+/**
+ * Remember that this key cannot use Search grounding, so every later session
+ * does not have to repeat a handshake the server is guaranteed to reject (and
+ * does not re-show the notice). Set GEMINI_LIVE_SEARCH_GROUNDING=1 to force it
+ * back on, for example after upgrading the API key's plan.
+ */
+function loadSearchGroundingDisabled(): boolean {
+  if (process.env.GEMINI_LIVE_SEARCH_GROUNDING === '1') return false;
+  try {
+    if (!existsSync(GEMINI_CAPABILITIES_FILE)) return false;
+    const parsed = JSON.parse(readFileSync(GEMINI_CAPABILITIES_FILE, 'utf8')) as {
+      searchGrounding?: boolean;
+    };
+    return parsed.searchGrounding === false;
+  } catch {
+    return false;
+  }
+}
+
+function saveSearchGroundingDisabled(disabled: boolean): void {
+  try {
+    mkdirSync(ELECTRON_USER_DATA_DIR, { recursive: true });
+    writeFileSync(
+      GEMINI_CAPABILITIES_FILE,
+      JSON.stringify({ searchGrounding: !disabled, updatedAt: new Date().toISOString() }, null, 2),
+      'utf8',
+    );
+  } catch (error) {
+    console.error('[Gemini] Could not persist capability cache:', (error as Error).message);
+  }
+}
+
+/**
+ * Grounding with Google Search is a billed Live API feature. On a free-tier key
+ * the server rejects the entire session at setup with a misleading
+ * `RESOURCE_EXHAUSTED` (close 1011) whose reason says the quota is exhausted.
+ * The same key connects immediately once the `googleSearch` tool is dropped, so
+ * the text is a plan/entitlement gate rather than a spent quota. Detect that
+ * shape so the session can fall back instead of blaming the user's quota.
+ */
+function isSearchGroundingRejection(code: number, reason: string): boolean {
+  if (code !== 1011 && code !== 1007 && code !== 1008) return false;
+  return /quota|resource[\s_]?exhausted|billing|grounding|search/i.test(reason);
+}
+
+function readSavedGeminiApiKey(): string | null {
+  if (!existsSync(GEMINI_API_KEY_FILE) || !safeStorage.isEncryptionAvailable()) return null;
+  try {
+    return safeStorage.decryptString(readFileSync(GEMINI_API_KEY_FILE));
+  } catch (error) {
+    console.error('[Gemini] Could not decrypt the saved API key:', (error as Error).message);
+    return null;
+  }
+}
+
+function saveGeminiApiKey(apiKey: string): void {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('Windows secure storage is unavailable. The API key was not saved.');
+  }
+  mkdirSync(ELECTRON_USER_DATA_DIR, { recursive: true });
+  const temporaryFile = `${GEMINI_API_KEY_FILE}.tmp`;
+  writeFileSync(temporaryFile, safeStorage.encryptString(apiKey), { mode: 0o600 });
+  renameSync(temporaryFile, GEMINI_API_KEY_FILE);
+}
 
 /** Read a plain-text document, with a hard cap on the returned size. */
 async function readTextFile(
@@ -107,6 +175,7 @@ export class GeminiLiveService extends EventEmitter {
   private clipboard: ClipboardService;
   private currentAssistantTurnId: string | null = null;
   private currentUserTurnId: string | null = null;
+  private currentGroundingSources: Array<{ title: string; url: string }> = [];
 
   private settings: HUDSettings;
   private status: LiveHUDStatus = 'idle';
@@ -119,6 +188,8 @@ export class GeminiLiveService extends EventEmitter {
   private isSetupComplete = false;
   private setupTimer: NodeJS.Timeout | null = null;
   private serverGoingAway = false;
+  /** Set once the server proves Search grounding is not licensed for this key. */
+  private searchGroundingDisabled = loadSearchGroundingDisabled();
   private static readonly MAX_RECONNECT_ATTEMPTS = 6;
 
   constructor(cdpClient: CDPClient, deps?: GeminiLiveServiceDeps) {
@@ -287,7 +358,12 @@ export class GeminiLiveService extends EventEmitter {
   }
 
   public updateSettings(newSettings: Partial<HUDSettings>): void {
-    this.settings = { ...this.settings, ...newSettings };
+    const updates = { ...newSettings };
+    if (updates.apiKey !== undefined) {
+      updates.apiKey = updates.apiKey.trim();
+      saveGeminiApiKey(updates.apiKey);
+    }
+    this.settings = { ...this.settings, ...updates };
     if (newSettings.autoApprove !== undefined) {
       this.workflowEngine.setAutoApprove(newSettings.autoApprove);
     }
@@ -345,8 +421,11 @@ export class GeminiLiveService extends EventEmitter {
       const socket = new WebSocket(LIVE_WS_URL, { headers: { 'x-goog-api-key': apiKey } });
       this.socket = socket;
       this.serverGoingAway = false;
+      let setupTimedOut = false;
       this.setupTimer = setTimeout(() => {
         if (this.socket !== socket || this.isSetupComplete) return;
+        setupTimedOut = true;
+        this.setStatus('error');
         this.emitError(
           'Gemini did not finish connecting within 15 seconds. Check your network and retry.',
         );
@@ -368,6 +447,7 @@ export class GeminiLiveService extends EventEmitter {
 
       socket.on('close', (code: number, reason: Buffer) => {
         if (this.socket !== socket) return;
+        const setupWasComplete = this.isSetupComplete;
         this.clearSetupTimer();
         this.stopScreenStream();
         this.isSetupComplete = false;
@@ -375,11 +455,43 @@ export class GeminiLiveService extends EventEmitter {
         this.cancelPendingOperations();
         const detail = { code, reason: reason.toString() };
         this.emit('disconnected', detail);
-        if ([1007, 1008, 1003].includes(code)) {
+        if (setupTimedOut) {
+          // A session that never completed setup should fail visibly. Reopening
+          // it automatically here would put the HUD back into "connecting"
+          // and hide the actionable timeout message behind a retry loop.
+          this.setStatus('error');
+        } else if ([1007, 1008, 1003].includes(code)) {
           this.resumeHandle = null;
           this.setStatus('error');
           this.emitError(
             `Gemini rejected the session (${code}): ${detail.reason || 'Check the API key and Live model.'}`,
+          );
+        } else if (
+          !setupWasComplete &&
+          !this.manualDisconnect &&
+          !this.searchGroundingDisabled &&
+          isSearchGroundingRejection(code, detail.reason)
+        ) {
+          // Retry the same handshake without Search grounding. This is the
+          // common case for free-tier keys and turns a session-killing error
+          // into a working voice session.
+          this.searchGroundingDisabled = true;
+          saveSearchGroundingDisabled(true);
+          this.resumeHandle = null;
+          this.reconnectAttempts = 0;
+          this.setStatus('connecting');
+          this.emit('search-grounding-disabled', { code, reason: detail.reason });
+          this.emitError(
+            'Live search grounding is not enabled for this API key, so the session was restarted without it. Chrome tools can still look things up.',
+          );
+          this.scheduleReconnect();
+        } else if (!setupWasComplete && !this.manualDisconnect) {
+          // Do not retry a session that the server closed before setup was
+          // acknowledged. Repeating the same rejected handshake only leaves
+          // the HUD showing "connecting" with no useful next step.
+          this.setStatus('error');
+          this.emitError(
+            `Gemini closed the connection before setup completed (${code}): ${detail.reason || 'Check API key access, model access, and network.'}`,
           );
         } else if (!this.manualDisconnect && (code !== 1000 || this.serverGoingAway)) {
           this.scheduleReconnect();
@@ -661,6 +773,9 @@ export class GeminiLiveService extends EventEmitter {
                 '- Do not respond to silence, ambient room sound, line noise, or breathing. Do not guess what the user might want.',
                 '- Respond naturally to speech addressed to you, including greetings such as "hello", questions, and requests. If speech is unclear, ask a brief clarification instead of inventing a command.',
                 'You possess complete human-like, OS-wide autonomous control over Windows: mouse clicking, dragging, moving, hardware mouse wheel scrolling, keyboard typing and hotkeys, window management (maximize, minimize, restore, close), application management, and Chrome browser tabs via CDP.',
+                this.searchGroundingDisabled
+                  ? 'REAL-TIME WEB LOOKUP: Built-in Google Search grounding is disabled for this session because the API key plan does not include it. When the user asks for current facts, recent events, or a web lookup, use the Chrome tools (navigate_to_url, browser_read, browser_click) to check the live page instead of guessing or claiming you searched.'
+                  : 'REAL-TIME WEB LOOKUP: Use built-in Google Search grounding for current facts, recent events, changing information, or whenever the user asks you to browse/search the web. This search runs through Gemini and does not open Chrome. Give a concise answer grounded in the results and name the sources. Use Chrome tools only when the user asks you to interact with a website, inspect an open page, or perform a browser action.',
                 'COORDINATE SPACE: You see downscaled frames (usually 1024x576) of the desktop. Report click/move coordinates in those frame pixels; the runtime rescales them to the physical desktop. Pass coordinate_space:"physical" only when you are certain your numbers are already desktop pixels.',
                 'FAST-PATH AUTONOMOUS ACTIONS (CRITICAL):',
                 '- When asked to MAXIMIZE a window (e.g. "maximize Chrome", "maximize window", "make it full screen"): IMMEDIATELY call maximize_window({ window_title: "Chrome" }). Do NOT call switch_active_window or tile_windows.',
@@ -703,6 +818,7 @@ export class GeminiLiveService extends EventEmitter {
           ],
         },
         tools: [
+          ...(this.searchGroundingDisabled ? [] : [{ googleSearch: {} }]),
           {
             functionDeclarations: [
               {
@@ -1881,6 +1997,27 @@ export class GeminiLiveService extends EventEmitter {
           this.setStatus('listening');
           this.currentAssistantTurnId = null;
           this.currentUserTurnId = null;
+          this.currentGroundingSources = [];
+        }
+
+        const groundingMetadata = sc.groundingMetadata ?? msg.groundingMetadata;
+        const groundingChunks = Array.isArray(groundingMetadata?.groundingChunks)
+          ? groundingMetadata.groundingChunks
+          : [];
+        for (const chunk of groundingChunks) {
+          const url = chunk?.web?.uri;
+          if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) continue;
+          let title = typeof chunk.web.title === 'string' ? chunk.web.title.trim() : '';
+          if (!title) {
+            try {
+              title = new URL(url).hostname;
+            } catch {
+              title = url;
+            }
+          }
+          if (!this.currentGroundingSources.some((source) => source.url === url)) {
+            this.currentGroundingSources.push({ title, url });
+          }
         }
 
         if (sc.inputTranscription?.text) {
@@ -1923,6 +2060,16 @@ export class GeminiLiveService extends EventEmitter {
 
         if (sc.turnComplete) {
           this.setStatus('listening');
+          if (this.currentAssistantTurnId && this.currentGroundingSources.length > 0) {
+            this.emit('conversation-message', {
+              id: this.currentAssistantTurnId,
+              kind: 'assistant',
+              text: '',
+              sources: [...this.currentGroundingSources],
+              at: Date.now(),
+            } as ConversationMessage);
+          }
+          this.currentGroundingSources = [];
           this.currentAssistantTurnId = null;
           this.currentUserTurnId = null;
           this.emit('turn-complete');
@@ -3294,7 +3441,7 @@ export class GeminiLiveService extends EventEmitter {
   }
 
   private loadInitialSettings(): HUDSettings {
-    let key = process.env.GEMINI_API_KEY || '';
+    let key = readSavedGeminiApiKey() || process.env.GEMINI_API_KEY || '';
 
     // Attempt to load from apps/local-bridge/.env
     const bridgeEnvPath = BRIDGE_ENV_PATH;
